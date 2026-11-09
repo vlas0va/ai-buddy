@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/node_modules/**)",
+      "Read(./**/vendor/**)",
+      "Read(./**/dist/**)",
+      "Read(./**/build/**)",
+      "Read(./coverage/**)",
+      "Read(./**/internal/gen/**)",
+      "Read(./**/package-lock.json)",
+      "Read(./**/pnpm-lock.yaml)",
+      "Read(./**/go.sum)",
+      "Read(./**/uv.lock)",
+      "Read(./data/checklist/*.xlsx)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
