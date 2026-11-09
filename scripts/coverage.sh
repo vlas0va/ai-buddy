@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Per-service Go coverage gate (>= 80%). Counted: ./internal/... except ./internal/gen/... (generated code, R73).
 # cmd/ mains are excluded by construction.
-# TODO: Cobertura conversion (gocover-cobertura) and web/agent coverage will be added later.
+# Agent (Python) coverage is included below (HTML + Cobertura in coverage/agent). TODO: Go Cobertura, web.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,6 +28,18 @@ for dir in "$ROOT"/services/*/; do
     fail=1
   fi
 done
+
+# Agent (Python, owner A): pytest-cov over services/agent/{agent,training}; tests and the model JSON are excluded.
+if [ -f "$ROOT/services/agent/requirements.txt" ]; then
+  out="$ROOT/coverage/agent"
+  mkdir -p "$out"
+  (cd "$ROOT/services/agent" && python3 -m pytest -q --cov --cov-report=html:"$out/html" \
+      --cov-report=xml:"$out/cobertura.xml" --cov-report=term >"$out/test.log" 2>&1) || {
+    tail -30 "$out/test.log"; echo "tests failed in agent" >&2; exit 1; }
+  total="$(awk '/^TOTAL/ {gsub("%","",$NF); print $NF}' "$out/test.log")"
+  rows="$rows$(printf '%-16s | %s' "agent" "$total")"$'\n'
+  if awk -v t="$total" -v th="$THRESHOLD" 'BEGIN{exit !(t+0 < th+0)}'; then fail=1; fi
+fi
 
 printf '%-16s | %s\n' "service" "total %"
 printf '%s\n' "-----------------+--------"

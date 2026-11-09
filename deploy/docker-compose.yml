@@ -66,15 +66,44 @@ services:
     ports:
       - "127.0.0.1:8101:8101"   # debug only; the agent reaches it inside the compose network
 
-  # TODO (owner A): agent service, port 8090, depends on core + mcp-*.
-  # agent:
-  #   build: ../services/agent
-  #   profiles: [core, full]
-  #   env_file:
-  #     - path: ../.env
-  #       required: false
-  #   ports:
-  #     - "8090:8090"
+  agent:
+    # Owner A. AI agent: Flask + SSE, stub LLM by default (works without any key), MCP tools by role (ADR-001..008).
+    build:
+      context: ..
+      dockerfile: services/agent/Dockerfile
+    profiles: [core, full]
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      AGENT_PORT: "8090"
+      JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
+      REDIS_URL: redis://redis:6379/1
+      AGENT_USE_REDIS: "true"
+      # LLM_* and MCP_<SERVER>_URL come from ../.env (see .env.example). An empty MCP url = the agent's in-process mock
+      # of that server; set e.g. MCP_ABSENCE_URL=http://mcp-absence:8101/mcp once B's server implements its tools.
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:${AGENT_HOST_PORT:-8090}:8090"   # debug only; core reaches it at http://agent:8090
+
+  ollama:
+    # Optional local LLM for demos without an external key: docker compose --profile core --profile ollama up -d
+    # then: docker compose exec ollama ollama pull qwen2.5:7b-instruct
+    # and in .env: LLM_PROVIDER=openai_compat LLM_BASE_URL=http://ollama:11434/v1 LLM_MODEL=qwen2.5:7b-instruct
+    image: ollama/ollama:0.5.7
+    profiles: [ollama]
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
 
   # TODO (owner C): web frontend, built from ../web.
   # web:
@@ -122,3 +151,4 @@ services:
 
 volumes:
   pgdata:
+  ollama:

@@ -12,6 +12,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r services/agent/requirements-dev.txt
       - run: make lint
       - run: make test
       - run: make coverage
@@ -20,6 +24,25 @@ jobs:
         with:
           name: coverage
           path: coverage/
+
+  agent:
+    # Owner A: eval on the stub provider (no key needed) and the OpenSpec scenario → test trace.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r services/agent/requirements-dev.txt
+      - run: cd services/agent && ruff check . && ruff format --check .
+      - run: python services/agent/tools/spec_trace.py
+      - run: python eval/run_eval.py
+      - run: docker build -f services/agent/Dockerfile -t aibuddy-agent .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-report
+          path: eval/reports/
 
   contracts:
     runs-on: ubuntu-latest
