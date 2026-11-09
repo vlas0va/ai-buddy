@@ -34,13 +34,13 @@ export interface RequestOptions {
   signal?: AbortSignal
 }
 
-const NETWORK_ERROR: ApiErrorBody = {
+export const NETWORK_ERROR: ApiErrorBody = {
   code: 'upstream_unavailable',
   message: 'Нет связи с сервером. Проверьте подключение и повторите.',
   retryable: true,
 }
 
-async function readErrorBody(res: Response): Promise<ApiErrorBody> {
+export async function readErrorBody(res: Response): Promise<ApiErrorBody> {
   try {
     const parsed = errorSchema.safeParse(await res.json())
     if (parsed.success) return parsed.data
@@ -85,7 +85,7 @@ export async function apiRequest<S extends z.ZodType>(
 
   let json: unknown
   try {
-    json = await res.json()
+    json = res.status === 204 ? undefined : await res.json()
   } catch {
     throw new ApiParseError(path, 'invalid JSON')
   }

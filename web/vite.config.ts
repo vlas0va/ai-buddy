@@ -3,14 +3,19 @@ import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
+  // The MSW service worker lives in public-mock/ and is served only by `npm run dev:mock`, never copied into dist/.
+  publicDir: mode === 'mock' ? 'public-mock' : false,
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: { port: 5173 },
   test: {
     environment: 'jsdom',
+    // jsdom per forked worker exhausted memory on dev machines (exit 134); threads with a small pool are stable
+    pool: 'threads',
+    maxWorkers: 2,
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
@@ -22,4 +27,4 @@ export default defineConfig({
       thresholds: { lines: 80 },
     },
   },
-})
+}))

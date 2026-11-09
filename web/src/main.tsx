@@ -7,14 +7,24 @@ import { createAppRouter } from './router'
 import './styles/tokens.css'
 import './styles/base.css'
 import './components/ui/ui.css'
+import './chat/chat.css'
 
-const router = createAppRouter()
-const queryClient = createQueryClient()
+async function bootstrap() {
+  // Dev mock mode only. The constant is replaced at build time, so the dynamic import is removed from production bundles.
+  if (import.meta.env.VITE_USE_MOCKS === 'true') {
+    const { startMocks } = await import('./mocks/browser')
+    await startMocks()
+  }
+  const router = createAppRouter()
+  const queryClient = createQueryClient()
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  </StrictMode>,
-)
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
+  )
+}
+
+void bootstrap()
