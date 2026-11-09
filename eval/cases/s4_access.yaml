@@ -1,0 +1,14 @@
+# S4 «Доступы и каналы».
+- {id: s4-01, category: s4, user: intern.anna, turns: ["Какие доступы мне нужны?"],
+   expect: {intent: access, events: [action_proposal], text_contains: ["Jira — не запрошен", "повышенные права"]}}
+- {id: s4-02, category: s4, user: intern.anna, turns: ["запроси доступ в jira"], confirm: true,
+   expect: {args: {resource_id: jira}}, expect_result: {status: granted}}
+- {id: s4-03, category: s4, user: intern.anna, turns: ["запроси закрытое пространство инцидентов"], confirm: true,
+   expect: {args: {resource_id: space-delivery-incidents}}, expect_result: {status: pending_approval}}
+- {id: s4-04, category: s4, user: intern.anna, turns: ["какие каналы есть в команде?"],
+   expect: {intent: channels, events: [escalation_draft], escalation_to: mentor, text_contains: ["#delivery-team"]}}
+- {id: s4-05, category: s4, user: intern.ivan, turns: ["добавь меня в чаты команды"], expect: {text_contains: ["#search-team"], escalation_to: mentor}}
+- {id: s4-06, category: s4, user: intern.anna, turns: ["запроси доступ к confluence"], expect: {not_events: [action_proposal], text_contains: ["не нужна"]}}
+- {id: s4-07, category: s4, user: intern.ivan, turns: ["нужен доступ к репозиторию команды"], expect: {args: {resource_id: gitlab}}}
+- {id: s4-08, category: s4, user: intern.anna, turns: ["как получить доступ в пространство команды"], expect: {args: {resource_id: space-delivery}}}
+- {id: s4-09, category: s4, user: mentor.oleg, turns: ["что запросила Анна?"], expect: {intent: mentee, text_contains: ["Анна Котова", "Confluence"]}}

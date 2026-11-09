@@ -1,0 +1,12 @@
+# «К кому идти» (R03) and mentor/lead scenarios (R57).
+- {id: wh-01, category: whois, turns: ["кто мой наставник?"], expect: {intent: whois, text_contains: ["Олег Мартынов"]}}
+- {id: wh-02, category: whois, turns: ["кто мой куратор стажировки?"], expect: {text_contains: ["Ирина Зайцева"]}}
+- {id: wh-03, category: whois, turns: ["кто мой hr bp?"], expect: {text_contains: ["Елена Соколова"]}}
+- {id: wh-04, category: whois, user: intern.ivan, turns: ["кто мой руководитель?"], expect: {text_contains: ["Дмитрий Волков"]}}
+- {id: wh-05, category: whois, turns: ["к кому идти с вопросом про отгул и цели?"], expect: {sources_include: [common-who-to-ask]}}
+- {id: tm-01, category: team, user: lead.maria, turns: ["покажи заявки на согласование"], expect: {intent: approvals}}
+- {id: tm-02, category: team, user: lead.dmitry, turns: ["согласуй ABS-000100"], confirm: true, expect: {events: [action_proposal]}, expect_result: {status: approved}}
+- {id: tm-03, category: team, user: lead.dmitry, turns: ["отклони ABS-000100 потому что релиз"], confirm: true,
+   expect: {args: {decision: rejected, comment: "релиз"}}, expect_result: {status: rejected}}
+- {id: tm-04, category: team, user: mentor.oleg, turns: ["как дела у моего стажёра?"], expect: {intent: mentee}}
+- {id: tm-05, category: team, turns: ["что ты умеешь?"], expect: {intent: help, text_contains: ["оформить отгул"]}}
