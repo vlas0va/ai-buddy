@@ -1,0 +1,15 @@
+apiVersion: 1
+datasources:
+  - name: AI-buddy Postgres
+    type: grafana-postgresql-datasource
+    uid: aibuddy-postgres
+    access: proxy
+    url: postgres:5432
+    user: buddy
+    isDefault: true
+    secureJsonData:
+      password: buddy
+    jsonData:
+      database: buddy
+      sslmode: disable
+      postgresVersion: 1600

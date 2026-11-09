@@ -35,7 +35,7 @@ persists messages, writes events.
 
 ## Write actions and confirmation (R66, R71)
 1. Agent decides a write is needed → emits `action_proposal`; it NEVER calls a write tool in the same turn.
-2. User clicks "Отправить" → `POST /api/actions/proposals/{proposal_id}/confirm`.
+2. User clicks "Отправить" → `POST /api/chat/sessions/{session_id}/proposals/{proposal_id}/confirm` (answers SSE, same reducer as messages).
 3. Core creates a confirmation token: HMAC(user_id, proposal_id, sha256(draft), exp 5 min).
 4. Agent calls the MCP write tool with `confirmation_token` + `idempotency_key = proposal_id`.
 5. MCP server verifies token signature, user match and payload hash; executes; returns `{id, status}`.
@@ -64,9 +64,11 @@ Tests: a role × tool × resource matrix (allowed/denied) per MCP server + agent
 No tool exists for salary, compensation amounts, medical data, hiring or dismissal operations (R72).
 
 ## Core REST (`contracts/openapi.yaml`, owner B; web parses every response with Zod)
-`POST /api/auth/login` · `GET /api/me` · `GET /api/plan` · `PATCH /api/plan/tasks/{id}` · `PUT /api/plan/goals` (lead) ·
-`GET /api/actions` · `POST /api/actions/proposals/{id}/confirm` · `POST /api/chat/sessions` ·
-`POST /api/chat/sessions/{id}/messages` (SSE) · `GET /api/chat/sessions/{id}` · `POST /api/escalations` ·
+Source of truth: `contracts/openapi.yaml`. Summary:
+`POST /api/auth/login` · `GET /api/me` · `GET /api/plan` · `PATCH /api/plan/tasks/{id}` · `PUT /api/plan/goals` (mentor, lead) ·
+`GET /api/team/interns` (mentor, lead) · `GET /api/actions` · `POST /api/chat/sessions` ·
+`POST /api/chat/sessions/{id}/messages` (SSE) · `POST /api/chat/sessions/{id}/proposals/{pid}/confirm` (SSE) · `.../cancel` ·
+`GET /api/chat/sessions/{id}` · `GET /api/approvals` (lead) · `POST /api/approvals/{id}/decision` (lead) · `POST /api/escalations` ·
 `GET /api/escalations` (mentor) · `POST /api/escalations/{id}/answer` (mentor, optional add-to-KB) ·
 `GET /api/notifications` · `POST /api/feedback` · `POST /api/events` (clickstream batch) ·
 `GET /api/flags` · `PUT /api/flags/{key}` (admin) · `POST /api/cron/run` (demo trigger) · `GET /healthz`.

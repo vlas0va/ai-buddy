@@ -1,0 +1,124 @@
+name: aibuddy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: [core, full]
+    environment:
+      POSTGRES_DB: buddy
+      POSTGRES_USER: buddy
+      POSTGRES_PASSWORD: buddy
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # TCP check on purpose: during first init the temporary server listens only on the socket,
+      # so the service turns healthy only after migrations and seed are applied.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U buddy -d buddy"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    profiles: [core, full]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  core:
+    build: ../services/core
+    profiles: [core, full]
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      CORE_PORT: "8080"   # in-container port is fixed; change the host side with CORE_HOST_PORT
+      JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
+      POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${CORE_HOST_PORT:-8080}:8080"
+
+  mcp-absence:
+    build: ../services/mcp-absence
+    profiles: [core, full]
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      MCP_ABSENCE_PORT: "8101"
+      JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
+      POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8101:8101"   # debug only; the agent reaches it inside the compose network
+
+  # TODO (owner A): agent service, port 8090, depends on core + mcp-*.
+  # agent:
+  #   build: ../services/agent
+  #   profiles: [core, full]
+  #   env_file:
+  #     - path: ../.env
+  #       required: false
+  #   ports:
+  #     - "8090:8090"
+
+  # TODO (owner C): web frontend, built from ../web.
+  # web:
+  #   build: ../web
+  #   profiles: [core, full]
+  #   ports:
+  #     - "5173:80"
+
+  kafka:
+    image: apache/kafka:3.9.0
+    profiles: [full]
+    environment:
+      CLUSTER_ID: "4L6g3nShT-eMCtK--X86sw"
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    profiles: [full]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ../deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

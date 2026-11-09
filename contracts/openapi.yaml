@@ -1,0 +1,777 @@
+openapi: 3.1.0
+info:
+  title: AI-buddy core API
+  version: 0.1.0
+  description: |
+    REST + SSE API of the core service (owner B). The web client (owner C) parses every response with Zod.
+    Chat and confirmation endpoints answer with `text/event-stream`; the event types are defined in
+    `contracts/agent-stream.md`. All data is synthetic; KB answers are test instructions, not Avito regulations.
+    Requirement IDs (R..) refer to docs/context/requirements.md.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: auth
+  - name: plan
+  - name: chat
+  - name: actions
+  - name: approvals
+  - name: escalations
+  - name: notifications
+  - name: analytics
+  - name: flags
+  - name: system
+
+paths:
+  /healthz:
+    get:
+      tags: [system]
+      security: []
+      summary: Liveness check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { type: string, const: ok }
+                  service: { type: string }
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      security: []
+      summary: Mock IdP login with a test account (R52, R70)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login: { type: string, examples: [intern.anna] }
+                password: { type: string, examples: [demo] }
+      responses:
+        "200":
+          description: JWT for the user; claims sub, role, team_id, cohort_start
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, user]
+                properties:
+                  token: { type: string }
+                  user: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/me:
+    get:
+      tags: [auth]
+      summary: Current user and enabled features
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, flags]
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  flags: { $ref: "#/components/schemas/Flags" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/plan:
+    get:
+      tags: [plan]
+      summary: Onboarding plan built from the Avito checklist (S1, R18-R20)
+      description: |
+        Without `user_id` returns the caller's own plan (intern plan or mentor plan by role).
+        A mentor or lead may pass `user_id` of an intern of their own team; anyone else gets 403 (R71).
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/plan/tasks/{task_id}:
+    patch:
+      tags: [plan]
+      summary: Change task status (optimistic in UI, must answer < 1 s, R76)
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [not_started, in_progress, done]
+                  description: waiting_approval and overdue are set by the system only
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/plan/goals:
+    put:
+      tags: [plan]
+      summary: Mentor or lead sets adaptation goals, criteria and expectations (CL-01 step 4, CL-06)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, goals]
+              properties:
+                user_id: { type: string, description: Intern of the caller's team }
+                goals:
+                  type: array
+                  maxItems: 10
+                  items: { $ref: "#/components/schemas/GoalInput" }
+      responses:
+        "200":
+          description: Saved goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Goal" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/team/interns:
+    get:
+      tags: [plan]
+      summary: Interns of the caller's team with progress (mentor and lead views, R08, R11)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/InternProgress" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/chat/sessions:
+    post:
+      tags: [chat]
+      summary: Start a chat session
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session_id]
+                properties:
+                  session_id: { type: string, format: uuid }
+
+  /api/chat/sessions/{session_id}:
+    get:
+      tags: [chat]
+      summary: Session history (own sessions only)
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [session_id, messages]
+                properties:
+                  session_id: { type: string, format: uuid }
+                  messages:
+                    type: array
+                    items: { $ref: "#/components/schemas/ChatMessage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/chat/sessions/{session_id}/messages:
+    post:
+      tags: [chat]
+      summary: Send a message; the answer streams as SSE (R77, R78)
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "200":
+          description: Event stream, see contracts/agent-stream.md
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /api/chat/sessions/{session_id}/proposals/{proposal_id}/confirm:
+    post:
+      tags: [chat, actions]
+      summary: User confirms a write proposal; the agent executes it and streams the result (R66, R71)
+      description: |
+        Core verifies the proposal belongs to the caller and is pending, issues a confirmation token over
+        sha256(canonical_json(draft.args)) (format in contracts/mcp-tools.md, exp 5 min) and resumes the agent turn.
+        Repeating the call for an executed proposal replays the stored action_result without a new write (R79);
+        409 only for a cancelled or expired proposal.
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ProposalId"
+      responses:
+        "200":
+          description: Event stream with status, action_result, token and done events
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/chat/sessions/{session_id}/proposals/{proposal_id}/cancel:
+    post:
+      tags: [chat, actions]
+      summary: User declines a proposal; nothing is written
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ProposalId"
+      responses:
+        "204": { description: Cancelled }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/actions:
+    get:
+      tags: [actions]
+      summary: Caller's executed actions; survives reload (R66)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Action" }
+
+  /api/approvals:
+    get:
+      tags: [approvals]
+      summary: Requests waiting for the caller's decision (lead only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Approval" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/approvals/{approval_id}/decision:
+    post:
+      tags: [approvals]
+      summary: Lead approves or rejects a request of their own team; the intern sees the new status (S3 step 8)
+      description: |
+        The button press is the confirmation: core issues a confirmation token for
+        args {approval_id, decision, comment} and calls approvals.decide with idempotency_key = Idempotency-Key.
+        A repeated request with the same key returns the stored result.
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: UUID generated by the client once per click (R79)
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                comment: { type: string, maxLength: 1000 }
+      responses:
+        "200":
+          description: Decided
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Approval" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/escalations:
+    post:
+      tags: [escalations]
+      summary: Intern sends an escalation drafted by buddy (S2 step 5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to_role, text]
+              properties:
+                to_role: { $ref: "#/components/schemas/ContactRole" }
+                text: { type: string, minLength: 1, maxLength: 4000 }
+                session_id: { type: string, format: uuid }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Escalation" }
+    get:
+      tags: [escalations]
+      summary: Escalations addressed to the caller (mentor) or sent by the caller (intern)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Escalation" }
+
+  /api/escalations/{escalation_id}/answer:
+    post:
+      tags: [escalations]
+      summary: Mentor answers; optionally adds the answer to the team KB (R10)
+      parameters:
+        - name: escalation_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, minLength: 1, maxLength: 4000 }
+                add_to_kb: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Answered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Escalation" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/notifications:
+    get:
+      tags: [notifications]
+      summary: AI-cron reminders and status changes for the caller (R54)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Notification" }
+
+  /api/notifications/{notification_id}/read:
+    post:
+      tags: [notifications]
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: Marked as read }
+
+  /api/feedback:
+    post:
+      tags: [analytics]
+      summary: Useful / not useful on an assistant message (metric, R24)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_id, useful]
+              properties:
+                message_id: { type: string, format: uuid }
+                useful: { type: boolean }
+                comment: { type: string, maxLength: 1000 }
+      responses:
+        "204": { description: Saved }
+
+  /api/events:
+    post:
+      tags: [analytics]
+      summary: Clickstream batch from the web client (contracts/events.md, R62)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [name, ts]
+                    properties:
+                      name: { type: string, pattern: "^ui\\.[a-z_.]+$" }
+                      ts: { type: string, format: date-time }
+                      props: { type: object, additionalProperties: true }
+      responses:
+        "202": { description: Accepted }
+
+  /api/flags:
+    get:
+      tags: [flags]
+      summary: Runtime feature flags for the caller's team (R55)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flags" }
+
+  /api/flags/{key}:
+    put:
+      tags: [flags]
+      summary: Toggle a runtime flag (lead; available only in builds with the `demo` tag)
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/FlagKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled]
+              properties:
+                enabled: { type: boolean }
+                teams:
+                  type: array
+                  items: { type: string }
+                  description: Empty = all teams (used for the pilot design, R25)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Flags" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Not available in this build }
+
+  /api/cron/run:
+    post:
+      tags: [flags]
+      summary: Run the AI-cron reminder job now (demo build only)
+      responses:
+        "202": { description: Queued }
+        "404": { description: Not available in this build }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProposalId:
+      name: proposal_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Not allowed for this user (R71); nothing about the resource is disclosed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: State conflict (already decided, expired proposal)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message, retryable]
+      properties:
+        code:
+          type: string
+          enum: [unauthorized, forbidden, not_found, validation_error, conflict, expired, rate_limited, upstream_unavailable, internal]
+        message: { type: string, description: Russian, user-facing }
+        retryable: { type: boolean }
+
+    Role:
+      type: string
+      enum: [intern, mentor, lead, hrbp, alumni]
+
+    ContactRole:
+      type: string
+      enum: [mentor, lead, hrbp, curator]
+
+    Period:
+      type: string
+      enum: [week_1, week_2, month_1, month_2, after_3_months]
+      description: Periods of the Avito checklist (data/checklist/checklist.yaml)
+
+    TaskStatus:
+      type: string
+      enum: [not_started, in_progress, waiting_approval, done, overdue]
+
+    User:
+      type: object
+      required: [id, login, display_name, role, team_id]
+      properties:
+        id: { type: string }
+        login: { type: string }
+        display_name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        team_id: { type: string }
+        team_name: { type: string }
+        cohort_start: { type: string, format: date }
+
+    Plan:
+      type: object
+      required: [user_id, plan_role, current_period, periods, goals]
+      properties:
+        user_id: { type: string }
+        plan_role: { type: string, enum: [intern, mentor] }
+        current_period: { $ref: "#/components/schemas/Period" }
+        periods:
+          type: array
+          items:
+            type: object
+            required: [id, label, tasks]
+            properties:
+              id: { $ref: "#/components/schemas/Period" }
+              label: { type: string, examples: ["1 неделя"] }
+              tasks:
+                type: array
+                items: { $ref: "#/components/schemas/Task" }
+        goals:
+          type: array
+          items: { $ref: "#/components/schemas/Goal" }
+        next_step:
+          oneOf:
+            - $ref: "#/components/schemas/NextStep"
+            - type: "null"
+
+    Task:
+      type: object
+      required: [id, source, checklist_item_id, period, title, status, human_only]
+      properties:
+        id: { type: string, format: uuid }
+        source:
+          type: string
+          enum: [checklist, action]
+          description: action = task created by core for an action outside the checklist (S3 day off)
+        checklist_item_id: { type: ["string", "null"], examples: [CL-05], description: null when source = action }
+        parent_task_id: { type: ["string", "null"], format: uuid }
+        period: { $ref: "#/components/schemas/Period" }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+        due_at: { type: ["string", "null"], format: date }
+        human_only:
+          type: boolean
+          description: Buddy only reminds; people do it (R05)
+        linked_action_id: { type: ["string", "null"], format: uuid }
+        subtasks:
+          type: array
+          items: { $ref: "#/components/schemas/Task" }
+
+    NextStep:
+      type: object
+      required: [task_id, title, action]
+      properties:
+        task_id: { type: string, format: uuid }
+        title: { type: string }
+        action:
+          type: string
+          enum: [ask_buddy, request_access, absence_request, draft_message, mark_done]
+        prompt: { type: string, description: Prefilled chat text for ask_buddy }
+
+    GoalInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 300 }
+        criteria: { type: string, maxLength: 1000 }
+
+    Goal:
+      allOf:
+        - $ref: "#/components/schemas/GoalInput"
+        - type: object
+          required: [id, created_by]
+          properties:
+            id: { type: string, format: uuid }
+            created_by: { type: string }
+
+    InternProgress:
+      type: object
+      required: [user_id, display_name, current_period, done, total, overdue]
+      properties:
+        user_id: { type: string }
+        display_name: { type: string }
+        current_period: { $ref: "#/components/schemas/Period" }
+        done: { type: integer }
+        total: { type: integer }
+        overdue: { type: integer }
+        pending_access_requests: { type: integer, description: CL-01 step 2 }
+
+    ChatMessage:
+      type: object
+      required: [id, author, text, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        author: { type: string, enum: [user, assistant] }
+        text: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/Source" }
+        created_at: { type: string, format: date-time }
+
+    Source:
+      type: object
+      required: [doc_id, title, source_type]
+      properties:
+        doc_id: { type: string }
+        title: { type: string }
+        source_type: { type: string, const: test, description: Always test in the prototype (R69) }
+        url: { type: string }
+
+    Action:
+      type: object
+      required: [id, kind, status, summary, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [absence_request, access_request] }
+        external_id: { type: ["string", "null"], examples: [ABS-000123] }
+        status:
+          type: string
+          enum: [pending_approval, approved, rejected, granted, created, failed]
+          description: granted = access issued (S4); approved = absence approved (S3)
+        summary: { type: string, examples: ["Отгул 14.11.2026, согласующий — Мария Л."] }
+        approver_display_name: { type: ["string", "null"] }
+        task_id: { type: ["string", "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Approval:
+      type: object
+      required: [id, kind, requester_display_name, summary, status, created_at]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [absence_request, access_request] }
+        requester_display_name: { type: string }
+        summary: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        comment: { type: ["string", "null"] }
+        created_at: { type: string, format: date-time }
+
+    Escalation:
+      type: object
+      required: [id, to_role, text, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        from_display_name: { type: string }
+        to_role: { $ref: "#/components/schemas/ContactRole" }
+        text: { type: string }
+        status: { type: string, enum: [open, answered] }
+        answer: { type: ["string", "null"] }
+        added_to_kb: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      required: [id, kind, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [reminder, overdue, status_change, escalation_answer] }
+        title: { type: string }
+        body: { type: ["string", "null"] }
+        checklist_item_id: { type: ["string", "null"] }
+        read: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    FlagKey:
+      type: string
+      enum: [scenario_s1, scenario_s2, scenario_s3, scenario_s4, proactive_digest, escalation_to_kb]
+
+    Flags:
+      type: object
+      additionalProperties: { type: boolean }
+      examples:
+        - { scenario_s1: true, scenario_s2: true, scenario_s3: true, scenario_s4: true, proactive_digest: true, escalation_to_kb: false }

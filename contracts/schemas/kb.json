@@ -1,0 +1,81 @@
+{
+  "server": "kb",
+  "tools": [
+    {
+      "name": "search",
+      "description": "Поиск по базе знаний среди документов, доступных роли и команде пользователя (ACL до LLM). Все документы — тестовые.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead",
+        "hrbp",
+        "alumni"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 500
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "doc_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "snippet": {
+                  "type": "string"
+                },
+                "source_type": {
+                  "const": "test"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "score": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "doc_id",
+                "title",
+                "snippet",
+                "source_type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    }
+  ]
+}

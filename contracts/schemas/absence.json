@@ -1,0 +1,401 @@
+{
+  "server": "absence",
+  "tools": [
+    {
+      "name": "get_policy",
+      "description": "Тестовая инструкция по оформлению отгула для команды пользователя (team из JWT).",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "source_type": {
+            "const": "test"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "text",
+          "source_type"
+        ]
+      }
+    },
+    {
+      "name": "list_my_requests",
+      "description": "Заявки на отсутствие текущего пользователя.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "approved",
+              "rejected",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^ABS-[0-9]{6}$"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "day_off"
+                  ]
+                },
+                "start_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "end_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending_approval",
+                    "approved",
+                    "rejected",
+                    "cancelled"
+                  ]
+                },
+                "approver_id": {
+                  "type": "string"
+                },
+                "approver_display_name": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "replayed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "start_date",
+                "end_date",
+                "status",
+                "approver_id",
+                "created_at"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "validate_request",
+      "description": "Проверка дат без записи: будущее, рабочий день, нет пересечений, не больше 3 дней подряд.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "day_off"
+            ]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "type",
+          "start_date",
+          "end_date"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid",
+          "problems"
+        ]
+      }
+    },
+    {
+      "name": "create_request",
+      "description": "Создать заявку на отгул от имени пользователя из JWT. Только после подтверждения.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "day_off"
+            ]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "type",
+          "start_date",
+          "end_date",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ABS-[0-9]{6}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "day_off"
+            ]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "approved",
+              "rejected",
+              "cancelled"
+            ]
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "start_date",
+          "end_date",
+          "status",
+          "approver_id",
+          "created_at"
+        ]
+      }
+    },
+    {
+      "name": "get_request",
+      "description": "Заявка по номеру; только своя.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ABS-[0-9]{6}$"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ABS-[0-9]{6}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "day_off"
+            ]
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "approved",
+              "rejected",
+              "cancelled"
+            ]
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "start_date",
+          "end_date",
+          "status",
+          "approver_id",
+          "created_at"
+        ]
+      }
+    }
+  ]
+}

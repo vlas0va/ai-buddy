@@ -1,0 +1,130 @@
+{
+  "server": "checklist",
+  "tools": [
+    {
+      "name": "get_plan_template",
+      "description": "Пункты чек-листа Авито для роли (data/checklist/checklist.yaml) с учётом команды.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead",
+        "hrbp",
+        "alumni"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "intern",
+              "mentor"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "periods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label"
+              ]
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^CL-[0-9]{2}$"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "intern",
+                    "mentor",
+                    "both"
+                  ]
+                },
+                "period": {
+                  "type": "string",
+                  "enum": [
+                    "week_1",
+                    "week_2",
+                    "month_1",
+                    "month_2",
+                    "after_3_months"
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "scenarios": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "S1",
+                      "S2",
+                      "S3",
+                      "S4"
+                    ]
+                  }
+                },
+                "human_only": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "role",
+                "period",
+                "title",
+                "scenarios",
+                "human_only"
+              ]
+            }
+          }
+        },
+        "required": [
+          "periods",
+          "items"
+        ]
+      }
+    }
+  ]
+}

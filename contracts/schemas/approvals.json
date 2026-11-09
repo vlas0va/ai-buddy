@@ -1,0 +1,187 @@
+{
+  "server": "approvals",
+  "tools": [
+    {
+      "name": "list_pending",
+      "description": "Запросы на согласование, где согласующий — пользователь из JWT.",
+      "roles": [
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "absence_request",
+                    "access_request"
+                  ]
+                },
+                "ref_id": {
+                  "type": "string"
+                },
+                "requester_id": {
+                  "type": "string"
+                },
+                "requester_display_name": {
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected"
+                  ]
+                },
+                "comment": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "replayed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "ref_id",
+                "requester_id",
+                "summary",
+                "status",
+                "created_at"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "decide",
+      "description": "Согласовать или отклонить запрос своей команды.",
+      "roles": [
+        "lead"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "approval_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "approval_id",
+          "decision",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "absence_request",
+              "access_request"
+            ]
+          },
+          "ref_id": {
+            "type": "string"
+          },
+          "requester_id": {
+            "type": "string"
+          },
+          "requester_display_name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ]
+          },
+          "comment": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "ref_id",
+          "requester_id",
+          "summary",
+          "status",
+          "created_at"
+        ]
+      }
+    }
+  ]
+}

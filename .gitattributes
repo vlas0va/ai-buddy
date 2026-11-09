@@ -1,0 +1,7 @@
+# LF everywhere: the team works on Windows, the services run in Linux containers.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary
+*.mp4 binary

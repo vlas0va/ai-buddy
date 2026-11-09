@@ -1,0 +1,273 @@
+{
+  "server": "access",
+  "tools": [
+    {
+      "name": "list_required",
+      "description": "Доступы, нужные команде пользователя (Confluence, Jira, пространство кластера/команды), со статусом для него.",
+      "roles": [
+        "intern",
+        "mentor"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "tool",
+                    "space",
+                    "channel"
+                  ]
+                },
+                "elevated": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "not_requested",
+                    "pending_approval",
+                    "granted",
+                    "rejected"
+                  ]
+                },
+                "checklist_item_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "name",
+                "kind",
+                "elevated",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "list_my_access",
+      "description": "Выданные и запрошенные доступы пользователя.",
+      "roles": [
+        "intern",
+        "mentor"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "resource_id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "tool",
+                    "space",
+                    "channel"
+                  ]
+                },
+                "elevated": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "not_requested",
+                    "pending_approval",
+                    "granted",
+                    "rejected"
+                  ]
+                },
+                "checklist_item_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "resource_id",
+                "name",
+                "kind",
+                "elevated",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "list_team_channels",
+      "description": "Каналы и чаты команды (только названия и назначение, без участников).",
+      "roles": [
+        "intern",
+        "mentor"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "closed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "closed"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "request_access",
+      "description": "Заявка на доступ для пользователя из JWT. Повышенные права уходят на согласование руководителю.",
+      "roles": [
+        "intern",
+        "mentor"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "resource_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "resource_id",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ACC-[0-9]{6}$"
+          },
+          "resource_id": {
+            "type": "string"
+          },
+          "resource_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "granted",
+              "rejected"
+            ]
+          },
+          "approver_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "resource_id",
+          "status",
+          "created_at"
+        ]
+      }
+    }
+  ]
+}

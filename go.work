@@ -1,0 +1,6 @@
+go 1.24
+
+use (
+	./services/core
+	./services/mcp-absence
+)

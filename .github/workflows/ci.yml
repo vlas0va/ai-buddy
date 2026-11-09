@@ -1,0 +1,85 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - run: make lint
+      - run: make test
+      - run: make coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml==6.0.2 jsonschema==4.23.0
+      - run: python scripts/check_contracts.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y @redocly/cli@1 lint contracts/openapi.yaml --format=stylish
+
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: buddy
+          POSTGRES_USER: buddy
+          POSTGRES_PASSWORD: buddy
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U buddy -d buddy" --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply migrations in order
+        env:
+          PGPASSWORD: buddy
+        run: for f in migrations/*.sql; do psql -h localhost -U buddy -d buddy -v ON_ERROR_STOP=1 -q -f "$f"; done
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose -f deploy/docker-compose.yml --profile core config -q
+      - run: docker compose -f deploy/docker-compose.yml --profile full config -q
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # TODO pin the image to a version tag after the first green run
+      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest detect --source /repo --no-banner
+
+  openspec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: |
+          if [ ! -d ./openspec ]; then
+            echo "openspec directory not found, skipping"
+            exit 0
+          fi
+          npx -y @fission-ai/openspec@1 validate --all
