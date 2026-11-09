@@ -1,0 +1,91 @@
+"""S2 «Спроси buddy» — openspec/specs/ask-buddy/spec.md."""
+
+from __future__ import annotations
+
+from tests.conftest import first, text_of
+
+
+def test_S2_01_answer_with_source_and_test_badge(anna):
+    ev = anna.say("как у нас проходит код-ревью?")
+    src = first(ev, "sources")["items"]
+    assert src[0]["doc_id"] == "delivery-code-review"
+    assert all(s["source_type"] == "test" and s["badge"] == "Тестовая инструкция прототипа" for s in src)
+    assert "тестовой инструкции" in text_of(ev).lower()
+    assert [e.name for e in ev].index("status") == 0
+
+
+def test_S2_02_status_events_before_answer(anna):
+    ev = anna.say("какие ритуалы в команде?")
+    stages = [e.data["stage"] for e in ev if e.name == "status"]
+    assert stages[0] == "thinking" and "searching_kb" in stages
+
+
+def test_S2_03_two_teams_get_different_answers_R02(anna, ivan):
+    a = first(anna.say("как проходит код-ревью"), "sources")["items"][0]["doc_id"]
+    i = first(ivan.say("как проходит код-ревью"), "sources")["items"][0]["doc_id"]
+    assert a == "delivery-code-review" and i == "search-code-review"
+
+
+def test_S2_04_acl_filter_before_llm_mentor_doc_hidden_from_intern_R71(client, anna):
+    ev = anna.say("методичка наставника")
+    ids = [s["doc_id"] for s in (first(ev, "sources") or {"items": []})["items"]]
+    assert "mentor-handbook" not in ids
+    mentor = client.login("mentor.oleg")
+    ids_m = [s["doc_id"] for s in first(mentor.say("где методичка наставника?"), "sources")["items"]]
+    assert "mentor-handbook" in ids_m
+
+
+def test_S2_05_no_answer_escalates_with_draft(anna):
+    ev = anna.say("как устроен квантовый компьютер в нашей команде?")
+    draft = first(ev, "escalation_draft")
+    assert draft["to_role"] == "mentor" and "квантовый" in draft["text"]
+    assert first(ev, "done")["escalated"] is True
+
+
+def test_S2_06_escalation_addressee_curator_for_university_topics(anna):
+    ev = anna.say("спроси у куратора про подпись договора о практике")
+    assert first(ev, "escalation_draft")["to_role"] == "curator"
+
+
+def test_S2_07_context_links_answer_to_plan_task(anna):
+    t = text_of(anna.say("какие документы команды нужно изучить?"))
+    assert "Это относится к задаче твоего плана" in t
+
+
+def test_S2_08_whois_from_directory(anna):
+    t = text_of(anna.say("кто мой наставник?"))
+    assert "Олег Мартынов" in t
+
+
+def test_S2_09_human_only_topics_are_reminded_not_replaced_R05(anna):
+    ev = anna.say("дай мне обратную связь по моей работе")
+    assert "проводят люди" in text_of(ev)
+    assert first(ev, "escalation_draft")["topic"] == "one_on_one"
+
+
+def test_S2_10_offtopic_is_politely_declined(anna):
+    assert "помогаю с адаптацией" in text_of(anna.say("какая погода в москве?"))
+
+
+def test_S2_11_smalltalk_and_help(anna):
+    assert "Привет, Анна" in text_of(anna.say("привет"))
+    assert "оформить отгул" in text_of(anna.say("что ты умеешь?"))
+    assert "Пожалуйста" in text_of(anna.say("спасибо"))
+
+
+def test_S2_12_manual_escalation_uses_history(anna):
+    history = [{"author": "user", "text": "Как поднять сервис локально?"}, {"author": "assistant", "text": "..."}]
+    ev = anna.say("спроси у наставника", history=history)
+    assert "поднять сервис" in first(ev, "escalation_draft")["text"]
+
+
+def test_S2_13_alumni_still_gets_answers_R58(client):
+    s = client.login("alumni.petr")
+    assert first(s.say("как проходит код-ревью?"), "sources") is not None
+
+
+def test_S2_14_kb_doc_endpoint_respects_acl(client, anna):
+    ok = client.http.get("/v1/kb/delivery-code-review", headers=anna.headers)
+    assert ok.status_code == 200 and ok.get_json()["badge"] == "Тестовая инструкция прототипа"
+    assert client.http.get("/v1/kb/mentor-handbook", headers=anna.headers).status_code == 404
+    assert client.http.get("/v1/kb/search-code-review", headers=anna.headers).status_code == 404

@@ -1,0 +1,28 @@
+[project]
+name = "ai-buddy-agent"
+version = "1.0.0"
+description = "AI-buddy agent service (owner A): Flask + SSE, stub and OpenAI-compatible LLM, MCP tools"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning", "ignore:.*HMAC key.*"]
+
+[tool.coverage.run]
+source = ["agent", "training"]
+branch = false
+omit = ["agent/models/*", "tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:", "raise NotImplementedError"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["E501", "B008", "SIM108"]

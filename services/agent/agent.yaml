@@ -1,0 +1,139 @@
+# AI-buddy agent configuration — the single place for prompt, model, MCP servers and role → tools (R53).
+# Mirrors Avito's internal "prompt + MCP" agent tool. ${VAR:-default} is substituted from the environment.
+version: 1
+name: ai-buddy
+
+prompt:
+  system: prompts/system.v1.md
+  answer: prompts/answer.v1.md
+  version: system.v1
+  tone: ty                      # informal «ты», as in the Avito intern checklist; no emojis
+
+llm:
+  provider: ${LLM_PROVIDER:-stub}          # stub | openai_compat
+  base_url: ${LLM_BASE_URL:-}
+  model: ${LLM_MODEL:-}
+  timeout_s: ${LLM_TIMEOUT_S:-30}
+  temperature: ${LLM_TEMPERATURE:-0.2}
+  max_tokens: 700
+  tool_calling: ${LLM_TOOL_CALLING:-false}  # let the LLM call READ tools of the user's role (never write tools)
+  max_tool_iterations: 3
+  fallback_to_stub: ${LLM_FALLBACK_TO_STUB:-true}
+
+embeddings:                     # optional hybrid retrieval (BM25 + vectors, RRF)
+  base_url: ${EMBEDDINGS_BASE_URL:-}
+  model: ${EMBEDDINGS_MODEL:-}
+
+retrieval:
+  k: 4
+  min_score: 1.2                # BM25 score below which «не нашёл» + escalation is offered
+  min_coverage: 0.25            # IDF-weighted share of query terms that must appear in the document
+  team_boost: 1.25              # documents of the user's team rank higher (R02)
+  stage_boost: 1.15             # documents linked to the user's open plan tasks rank higher (R15)
+
+nlu:
+  model_path: agent/models/intent_model.json
+  min_confidence: 0.30
+
+# MCP servers (streamable HTTP, contracts/mcp-tools.md: http://mcp-<server>:<port>/mcp).
+# Empty url → the in-process mock of that server is used (standalone/dev/test, or until B's server implements it).
+mcp_servers:
+  absence:   {url: "${MCP_ABSENCE_URL:-}",   timeout_s: 5}   # http://mcp-absence:8101/mcp
+  approvals: {url: "${MCP_APPROVALS_URL:-}", timeout_s: 5}   # http://mcp-approvals:8102/mcp
+  directory: {url: "${MCP_DIRECTORY_URL:-}", timeout_s: 5}   # http://mcp-directory:8103/mcp
+  checklist: {url: "${MCP_CHECKLIST_URL:-}", timeout_s: 5}   # http://mcp-checklist:8104/mcp
+  access:    {url: "${MCP_ACCESS_URL:-}",    timeout_s: 5}   # http://mcp-access:8105/mcp
+  kb:        {url: "${MCP_KB_URL:-}",        timeout_s: 5}   # http://mcp-kb:8106/mcp
+
+roles: [intern, mentor, lead, hrbp, alumni]
+
+# Role → tools, mirrors "roles" in contracts/schemas/*.json. The LLM is offered only READ tools of the caller's role;
+# write tools run only in a confirm turn after the user pressed «Отправить» (ADR-003).
+# There are no tools for salary, compensation, medical data, hiring or dismissal (R72).
+tools:
+  - name: absence.get_policy
+    roles: [intern, mentor, lead]
+    write: false
+    description: Тестовая инструкция об оформлении отгула (документ базы знаний).
+    input_schema: {type: object, properties: {}}
+  - name: absence.list_my_requests
+    roles: [intern, mentor, lead]
+    write: false
+    description: Мои заявки на отгул и их статусы.
+    input_schema: {type: object, properties: {status: {type: string, enum: [pending_approval, approved, rejected, cancelled]}}}
+  - name: absence.get_request
+    roles: [intern, mentor, lead]
+    write: false
+    description: Одна моя заявка на отгул по номеру ABS-xxxxxx.
+    input_schema: {type: object, properties: {id: {type: string}}, required: [id]}
+  - name: absence.validate_request
+    roles: [intern, mentor, lead]
+    write: false
+    description: Проверить даты отгула (будущее, рабочие дни, пересечения, лимит).
+    input_schema:
+      type: object
+      properties: {type: {type: string, enum: [day_off]}, start_date: {type: string, format: date}, end_date: {type: string, format: date}}
+      required: [type, start_date, end_date]
+  - name: absence.create_request
+    roles: [intern, mentor, lead]
+    write: true
+    proposal_kind: absence_request
+  - name: approvals.list_pending
+    roles: [lead]
+    write: false
+    description: Заявки моей команды, ожидающие моего согласования.
+    input_schema: {type: object, properties: {}}
+  - name: approvals.decide
+    roles: [lead]
+    write: true
+    proposal_kind: approval_decision
+  - name: directory.whoami
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: false
+    description: Кто я — имя, роль, команда, текущий этап стажировки.
+    input_schema: {type: object, properties: {}}
+  - name: directory.get_my_contacts
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: false
+    description: Мои контакты — наставник, руководитель, HR BP, куратор стажировки и с чем к ним идти.
+    input_schema: {type: object, properties: {}}
+  - name: checklist.get_plan_template
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: false
+    description: Шаблон плана адаптации по чек-листу (пункты CL-xx, периоды, шаги).
+    input_schema: {type: object, properties: {role: {type: string, enum: [intern, mentor]}}, required: [role]}
+  - name: access.list_required
+    roles: [intern, mentor]
+    write: false
+    description: Доступы, нужные в моей команде, со статусами (Confluence, Jira, GitLab, пространство).
+    input_schema: {type: object, properties: {}}
+  - name: access.list_my_access
+    roles: [intern, mentor]
+    write: false
+    description: Мои доступы и заявки на доступ со статусами.
+    input_schema: {type: object, properties: {}}
+  - name: access.list_team_channels
+    roles: [intern, mentor]
+    write: false
+    description: Каналы и чаты моей команды (название, назначение, закрытый ли).
+    input_schema: {type: object, properties: {}}
+  - name: access.request_access
+    roles: [intern, mentor]
+    write: true
+    proposal_kind: access_request
+  - name: kb.search
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: false
+    description: Поиск по базе знаний (результаты уже отфильтрованы по правам роли и команды).
+    input_schema: {type: object, properties: {query: {type: string}, k: {type: integer, minimum: 1, maximum: 10}}, required: [query]}
+
+# Intents available per role (feature flags from core can switch scenarios off per team, R55).
+intents:
+  absence:      {roles: [intern, mentor, lead], flag: scenario_s3}
+  access:       {roles: [intern, mentor], flag: scenario_s4}
+  channels:     {roles: [intern, mentor], flag: scenario_s4}
+  plan:         {roles: [intern, mentor, lead, alumni], flag: scenario_s1}
+  summary:      {roles: [intern, mentor], flag: scenario_s1}
+  approvals:    {roles: [lead]}
+  mentee:       {roles: [mentor, lead]}
+  kb_question:  {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}
