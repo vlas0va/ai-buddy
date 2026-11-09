@@ -95,13 +95,13 @@ def register_dev(app: Flask, agent: Agent, settings: Settings) -> None:
     @app.get("/dev/users")
     def dev_users() -> Response:
         assert agent.mocks is not None
-        return jsonify(
-            [
-                {"login": uid, "name": e["display_name"], "role": e["role"], "team_id": e["team_id"]}
-                for uid, e in agent.mocks.employees.items()
-                if e["role"] != "curator"
-            ]
-        )
+        order = {"intern": 0, "mentor": 1, "lead": 2, "hrbp": 3, "alumni": 4}
+        users = [
+            {"login": uid, "name": e["display_name"], "role": e["role"], "team_id": e["team_id"]}
+            for uid, e in agent.mocks.employees.items()
+            if e["role"] in order
+        ]
+        return jsonify(sorted(users, key=lambda u: (order[u["role"]], u["login"])))
 
     @app.post("/dev/login")
     def dev_login() -> Response:
