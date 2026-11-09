@@ -1,0 +1,22 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+body { margin: 0; }
+.layout-header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 24px; background: #fff; border-bottom: 1px solid #e3e3e3; }
+.layout-header nav { display: flex; gap: 12px; flex: 1; }
+.layout-user { display: flex; gap: 12px; align-items: center; }
+main, .login { max-width: 880px; margin: 0 auto; padding: 24px 16px; }
+form { display: grid; gap: 12px; max-width: 320px; }
+label { display: grid; gap: 4px; }
+input { padding: 8px; font: inherit; }
+button { padding: 8px 12px; font: inherit; cursor: pointer; }
+.hint { color: #666; }
+.accounts { list-style: none; padding: 0; display: grid; gap: 6px; }
+.state { padding: 16px; border-radius: 6px; background: #fff; border: 1px solid #e3e3e3; }
+.state-error { color: #a12020; }
+.skeleton { display: grid; gap: 8px; }
+.skeleton-line { height: 16px; border-radius: 4px; background: #e8e8e8; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.5; } }
