@@ -253,6 +253,13 @@
               "null"
             ]
           },
+          "checklist_item_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Plan task to link the action to (R66)"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"

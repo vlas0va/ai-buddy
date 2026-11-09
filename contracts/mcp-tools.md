@@ -4,7 +4,9 @@ Owner: **B**. Machine-readable definitions: `contracts/schemas/<server>.json` (o
 `inputSchema` / `outputSchema` in JSON Schema 2020-12). Servers are mock Avito systems (R39, R52, R56); all data is synthetic (R68).
 
 ## Transport and auth (every server)
-- MCP over streamable HTTP at `http://mcp-<server>:<port>/mcp`.
+- MCP over streamable HTTP (stateless mode, JSON responses). All six servers run in one binary `mcp-mocks` (port 8100):
+  `http://mcp-mocks:8100/mcp/<server>`, e.g. `/mcp/absence`. Each is an independent MCP server with its own tool set and
+  its own DB schema; moving one to its own process or replacing it with a real Avito API is a URL change in `agent.yaml` (R23).
 - The agent forwards the user's JWT in `Authorization: Bearer <token>` on every MCP request. The server validates the JWT
   itself (same `JWT_SECRET`) and derives `user_id`, `role`, `team_id` from claims — never from tool arguments (R71).
 - Write tools additionally require `confirmation_token` and `idempotency_key`. Core issues the token when the user confirms:
@@ -22,23 +24,27 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 `forbidden` never reveals whether the resource exists.
 
 ## Servers and tools
-| Server (port) | Tool | Roles | Write | Scenario |
+| Server (path) | Tool | Roles | Write | Scenario |
 |---|---|---|---|---|
-| absence (8101) | `get_policy` | intern, mentor, lead | no | S3 step 1 |
+| absence (`/mcp/absence`) | `get_policy` | intern, mentor, lead | no | S3 step 1 |
 | absence | `list_my_requests` | intern, mentor, lead | no | S3 |
 | absence | `validate_request` | intern, mentor, lead | no | S3 step 2 |
 | absence | `create_request` | intern, mentor, lead | **yes** | S3 steps 5–7 |
 | absence | `get_request` | intern, mentor, lead (own only) | no | S3 step 8 |
-| approvals (8102) | `list_pending` | lead | no | S3 step 8, S4 |
+| approvals (`/mcp/approvals`) | `list_pending` | lead | no | S3 step 8, S4 |
 | approvals | `decide` | lead (own team only) | **yes** | S3 step 8, S4 |
-| directory (8103) | `whoami` | all | no | S2 |
+| directory (`/mcp/directory`) | `whoami` | all | no | S2 |
 | directory | `get_my_contacts` | all | no | S2 «к кому идти», CL-02, CL-03 |
-| checklist (8104) | `get_plan_template` | all | no | S1 |
-| access (8105) | `list_required` | intern, mentor | no | S4 step 1 |
+| checklist (`/mcp/checklist`) | `get_plan_template` | all | no | S1 |
+| access (`/mcp/access`) | `list_required` | intern, mentor | no | S4 step 1 |
 | access | `list_my_access` | intern, mentor | no | S4 |
 | access | `list_team_channels` | intern, mentor | no | S4 step 4, CL-04 |
 | access | `request_access` | intern, mentor | **yes** | S4 steps 2–3 |
-| kb (8106) | `search` | all | no | S2 |
+| kb (`/mcp/kb`) | `search` | all | no | S2 |
+
+Callers: the agent (A) calls read tools and the S3/S4 write tools after confirmation; core (B) calls `approvals.*`
+(lead decision buttons) and `kb.add_faq` (mentor answer) and issues the confirmation token itself, because the button press
+is the confirmation.
 
 Not provided on purpose (R72): salary, compensation amounts, medical data, hiring, dismissal, other people's absences.
 

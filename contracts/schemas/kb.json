@@ -76,6 +76,70 @@
           "items"
         ]
       }
+    },
+    {
+      "name": "add_faq",
+      "description": "Добавить ответ наставника в базу знаний его команды (сценарий S2, флаг escalation_to_kb). Документ виден ролям intern, mentor, lead этой команды.",
+      "roles": [
+        "mentor"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "body": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 8000
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source_type": {
+            "const": "test"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "source_type"
+        ]
+      }
     }
   ]
 }

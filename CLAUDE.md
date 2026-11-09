@@ -26,8 +26,9 @@ Read those only when the task needs them — do not load them "just in case".
 ## Repo map and owners
 | Path | Owner | What |
 |---|---|---|
-| `services/core/` | B | Go core API: REST + SSE proxy, plan, actions log, JWT check, feature flags, AI-cron, Kafka events |
-| `services/mcp-*/` | B | Go MCP servers over mock corporate services (absence, approvals, access, checklist, directory, kb) |
+| `services/cmd/core`, `services/internal/core/` | B | Go core API: REST + SSE proxy, plan, actions log, JWT check, feature flags, AI-cron, Kafka events |
+| `services/cmd/mcp-mocks`, `services/internal/mocks/` | B | One binary, six MCP servers over mock corporate services at /mcp/<server> |
+| `services/internal/platform/` | B | Shared Go libs: JWT, confirmation tokens, MCP helpers, SSE, pgtest |
 | `services/agent/` | A | Agent service (Python+Flask or Go — see ADR-001): agent.yaml, prompts, RAG with ACL filter, LLM providers |
 | `web/` | C | React + TS, TanStack Query/Router, Zustand, Zod, typed API client |
 | `e2e/` | C | Playwright tests, one per declared scenario |
@@ -45,7 +46,8 @@ Work inside your own area. Touch another owner's files only through a PR they re
 - `make coverage` — HTML + Cobertura + summary into `coverage/`; fails under 80%
 - `make e2e` — Playwright against a running stack on stub LLM
 - `make lint` — golangci-lint, ruff, eslint, `openspec validate --all`
-- `make seed` — reload synthetic data
+- `make seed` — regenerate the demo seed from the checklist; `make reset` — recreate the database
+- `make vendor` — re-vendor Go deps after changing go.mod (needs network)
 
 ## How to work (token budget matters: 3 Pro accounts for the whole hackathon)
 - One task per session; `/clear` between tasks. Plan Mode before touching more than 2–3 files.

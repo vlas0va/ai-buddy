@@ -122,10 +122,12 @@ CREATE TABLE core.notifications (
     title             text NOT NULL,
     body              text,
     checklist_item_id text,
+    dedupe_key        text,                      -- AI-cron: one reminder per (user, item, kind, period)
     read_at           timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX notifications_user_idx ON core.notifications (user_id, created_at DESC);
+CREATE UNIQUE INDEX notifications_dedupe_idx ON core.notifications (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL;
 
 CREATE TABLE core.feedback (
     message_id uuid NOT NULL REFERENCES core.chat_messages(id) ON DELETE CASCADE,
