@@ -102,6 +102,8 @@ def load_docs(kb_dir: Path) -> list[Doc]:
     for d in docs:
         if d.source_type != "test":
             raise ValueError(f"{d.doc_id}: every KB document must have source_type: test (R69)")
+        if not d.roles or not d.teams:
+            raise ValueError(f"{d.doc_id}: frontmatter with acl.roles and acl.teams is required (R71)")
     return docs
 
 

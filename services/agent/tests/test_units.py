@@ -202,3 +202,9 @@ def test_AG_20_name_matching():
 def test_AG_21_errors_to_dict():
     assert ToolError().to_dict()["retryable"] is True
     assert ToolValidationError("x").code == "validation_failed" and ToolDenied().http_status == 403
+
+
+def test_S2_22_kb_rejects_documents_without_acl(tmp_path):
+    (tmp_path / "x.md").write_text("# Без frontmatter\nТекст", encoding="utf-8")
+    with pytest.raises(ValueError):
+        KnowledgeBase.from_dir(tmp_path)

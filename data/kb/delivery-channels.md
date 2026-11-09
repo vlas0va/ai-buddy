@@ -1,3 +1,13 @@
+---
+doc_id: delivery-channels
+title: "Каналы и чаты команды Доставка"
+source_type: test
+acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-01
+checklist: [CL-01, CL-04]
+tags: [каналы, чаты, мессенджер]
+updated: 2026-11-01
+---
 # Каналы и чаты команды «Доставка»
 
 - #delivery-team — рабочий чат команды: объявления, вопросы, обсуждение задач и код-ревью.
