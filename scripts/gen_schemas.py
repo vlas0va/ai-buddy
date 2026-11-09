@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Regenerate contracts/schemas/*.json. Usage: python3 scripts/gen_schemas.py contracts/schemas"""
+import json, os, sys
+out = sys.argv[1]
+S = "https://json-schema.org/draft/2020-12/schema"
+date = {"type": "string", "format": "date"}
+idem = {"type": "string", "format": "uuid", "description": "= proposal_id; repeated call returns stored result"}
+conf = {"type": "string", "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"}
+def obj(props, req=None):
+    o = {"type": "object", "additionalProperties": False, "properties": props}
+    if req: o["required"] = req
+    return o
+def tool(name, desc, roles, write, inp, outp):
+    return {"name": name, "description": desc, "roles": roles, "write": write,
+            "inputSchema": {"$schema": S, **inp}, "outputSchema": {"$schema": S, **outp}}
+abs_req = obj({
+    "id": {"type": "string", "pattern": "^ABS-[0-9]{6}$"},
+    "type": {"type": "string", "enum": ["day_off"]},
+    "start_date": date, "end_date": date,
+    "comment": {"type": "string"},
+    "status": {"type": "string", "enum": ["pending_approval", "approved", "rejected", "cancelled"]},
+    "approver_id": {"type": "string"}, "approver_display_name": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "replayed": {"type": "boolean"}},
+    ["id", "type", "start_date", "end_date", "status", "approver_id", "created_at"])
+absence = [
+  tool("get_policy", "Тестовая инструкция по оформлению отгула для команды пользователя (team из JWT).", ["intern","mentor","lead"], False,
+       obj({}), obj({"doc_id": {"type":"string"}, "title": {"type":"string"}, "text": {"type":"string"},
+                     "source_type": {"const": "test"}, "url": {"type":"string"}}, ["doc_id","title","text","source_type"])),
+  tool("list_my_requests", "Заявки на отсутствие текущего пользователя.", ["intern","mentor","lead"], False,
+       obj({"status": {"type":"string","enum":["pending_approval","approved","rejected","cancelled"]}}),
+       obj({"items": {"type":"array","items": abs_req}}, ["items"])),
+  tool("validate_request", "Проверка дат без записи: будущее, рабочий день, нет пересечений, не больше 3 дней подряд.", ["intern","mentor","lead"], False,
+       obj({"type": {"type":"string","enum":["day_off"]}, "start_date": date, "end_date": date}, ["type","start_date","end_date"]),
+       obj({"valid": {"type":"boolean"}, "problems": {"type":"array","items":{"type":"string"}},
+            "approver_id": {"type":"string"}, "approver_display_name": {"type":"string"}}, ["valid","problems"])),
+  tool("create_request", "Создать заявку на отгул от имени пользователя из JWT. Только после подтверждения.", ["intern","mentor","lead"], True,
+       obj({"type": {"type":"string","enum":["day_off"]}, "start_date": date, "end_date": date,
+            "comment": {"type":"string","maxLength":500}, "idempotency_key": idem, "confirmation_token": conf},
+           ["type","start_date","end_date","idempotency_key","confirmation_token"]),
+       abs_req),
+  tool("get_request", "Заявка по номеру; только своя.", ["intern","mentor","lead"], False,
+       obj({"id": {"type":"string","pattern":"^ABS-[0-9]{6}$"}}, ["id"]), abs_req),
+]
+appr_item = obj({"id": {"type":"string"}, "kind": {"type":"string","enum":["absence_request","access_request"]},
+                 "ref_id": {"type":"string"}, "requester_id": {"type":"string"}, "requester_display_name": {"type":"string"},
+                 "summary": {"type":"string"}, "status": {"type":"string","enum":["pending","approved","rejected"]},
+                 "comment": {"type":"string"}, "created_at": {"type":"string","format":"date-time"}, "replayed": {"type":"boolean"}},
+                ["id","kind","ref_id","requester_id","summary","status","created_at"])
+approvals = [
+  tool("list_pending", "Запросы на согласование, где согласующий — пользователь из JWT.", ["lead"], False,
+       obj({}), obj({"items": {"type":"array","items": appr_item}}, ["items"])),
+  tool("decide", "Согласовать или отклонить запрос своей команды.", ["lead"], True,
+       obj({"approval_id": {"type":"string"}, "decision": {"type":"string","enum":["approved","rejected"]},
+            "comment": {"type":"string","maxLength":1000}, "idempotency_key": idem, "confirmation_token": conf},
+           ["approval_id","decision","idempotency_key","confirmation_token"]),
+       appr_item),
+]
+contact = obj({"role": {"type":"string","enum":["mentor","lead","hrbp","curator"]}, "employee_id": {"type":"string"},
+               "display_name": {"type":"string"}, "channel": {"type":"string","description":"Название канала или чата, без личных контактов"},
+               "ask_about": {"type":"array","items":{"type":"string"}}}, ["role","employee_id","display_name"])
+directory = [
+  tool("whoami", "Профиль пользователя из JWT: команда, роль, начало стажировки, текущий период.", ["intern","mentor","lead","hrbp","alumni"], False,
+       obj({}), obj({"employee_id":{"type":"string"},"display_name":{"type":"string"},"role":{"type":"string"},
+                     "team_id":{"type":"string"},"team_name":{"type":"string"},"cohort_start":date,
+                     "current_period":{"type":"string","enum":["week_1","week_2","month_1","month_2","after_3_months"]}},
+                    ["employee_id","display_name","role","team_id"])),
+  tool("get_my_contacts", "Свои наставник, руководитель, HR BP и куратор стажировки и с чем к ним идти.", ["intern","mentor","lead","hrbp","alumni"], False,
+       obj({}), obj({"items":{"type":"array","items":contact}}, ["items"])),
+]
+cl_item = obj({"id":{"type":"string","pattern":"^CL-[0-9]{2}$"}, "role":{"type":"string","enum":["intern","mentor","both"]},
+               "period":{"type":"string","enum":["week_1","week_2","month_1","month_2","after_3_months"]},
+               "title":{"type":"string"}, "description":{"type":"string"},
+               "steps":{"type":"array","items":{"type":"string"}},
+               "scenarios":{"type":"array","items":{"type":"string","enum":["S1","S2","S3","S4"]}},
+               "human_only":{"type":"boolean"}}, ["id","role","period","title","scenarios","human_only"])
+checklist = [
+  tool("get_plan_template", "Пункты чек-листа Авито для роли (data/checklist/checklist.yaml) с учётом команды.", ["intern","mentor","lead","hrbp","alumni"], False,
+       obj({"role": {"type":"string","enum":["intern","mentor"]}}, ["role"]),
+       obj({"periods":{"type":"array","items":obj({"id":{"type":"string"},"label":{"type":"string"}},["id","label"])},
+            "items":{"type":"array","items":cl_item}}, ["periods","items"])),
+]
+res = obj({"resource_id":{"type":"string"},"name":{"type":"string"},"kind":{"type":"string","enum":["tool","space","channel"]},
+           "elevated":{"type":"boolean"},"status":{"type":"string","enum":["not_requested","pending_approval","granted","rejected"]},
+           "checklist_item_id":{"type":"string"}}, ["resource_id","name","kind","elevated","status"])
+acc_req = obj({"id":{"type":"string","pattern":"^ACC-[0-9]{6}$"},"resource_id":{"type":"string"},"resource_name":{"type":"string"},
+               "status":{"type":"string","enum":["pending_approval","granted","rejected"]},"approver_id":{"type":["string","null"]},
+               "checklist_item_id":{"type":["string","null"],"description":"Plan task to link the action to (R66)"},
+               "created_at":{"type":"string","format":"date-time"},"replayed":{"type":"boolean"}},
+              ["id","resource_id","status","created_at"])
+access = [
+  tool("list_required", "Доступы, нужные команде пользователя (Confluence, Jira, пространство кластера/команды), со статусом для него.", ["intern","mentor"], False,
+       obj({}), obj({"items":{"type":"array","items":res}}, ["items"])),
+  tool("list_my_access", "Выданные и запрошенные доступы пользователя.", ["intern","mentor"], False,
+       obj({}), obj({"items":{"type":"array","items":res}}, ["items"])),
+  tool("list_team_channels", "Каналы и чаты команды (только названия и назначение, без участников).", ["intern","mentor"], False,
+       obj({}), obj({"items":{"type":"array","items":obj({"name":{"type":"string"},"purpose":{"type":"string"},"closed":{"type":"boolean"}},["name","closed"])}}, ["items"])),
+  tool("request_access", "Заявка на доступ для пользователя из JWT. Повышенные права уходят на согласование руководителю.", ["intern","mentor"], True,
+       obj({"resource_id":{"type":"string"},"reason":{"type":"string","maxLength":500},"idempotency_key":idem,"confirmation_token":conf},
+           ["resource_id","idempotency_key","confirmation_token"]),
+       acc_req),
+]
+kb = [
+  tool("search", "Поиск по базе знаний среди документов, доступных роли и команде пользователя (ACL до LLM). Все документы — тестовые.", ["intern","mentor","lead","hrbp","alumni"], False,
+       obj({"query":{"type":"string","minLength":2,"maxLength":500},"k":{"type":"integer","minimum":1,"maximum":10,"default":5}}, ["query"]),
+       obj({"items":{"type":"array","items":obj({"doc_id":{"type":"string"},"title":{"type":"string"},"snippet":{"type":"string"},
+            "source_type":{"const":"test"},"url":{"type":"string"},"score":{"type":"number"}},["doc_id","title","snippet","source_type"])}}, ["items"])),
+  tool("add_faq", "Добавить ответ наставника в базу знаний его команды (сценарий S2, флаг escalation_to_kb). Документ виден ролям intern, mentor, lead этой команды.", ["mentor"], True,
+       obj({"title":{"type":"string","minLength":3,"maxLength":300},"body":{"type":"string","minLength":3,"maxLength":8000},
+            "idempotency_key":idem,"confirmation_token":conf}, ["title","body","idempotency_key","confirmation_token"]),
+       obj({"doc_id":{"type":"string"},"title":{"type":"string"},"source_type":{"const":"test"},"replayed":{"type":"boolean"}}, ["doc_id","title","source_type"])),
+]
+for name, tools in [("absence",absence),("approvals",approvals),("directory",directory),("checklist",checklist),("access",access),("kb",kb)]:
+    with open(os.path.join(out, f"{name}.json"), "w", encoding="utf-8") as f:
+        json.dump({"server": name, "tools": tools}, f, ensure_ascii=False, indent=2); f.write("\n")
+print("ok")

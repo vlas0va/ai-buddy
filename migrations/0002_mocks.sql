@@ -106,7 +106,10 @@ CREATE TABLE kb.documents (
     source_type text NOT NULL DEFAULT 'test' CHECK (source_type = 'test'),  -- R69
     acl_roles   text[] NOT NULL,                -- e.g. {intern,mentor,lead}
     acl_teams   text[] NOT NULL,                -- team ids or {*}
+    kind        text NOT NULL DEFAULT 'doc' CHECK (kind IN ('doc','faq','note')),  -- faq = mentor answer, note = private notes
     owner_id    text REFERENCES directory.employees(id),  -- set only for private notes (CL-04 step 3)
+    created_by  text REFERENCES directory.employees(id),
+    idempotency_key uuid UNIQUE,                -- kb.add_faq
     checklist_item_id text,
     url         text,
     updated     date NOT NULL DEFAULT current_date,

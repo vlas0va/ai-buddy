@@ -1,8 +1,9 @@
 # Analytics events contract
 
 Owner: **B**. Producers: core (domain events), web via `POST /api/events` (clickstream, names start with `ui.`).
-Profile `full`: core writes to `core.outbox` → publisher → Kafka topics `buddy.domain`, `buddy.clickstream` → consumer → `core.analytics_events`.
-Profile `core`: core inserts straight into `core.analytics_events`, so Grafana metrics work without Kafka (R62).
+Core always inserts events into `core.analytics_events` (Grafana reads them in both profiles, R24).
+When `KAFKA_BROKERS` is set (profile `full`), core also writes each event to `core.outbox` in the same transaction and a
+publisher goroutine sends it to Kafka topics `buddy.domain` / `buddy.clickstream` — the hand-off to Avito's Clickstream (R62).
 
 ## Envelope
 ```json

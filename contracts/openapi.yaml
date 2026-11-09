@@ -91,12 +91,18 @@ paths:
       tags: [plan]
       summary: Onboarding plan built from the Avito checklist (S1, R18-R20)
       description: |
-        Without `user_id` returns the caller's own plan (intern plan or mentor plan by role).
-        A mentor or lead may pass `user_id` of an intern of their own team; anyone else gets 403 (R71).
+        Without `user_id` returns the caller's own plan: an intern gets the intern plan; a mentor gets the mentor plan
+        (CL-01, CL-02, CL-06, CL-12, CL-13, CL-16) for their first intern, or for `intern_id` when given.
+        A mentor or lead may pass `user_id` of an intern of their own team to see that intern's plan; anyone else gets 403 (R71).
       parameters:
         - name: user_id
           in: query
           required: false
+          schema: { type: string }
+        - name: intern_id
+          in: query
+          required: false
+          description: Mentor only, selects which intern's mentor plan to return
           schema: { type: string }
       responses:
         "200":
@@ -604,10 +610,11 @@ components:
 
     Plan:
       type: object
-      required: [user_id, plan_role, current_period, periods, goals]
+      required: [user_id, plan_role, intern_id, current_period, periods, goals]
       properties:
-        user_id: { type: string }
+        user_id: { type: string, description: Owner of the plan }
         plan_role: { type: string, enum: [intern, mentor] }
+        intern_id: { type: string, description: The intern whose onboarding this plan supports (= user_id for an intern plan) }
         current_period: { $ref: "#/components/schemas/Period" }
         periods:
           type: array
