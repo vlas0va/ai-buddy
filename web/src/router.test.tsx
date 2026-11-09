@@ -37,7 +37,7 @@ describe('routing and auth guard', () => {
     )
     const router = mount('/')
     expect(await screen.findByRole('heading', { name: 'Чат с buddy' })).toBeInTheDocument()
-    expect(await screen.findByText(/Анна, Стажёр/)).toBeInTheDocument()
+    expect(await screen.findByText('Стажёр')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
     expect(await screen.findByRole('heading', { name: 'Вход в AI-buddy' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/login')

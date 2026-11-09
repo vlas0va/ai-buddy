@@ -4,7 +4,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createQueryClient } from './queryClient'
 import { createAppRouter } from './router'
-import './styles.css'
+import './styles/tokens.css'
+import './styles/base.css'
+import './components/ui/ui.css'
 
 const router = createAppRouter()
 const queryClient = createQueryClient()

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { errorMessage, isRetryable } from '@/api/client'
 import { Skeleton } from './Skeleton'
+import { EmptyState } from './ui/EmptyState'
+import { ErrorState } from './ui/ErrorState'
 
 interface Props {
   isLoading: boolean
@@ -15,17 +17,8 @@ interface Props {
 export function QueryState({ isLoading, error, isEmpty, emptyText, onRetry, children }: Props) {
   if (isLoading) return <Skeleton />
   if (error) {
-    return (
-      <div className="state state-error" role="alert">
-        <p>{errorMessage(error)}</p>
-        {onRetry && isRetryable(error) && (
-          <button type="button" onClick={onRetry}>
-            Повторить
-          </button>
-        )}
-      </div>
-    )
+    return <ErrorState message={errorMessage(error)} onRetry={onRetry && isRetryable(error) ? onRetry : undefined} />
   }
-  if (isEmpty) return <div className="state state-empty">{emptyText ?? 'Пока ничего нет.'}</div>
+  if (isEmpty) return <EmptyState>{emptyText ?? 'Пока ничего нет.'}</EmptyState>
   return <>{children}</>
 }

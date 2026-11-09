@@ -4,6 +4,10 @@ import { getMe } from '@/api/auth'
 import { keys } from '@/api/keys'
 import { useSession } from '@/store/session'
 import { ROLE_LABELS } from './roles'
+import { Avatar } from './ui/Avatar'
+import { Button } from './ui/Button'
+import { Logo } from './ui/Logo'
+import './layout.css'
 
 export function AppLayout() {
   const navigate = useNavigate()
@@ -19,24 +23,35 @@ export function AppLayout() {
 
   return (
     <div className="layout">
-      <header className="layout-header">
-        <strong>AI-buddy</strong>
-        <nav>
-          <Link to="/chat">Чат</Link>
-          <Link to="/plan">План адаптации</Link>
-        </nav>
-        <div className="layout-user">
-          {user && (
-            <span>
-              {user.display_name}, {ROLE_LABELS[user.role]}
-            </span>
-          )}
-          <button type="button" onClick={logout}>
-            Выйти
-          </button>
+      <aside className="sidebar">
+        <div className="brand">
+          <Logo size={28} />
+          <span className="brand-name">AI-buddy</span>
         </div>
-      </header>
-      <main>
+        <nav className="nav" aria-label="Основное меню">
+          <Link to="/chat" className="nav-link">
+            Чат
+          </Link>
+          <Link to="/plan" className="nav-link">
+            Мой план
+          </Link>
+        </nav>
+        <div className="sidebar-user">
+          {user && (
+            <div className="user-info">
+              <Avatar name={user.display_name} />
+              <div className="user-text">
+                <span className="user-name">{user.display_name}</span>
+                <span className="user-role">{ROLE_LABELS[user.role]}</span>
+              </div>
+            </div>
+          )}
+          <Button variant="ghost" size="sm" onClick={logout}>
+            Выйти
+          </Button>
+        </div>
+      </aside>
+      <main className="content">
         <Outlet />
       </main>
     </div>
