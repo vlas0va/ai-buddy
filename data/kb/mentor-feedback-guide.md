@@ -3,6 +3,7 @@ doc_id: mentor-feedback-guide
 title: "Как давать обратную связь стажёру"
 source_type: test
 acl: {roles: [mentor, lead], teams: ["*"]}
+checklist_item_id: CL-12
 checklist: [CL-12]
 tags: [обратная связь, 1:1]
 updated: 2026-11-01

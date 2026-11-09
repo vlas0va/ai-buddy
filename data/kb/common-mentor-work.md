@@ -3,6 +3,7 @@ doc_id: common-mentor-work
 title: "Как работать с наставником"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-04
 checklist: [CL-04]
 tags: [наставник, 1:1, конспект]
 updated: 2026-11-01

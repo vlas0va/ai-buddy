@@ -3,6 +3,7 @@ doc_id: common-who-to-ask
 title: "К кому с чем идти"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-03
 checklist: [CL-03]
 tags: [к кому обратиться, контакты]
 updated: 2026-11-01

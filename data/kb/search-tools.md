@@ -3,6 +3,7 @@ doc_id: search-tools
 title: "Инструменты команды Поиск"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [search]}
+checklist_item_id: CL-07
 checklist: [CL-07]
 tags: [инструменты, стек, Python, ML]
 updated: 2026-11-01

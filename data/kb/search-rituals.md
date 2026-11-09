@@ -3,6 +3,7 @@ doc_id: search-rituals
 title: "Ритуалы команды Поиск"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [search]}
+checklist_item_id: CL-04
 checklist: [CL-04]
 tags: [стендап, планирование, встречи]
 updated: 2026-11-01

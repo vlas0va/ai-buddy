@@ -3,6 +3,7 @@ doc_id: mentor-handbook
 title: "Методичка наставника (тестовая версия)"
 source_type: test
 acl: {roles: [mentor, lead], teams: ["*"]}
+checklist_item_id: CL-02
 checklist: [CL-02, CL-06]
 tags: [методичка, наставник]
 updated: 2026-11-01

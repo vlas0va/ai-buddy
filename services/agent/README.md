@@ -18,7 +18,7 @@ OpenAI-совместимым API. Все корпоративные дейст�
 ```bash
 cd services/agent
 python -m pip install -r requirements-dev.txt
-make test        # 170 тестов, ~10 с, без сети и ключей
+make test        # 174 теста, ~10 с, без сети и ключей
 make coverage    # покрытие строк ~97% (порог 80%), HTML + Cobertura в coverage/agent
 make eval        # 92 кейса, guard-метрики (отказы, инъекции, права) должны быть 100%
 make run         # агент на :8090 + консоль разработчика http://localhost:8090/dev
@@ -59,7 +59,8 @@ POST /v1/turn {turn.kind: confirm, proposal_id, draft, confirmation_token}
 | `LLM_FALLBACK_TO_STUB` | `true` | при сбое LLM ответ строит stub, пользователь видит пометку |
 | `EMBEDDINGS_BASE_URL`, `EMBEDDINGS_MODEL` | пусто | гибридный поиск BM25 + векторы (например, `bge-m3` в Ollama) |
 | `JWT_SECRET`, `CONFIRMATION_HMAC_SECRET` | dev-значения | те же, что у core и MCP-серверов |
-| `MCP_<SERVER>_URL` | пусто | URL MCP-сервера B; пусто → встроенная имитация этого сервера |
+| `MCP_BASE_URL` | пусто | `http://mcp-mocks:8100/mcp` — все серверы B по адресу `<base>/<server>` |
+| `MCP_<SERVER>_URL` | пусто | адрес одного сервера (важнее `MCP_BASE_URL`); пусто и нет базы → встроенная имитация |
 | `REDIS_URL` + `AGENT_USE_REDIS=true` | выкл. | состояние диалогов и реестр proposal в Redis |
 | `AGENT_SERVICE_TOKEN` | пусто | общий секрет core → агент (`X-Service-Token`) |
 | `AGENT_DEV_MODE`, `AGENT_ALLOW_CLOCK_OVERRIDE` | `false` | консоль `/dev`; поле `today` в запросе для демо и e2e |
@@ -88,6 +89,6 @@ python training/augment_with_llm.py     # опционально: парафра
 
 ## Тесты и трассировка
 - Имена тестов содержат ID сценариев спек: `test_S3_05_confirmed_request_created_shown_saved`.
-- `python tools/spec_trace.py --report ../../eval/reports/spec-trace.md` — у каждого из 137 сценариев есть тест.
+- `python tools/spec_trace.py --report ../../eval/reports/spec-trace.md` — у каждого из 140 сценариев есть тест.
 - Матрица прав имитаций (`tests/test_mocks.py`) повторяет требования `contracts/mcp-tools.md` к Go-серверам B.
 - MCP-клиент и LLM-провайдер проверяются через `httpx.MockTransport`: CI не нужны ни сеть, ни ключ.

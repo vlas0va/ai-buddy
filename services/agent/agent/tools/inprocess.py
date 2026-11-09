@@ -22,7 +22,7 @@ from ..dates import working_days
 from ..errors import ToolDenied, ToolError, ToolValidationError
 from ..retrieval import KnowledgeBase
 
-PERIODS = [("week_1", 7), ("week_2", 14), ("month_1", 30), ("month_2", 60), ("after_3_months", 100)]
+PERIODS = [("week_1", 7), ("week_2", 14), ("month_1", 30), ("month_2", 90)]  # = B's platform/period.Current
 TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "absence.get_policy": {"intern", "mentor", "lead"},
     "absence.list_my_requests": {"intern", "mentor", "lead"},
@@ -265,6 +265,10 @@ class MockServices:
             problems.append("Дата окончания раньше даты начала.")
         if start < today:
             problems.append("Дата уже прошла — выбери дату в будущем.")
+        elif start == today:
+            problems.append(
+                "Через сервис отгул оформляется начиная с завтрашнего дня — на сегодня предупреди руководителя лично."
+            )
         if end >= start and wd == 0:
             problems.append("Это выходной или праздничный день — отгул не нужен.")
         if wd > pol["max_working_days"]:
@@ -422,6 +426,7 @@ class MockServices:
             "resource_name": res["name"],
             "status": rec["status"],
             "approver_id": approver,
+            "checklist_item_id": res.get("checklist_item_id"),
             "created_at": rec["created_at"],
             "replayed": False,
         }

@@ -3,6 +3,7 @@ doc_id: delivery-team-overview
 title: "Кто есть кто в команде Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-03
 checklist: [CL-03]
 tags: [команда, кто есть кто, знакомство]
 updated: 2026-11-01

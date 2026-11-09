@@ -12,7 +12,7 @@
 | R21 | Обоснование архитектуры | ADR-001, 003–008 | `docs/adr/` |
 | R22, R71 | Права | Пять рубежей ADR-003, матрица прав имитаций | `test_RG_*`, `test_MCP_*`, eval `rt-*`, `inj-*` (100%) |
 | R24, R25 | Метрики и пилот | Дерево метрик, DiD по командам, опросы, стоп-кран | `docs/product/metrics.md`, `docs/agent/slides.md` |
-| R37, R60, R75 | SDD-спеки | 8 спек, 8 архивных изменений, 137 сценариев → тесты | `openspec/`, `eval/reports/spec-trace.md` |
+| R37, R60, R75 | SDD-спеки | 8 спек, 8 архивных изменений, 140 сценариев → тесты | `openspec/`, `eval/reports/spec-trace.md` |
 | R44–R46 | LLM, ключи, пример конфигурации | `LLM_*`, stub по умолчанию, `.env.example` | `docs/llm-and-keys.md`, `test_S2_18..21`, `test_LLM_*` |
 | R53 | Конфиг «промпт + MCP» | `services/agent/agent.yaml` | `test_AG_06`, `test_AG_18` |
 | R57 | Наставник, руководитель, HR BP | Согласования в чате, прогресс подопечных, перенаправление к HR BP | `test_TR_*`, `test_RG_13` |

@@ -3,6 +3,7 @@ doc_id: delivery-rituals
 title: "Ритуалы команды Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-04
 checklist: [CL-04]
 tags: [стендап, планирование, ретро, встречи]
 updated: 2026-11-01

@@ -3,6 +3,7 @@ doc_id: delivery-space-docs
 title: "Пространство и документы команды Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-05
 checklist: [CL-05, CL-07]
 tags: [пространство, Confluence, документы, мануалы]
 updated: 2026-11-01

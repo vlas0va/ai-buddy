@@ -5,7 +5,7 @@ The agent SHALL explain the day-off procedure from the test instruction with its
 
 #### Scenario: S3-01 Procedure with source
 - **WHEN** an intern asks how to take a day off
-- **THEN** the agent cites common-dayoff-procedure with the test badge, names the approver and asks for dates
+- **THEN** the agent cites absence-policy with the test badge, names the approver and asks for dates
 
 #### Scenario: S3-02 Relative dates
 - **WHEN** an intern says «хочу отгул в пятницу»

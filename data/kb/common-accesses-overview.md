@@ -3,6 +3,7 @@ doc_id: common-accesses-overview
 title: "Какие доступы нужны и как их запросить"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-01
 checklist: [CL-01, CL-05]
 tags: [доступы, Confluence, Jira, пространство]
 updated: 2026-11-01

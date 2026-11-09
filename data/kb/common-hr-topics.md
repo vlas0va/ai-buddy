@@ -3,6 +3,7 @@ doc_id: common-hr-topics
 title: "Кадровые вопросы"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: null
 checklist: []
 tags: [HR, кадры, документы]
 updated: 2026-11-01

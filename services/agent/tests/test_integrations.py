@@ -286,3 +286,11 @@ def test_LLM_05_embeddings_client():
 
     e = EmbeddingsClient("http://llm/v1", "k", "bge-m3", client=httpx.Client(transport=httpx.MockTransport(handler)))
     assert e(["a", "b"]) == [[0.0], [1.0]]
+
+
+def test_MCP_15_mcp_base_url_routes_every_server(monkeypatch):
+    monkeypatch.setenv("MCP_BASE_URL", "http://mcp-mocks:8100/mcp")
+    settings = make_settings(mcp_base_url="http://mcp-mocks:8100/mcp")
+    agent = build_agent(settings, load_agent_config())
+    assert {k: v.url for k, v in agent.backends.items()}["absence"] == "http://mcp-mocks:8100/mcp/absence"
+    assert load_agent_config().sanitized("intern")["mcp_servers"]["kb"] == "http"

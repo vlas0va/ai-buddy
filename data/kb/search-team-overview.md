@@ -3,6 +3,7 @@ doc_id: search-team-overview
 title: "Кто есть кто в команде Поиск"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [search]}
+checklist_item_id: CL-03
 checklist: [CL-03]
 tags: [команда, кто есть кто, знакомство]
 updated: 2026-11-01

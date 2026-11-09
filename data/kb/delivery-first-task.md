@@ -3,6 +3,7 @@ doc_id: delivery-first-task
 title: "Первая задача стажёра в команде Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: null
 checklist: []
 tags: [первая задача, онбординг]
 updated: 2026-11-01

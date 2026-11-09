@@ -3,6 +3,7 @@ doc_id: common-business-trips
 title: "Командировки: общая справка"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: null
 checklist: []
 tags: [командировка]
 updated: 2026-11-01

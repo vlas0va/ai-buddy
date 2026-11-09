@@ -3,6 +3,7 @@ doc_id: common-equator-prep
 title: "Подготовка к экваторной встрече"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-10
 checklist: [CL-10]
 tags: [экватор, презентация, подготовка]
 updated: 2026-11-01

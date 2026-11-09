@@ -9,7 +9,7 @@ def test_S3_01_explains_procedure_with_test_source_and_asks_dates(anna):
     ev = anna.say("Как оформить отгул?")
     assert ev[0].name == "status"
     src = first(ev, "sources")
-    assert src["items"][0]["doc_id"] == "common-dayoff-procedure"
+    assert src["items"][0]["doc_id"] == "absence-policy"
     assert src["items"][0]["source_type"] == "test" and src["items"][0]["badge"] == "Тестовая инструкция прототипа"
     assert "На какие даты" in text_of(ev)
     assert "Мария Лебедева" in text_of(ev)  # approver from the directory
@@ -166,3 +166,8 @@ def test_S3_18_proposal_fields_follow_contract(anna):
     assert set(p["draft"]) == {"tool", "args", "display"}
     assert len(p["proposal_id"]) == 36  # uuid = idempotency_key
     assert all_of(anna.say("мои заявки"), "action_proposal") == []
+
+
+def test_S3_19_today_is_not_accepted_by_the_service(anna):
+    ev = anna.say("хочу отгул сегодня")
+    assert first(ev, "action_proposal") is None and "завтрашнего дня" in text_of(ev)

@@ -3,6 +3,7 @@ doc_id: common-internship-curator
 title: "Что делает куратор стажировки"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-02
 checklist: [CL-02, CL-06, CL-11, CL-14]
 tags: [куратор, стажировка]
 updated: 2026-11-01

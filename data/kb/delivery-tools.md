@@ -3,6 +3,7 @@ doc_id: delivery-tools
 title: "Инструменты команды Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-07
 checklist: [CL-07]
 tags: [инструменты, стек, Go, Kafka, Grafana]
 updated: 2026-11-01

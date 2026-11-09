@@ -3,6 +3,7 @@ doc_id: common-vacation
 title: "Отпуск во время стажировки"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: null
 checklist: []
 tags: [отпуск, отсутствие]
 updated: 2026-11-01

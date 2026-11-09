@@ -3,6 +3,7 @@ doc_id: common-practice-university
 title: "Как закрыть практику и писать учебные работы"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-09
 checklist: [CL-09]
 tags: [практика, вуз, учебная работа, диплом]
 updated: 2026-11-01

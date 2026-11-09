@@ -3,6 +3,7 @@ doc_id: search-first-task
 title: "Первая задача стажёра в команде Поиск"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [search]}
+checklist_item_id: null
 checklist: []
 tags: [первая задача, онбординг]
 updated: 2026-11-01

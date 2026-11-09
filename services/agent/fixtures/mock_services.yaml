@@ -24,7 +24,7 @@ ask_about:
   hrbp:    ["кадровые вопросы", "больничный", "оплата и документы"]
 
 absence_policy:
-  doc_id: common-dayoff-procedure
+  doc_id: absence-policy
   max_working_days: 3
   notice_working_days: 2
 

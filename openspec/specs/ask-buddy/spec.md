@@ -44,6 +44,10 @@ The agent SHALL answer only from documents returned by kb.search and readable by
 - **WHEN** a KB file has source_type other than test
 - **THEN** loading fails
 
+#### Scenario: S2-22 Documents without ACL rejected
+- **WHEN** a KB file has no frontmatter or empty acl.roles or acl.teams
+- **THEN** loading fails instead of silently hiding or exposing the document
+
 #### Scenario: S2-17 Hybrid retrieval
 - **WHEN** an embeddings endpoint is configured
 - **THEN** BM25 and vector results are fused; a failing embedder falls back to BM25

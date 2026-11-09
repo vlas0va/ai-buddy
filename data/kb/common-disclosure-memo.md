@@ -3,6 +3,7 @@ doc_id: common-disclosure-memo
 title: "Памятка по раскрытию информации (тестовая версия)"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-08
 checklist: [CL-08]
 tags: [раскрытие информации, публичность]
 updated: 2026-11-01

@@ -35,15 +35,16 @@ nlu:
   model_path: agent/models/intent_model.json
   min_confidence: 0.30
 
-# MCP servers (streamable HTTP, contracts/mcp-tools.md: http://mcp-<server>:<port>/mcp).
-# Empty url → the in-process mock of that server is used (standalone/dev/test, or until B's server implements it).
+# MCP servers (streamable HTTP, contracts/mcp-tools.md): B runs all six in one binary at http://mcp-mocks:8100/mcp/<server>.
+# Per-server MCP_<SERVER>_URL wins; else MCP_BASE_URL + "/<server>"; else the in-process mock of that server is used
+# (standalone/dev/test, or until B's server implements its tools).
 mcp_servers:
-  absence:   {url: "${MCP_ABSENCE_URL:-}",   timeout_s: 5}   # http://mcp-absence:8101/mcp
-  approvals: {url: "${MCP_APPROVALS_URL:-}", timeout_s: 5}   # http://mcp-approvals:8102/mcp
-  directory: {url: "${MCP_DIRECTORY_URL:-}", timeout_s: 5}   # http://mcp-directory:8103/mcp
-  checklist: {url: "${MCP_CHECKLIST_URL:-}", timeout_s: 5}   # http://mcp-checklist:8104/mcp
-  access:    {url: "${MCP_ACCESS_URL:-}",    timeout_s: 5}   # http://mcp-access:8105/mcp
-  kb:        {url: "${MCP_KB_URL:-}",        timeout_s: 5}   # http://mcp-kb:8106/mcp
+  absence:   {url: "${MCP_ABSENCE_URL:-}",   timeout_s: 5}   # http://mcp-mocks:8100/mcp/absence
+  approvals: {url: "${MCP_APPROVALS_URL:-}", timeout_s: 5}   # http://mcp-mocks:8100/mcp/approvals
+  directory: {url: "${MCP_DIRECTORY_URL:-}", timeout_s: 5}   # http://mcp-mocks:8100/mcp/directory
+  checklist: {url: "${MCP_CHECKLIST_URL:-}", timeout_s: 5}   # http://mcp-mocks:8100/mcp/checklist
+  access:    {url: "${MCP_ACCESS_URL:-}",    timeout_s: 5}   # http://mcp-mocks:8100/mcp/access
+  kb:        {url: "${MCP_KB_URL:-}",        timeout_s: 5}   # http://mcp-mocks:8100/mcp/kb
 
 roles: [intern, mentor, lead, hrbp, alumni]
 

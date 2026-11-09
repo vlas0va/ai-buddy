@@ -3,6 +3,7 @@ doc_id: lead-approvals-guide
 title: "Как согласовывать заявки стажёров"
 source_type: test
 acl: {roles: [lead], teams: ["*"]}
+checklist_item_id: null
 checklist: []
 tags: [согласование, руководитель]
 updated: 2026-11-01

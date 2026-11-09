@@ -3,6 +3,7 @@ doc_id: common-confidential-info
 title: "Работа с конфиденциальной информацией (тестовая версия)"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-08
 checklist: [CL-08]
 tags: [КИ, конфиденциальная информация]
 updated: 2026-11-01

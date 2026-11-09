@@ -3,6 +3,7 @@ doc_id: common-graduation-survey
 title: "Выпускной и опрос о стажировке"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-14
 checklist: [CL-14, CL-15, CL-16]
 tags: [выпускной, опрос]
 updated: 2026-11-01

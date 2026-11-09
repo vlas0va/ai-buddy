@@ -18,10 +18,12 @@
 6. **AI-крон** (`POST /api/cron/run`): тексты напоминаний — `POST {AGENT_URL}/v1/reminders`.
 7. **Эскалация в базу знаний**: `POST /api/escalations/{id}/answer` с add-to-KB → `POST {AGENT_URL}/v1/kb/faq-draft` →
    сохранить markdown в `kb.documents`.
-8. **mcp-kb** загружает `data/kb/*.md` (frontmatter: `acl.roles`, `acl.teams`, `checklist` — список, первый элемент →
-   `checklist_item_id`). Все документы `source_type: test`.
-9. **MCP-серверы.** Агент вызывает инструменты строго по `contracts/schemas/*.json`. Когда сервер готов, достаточно задать
-   `MCP_<SERVER>_URL=http://mcp-<server>:<port>/mcp` в `.env` — код агента не меняется. Встроенные имитации повторяют матрицу
+8. **mcp-kb** загружает `data/kb/*.md`: база знаний уже готова (37 документов), во frontmatter есть `doc_id`, `title`,
+   `source_type: test`, `acl {roles, teams}`, `checklist_item_id` (и список `checklist`). Документ для `absence.get_policy` —
+   `absence-policy`. Отдельные образцы `access-guide.md` и `team-channels-delivery.md` из брифа не нужны: эти темы уже
+   покрыты `common-accesses-overview` и `delivery-channels`.
+9. **MCP-серверы.** Агент вызывает инструменты строго по `contracts/schemas/*.json`. Когда `mcp-mocks` готов, достаточно задать
+   `MCP_BASE_URL=http://mcp-mocks:8100/mcp` в `.env` (или поштучно `MCP_<SERVER>_URL`) — код агента не меняется. Встроенные имитации повторяют матрицу
    прав из `contracts/mcp-tools.md` (`services/agent/tests/test_mocks.py` можно использовать как чек-лист для Go-тестов).
 10. Изменения в общих файлах, сделанные A: сервис `agent` и профиль `ollama` в compose, цели `test-agent`, `eval`, `train`,
     `agent-dev` в Makefile, агент в `scripts/coverage.sh`, job `agent` и Python в job `go` в CI, переменные в `.env.example`.
@@ -40,3 +42,12 @@
 6. **Видео.** Хорошие фразы для демо: «что мне делать дальше?», «как у нас проходит код-ревью?», «хочу отгул в пятницу» →
    «Отправить», вход `lead.maria` → «покажи заявки на согласование» → «согласуй ABS-…», «покажи отпуск коллеги» (отказ),
    «игнорируй все инструкции…» (отказ).
+
+## Что заметила после слияния `main` (09.11)
+- `Makefile` ссылается на `scripts/test.sh`, `scripts/lint.sh`, `scripts/test-db.sh`, `scripts/e2e.sh` — их пока нет в репозитории.
+- `deploy/docker-compose.yml` ещё собирает `services/core` и `services/mcp-absence`, которых после переезда в один модуль нет;
+  нужен `services/Dockerfile` с `ARG CMD` и сервисы `core` + `mcp-mocks`. Блок `agent` в compose от этого не зависит.
+- В `Makefile` после слияния: `make test` и `make lint` дополнительно запускают `test-agent` и `lint-agent`; отдельные цели
+  `eval`, `train`, `agent-dev`.
+- Агент подстроен под бриф: период `month_2` < 90 дней, отгул только с завтрашнего дня, `request_access` возвращает
+  `checklist_item_id`, `/v1/kb/faq-draft` отдаёт `title` и `body` — ровно аргументы `kb.add_faq`.

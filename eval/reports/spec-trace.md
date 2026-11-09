@@ -1,6 +1,6 @@
 # OpenSpec scenario → test trace
 
-Scenarios: 137 · traced: 137
+Scenarios: 140 · traced: 140
 
 | capability | scenario | test files |
 |---|---|---|
@@ -23,6 +23,7 @@ Scenarios: 137 · traced: 137
 | absence-request | S3-14 Short notice | test_absence_s3.py |
 | absence-request | S3-15 Scenario flag off | test_absence_s3.py |
 | absence-request | S3-16 Role without absence tools | test_absence_s3.py |
+| absence-request | S3-19 Not for today | test_absence_s3.py |
 | absence-request | S3-11 For another person | test_absence_s3.py |
 | access-and-channels | S4-01 List with statuses | test_access_s4.py |
 | access-and-channels | S4-02 Ordinary access | test_access_s4.py |
@@ -61,6 +62,7 @@ Scenarios: 137 · traced: 137
 | ask-buddy | S2-14 Document endpoint | test_qa_s2.py |
 | ask-buddy | S2-15 ACL and snippets in retrieval | test_units.py |
 | ask-buddy | S2-16 Non-test documents rejected | test_units.py |
+| ask-buddy | S2-22 Documents without ACL rejected | test_units.py |
 | ask-buddy | S2-17 Hybrid retrieval | test_units.py |
 | ask-buddy | S2-05 No answer | test_qa_s2.py |
 | ask-buddy | S2-06 Curator topics | test_qa_s2.py |
@@ -86,6 +88,7 @@ Scenarios: 137 · traced: 137
 | nlu-and-llm | MCP-12 Tool errors | test_integrations.py |
 | nlu-and-llm | MCP-13 HTTP failures | test_integrations.py |
 | nlu-and-llm | MCP-14 HTTP backend in the agent | test_integrations.py |
+| nlu-and-llm | MCP-15 One base URL for B's mcp-mocks | test_integrations.py |
 | plan-assistant | S1-01 Stage and next step | test_plan_s1.py |
 | plan-assistant | S1-02 Overdue first | test_plan_s1.py |
 | plan-assistant | S1-03 Status changes move the next step | test_plan_s1.py |

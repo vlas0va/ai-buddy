@@ -3,6 +3,7 @@ doc_id: common-alumni
 title: "После стажировки"
 source_type: test
 acl: {roles: [alumni, mentor, lead, hrbp], teams: ["*"]}
+checklist_item_id: CL-14
 checklist: [CL-14]
 tags: [выпускник, после стажировки]
 updated: 2026-11-01

@@ -107,7 +107,10 @@ class AgentConfig:
             "role": role,
             "read_tools": [t.name for t in self.tools_for_role(role)],
             "write_tools_via_confirmation": [t.name for t in self.tools_for_role(role, True) if t.write],
-            "mcp_servers": {k: ("http" if v.get("url") else "inprocess") for k, v in self.mcp_servers.items()},
+            "mcp_servers": {
+                k: ("http" if (v.get("url") or os.environ.get("MCP_BASE_URL")) else "inprocess")
+                for k, v in self.mcp_servers.items()
+            },
         }
 
 
@@ -143,6 +146,7 @@ class Settings:
     dev_mode: bool = False
     allow_clock_override: bool = False
     mock_faults: str = ""
+    mcp_base_url: str = ""
     llm_api_key: str = ""
     embeddings_api_key: str = ""
     log_level: str = "INFO"
@@ -162,6 +166,7 @@ class Settings:
             dev_mode=_truthy(e.get("AGENT_DEV_MODE", "false")),
             allow_clock_override=_truthy(e.get("AGENT_ALLOW_CLOCK_OVERRIDE", "false")),
             mock_faults=e.get("MOCK_FAULTS", ""),
+            mcp_base_url=e.get("MCP_BASE_URL", ""),
             llm_api_key=e.get("LLM_API_KEY", ""),
             embeddings_api_key=e.get("EMBEDDINGS_API_KEY", "") or e.get("LLM_API_KEY", ""),
             log_level=e.get("LOG_LEVEL", "INFO"),

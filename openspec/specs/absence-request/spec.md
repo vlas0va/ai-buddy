@@ -10,7 +10,7 @@ The agent SHALL explain the day-off procedure from the test instruction with its
 
 #### Scenario: S3-01 Procedure with source
 - **WHEN** an intern asks how to take a day off
-- **THEN** the agent cites common-dayoff-procedure with the test badge, names the approver and asks for dates
+- **THEN** the agent cites absence-policy with the test badge, names the approver and asks for dates
 
 #### Scenario: S3-02 Relative dates
 - **WHEN** an intern says «хочу отгул в пятницу»
@@ -92,6 +92,10 @@ The agent SHALL relay validation problems, SHALL warn about short notice and SHA
 #### Scenario: S3-16 Role without absence tools
 - **WHEN** an alumni asks for a day off
 - **THEN** refusal no_rights
+
+#### Scenario: S3-19 Not for today
+- **WHEN** the intern asks for a day off today
+- **THEN** the service rejects it (requests start tomorrow) and the agent advises to tell the lead personally
 
 #### Scenario: S3-11 For another person
 - **WHEN** an intern asks to file a day off for Ivan

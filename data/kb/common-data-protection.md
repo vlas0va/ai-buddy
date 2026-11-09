@@ -3,6 +3,7 @@ doc_id: common-data-protection
 title: "Основы защиты персональных данных (тестовая версия)"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-08
 checklist: [CL-08]
 tags: [персональные данные, защита данных, безопасность]
 updated: 2026-11-01

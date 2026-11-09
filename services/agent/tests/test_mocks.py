@@ -122,7 +122,7 @@ def test_MCP_08_directory_checklist_whoami(mocks):
         mocks.call("checklist.get_plan_template", {"role": "lead"}, tok(*ANNA))
     assert mocks.call("access.list_my_access", {}, tok(*ANNA))["items"][0]["resource_id"] == "confluence"
     assert mocks.call("absence.list_my_requests", {"status": "approved"}, tok(*ANNA))["items"] == []
-    assert mocks.call("absence.get_policy", {}, tok(*ANNA))["doc_id"] == "common-dayoff-procedure"
+    assert mocks.call("absence.get_policy", {}, tok(*ANNA))["doc_id"] == "absence-policy"
 
 
 def test_MCP_09_faults_parser_and_server_adapter(mocks):

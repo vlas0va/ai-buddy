@@ -315,7 +315,7 @@ class Agent:
             "kind": kind,
             "tool": spec.name,
             **card,
-            "task_checklist_item_id": (reg or {}).get("checklist_item_id"),
+            "task_checklist_item_id": raw.get("checklist_item_id") or (reg or {}).get("checklist_item_id"),
             "replayed": bool(raw.get("replayed")),
             "result": raw,
         }
@@ -351,7 +351,8 @@ class Agent:
             f"origin: escalation\nauthor: {user.user_id}\nupdated: {datetime.now(timezone.utc).date().isoformat()}\n---\n"
             f"# {title}?\n\n{answer.strip()}\n"
         )
-        return {"doc_id": doc_id, "markdown": md}
+        # title/body are exactly the arguments of kb.add_faq (contracts/schemas/kb.json) that core calls itself.
+        return {"doc_id": doc_id, "title": title, "body": answer.strip(), "markdown": md}
 
 
 # ---------------------------------------------------------------------- factory
@@ -370,8 +371,9 @@ def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = N
         settings.mock_faults,
     )
     backends: dict[str, ToolBackend] = {}
+    base_url = settings.mcp_base_url.rstrip("/")
     for server, spec in config.mcp_servers.items():
-        url = str(spec.get("url") or "")
+        url = str(spec.get("url") or "") or (f"{base_url}/{server}" if base_url else "")
         backends[server] = (
             McpHttpServer(server, url, float(spec.get("timeout_s", 5)), client=http_client)
             if url

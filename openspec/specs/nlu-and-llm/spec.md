@@ -65,3 +65,7 @@ The agent SHALL reach MCP servers over streamable HTTP, forward the user token o
 #### Scenario: MCP-14 HTTP backend in the agent
 - **WHEN** MCP_KB_URL is set
 - **THEN** kb.search goes over HTTP and the agent drops documents the user may not read
+
+#### Scenario: MCP-15 One base URL for B's mcp-mocks
+- **WHEN** MCP_BASE_URL is http://mcp-mocks:8100/mcp
+- **THEN** every server is reached at <base>/<server> unless a per-server URL is set

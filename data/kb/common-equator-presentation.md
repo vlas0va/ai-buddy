@@ -3,6 +3,7 @@ doc_id: common-equator-presentation
 title: "Структура презентации на экватор"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: CL-11
 checklist: [CL-11, CL-13]
 tags: [экватор, презентация, структура]
 updated: 2026-11-01

@@ -3,6 +3,7 @@ doc_id: delivery-code-review
 title: "Как у нас проходит код-ревью (Доставка)"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: CL-07
 checklist: [CL-07]
 tags: [код-ревью, pull request, merge request]
 updated: 2026-11-01

@@ -3,6 +3,7 @@ doc_id: common-first-day
 title: "Первый день: техника, учётки, пропуск"
 source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
+checklist_item_id: null
 checklist: []
 tags: [первый день, ноутбук, учётная запись, пропуск]
 updated: 2026-11-01

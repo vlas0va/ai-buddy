@@ -3,6 +3,7 @@ doc_id: delivery-oncall
 title: "Дежурства в команде Доставка"
 source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: [delivery]}
+checklist_item_id: null
 checklist: []
 tags: [дежурство, on-call, алерты]
 updated: 2026-11-01
