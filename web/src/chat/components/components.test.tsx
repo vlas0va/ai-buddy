@@ -3,16 +3,16 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Proposal } from '@/chat/events'
+import { withoutApprover } from '@/chat/statusText'
 import { jsonResponse } from '@/test/helpers'
 import { ActionProposalCard } from './ActionProposalCard'
 import { ActionResultCard } from './ActionResultCard'
 import { ChatInput } from './ChatInput'
 import { ErrorBlock } from './ErrorBlock'
 import { EscalationDraft } from './EscalationDraft'
-import { MessageBubble } from './MessageBubble'
+import { MessageBubble, WelcomeBubble } from './MessageBubble'
 import { RefusalBlock } from './RefusalBlock'
 import { SourceChips } from './SourceChips'
-import { Suggestions } from './Suggestions'
 
 const absence: Proposal & { state: 'pending' } = {
   proposal_id: 'p1',
@@ -111,6 +111,13 @@ describe('SourceChips (R69)', () => {
   })
 })
 
+describe('withoutApprover', () => {
+  it('drops the approver suffix of the summary', () => {
+    expect(withoutApprover('Отгул 13.11.2026, согласующий — Мария Лебедева')).toBe('Отгул 13.11.2026')
+    expect(withoutApprover('Доступ к Jira')).toBe('Доступ к Jira')
+  })
+})
+
 describe('ErrorBlock (R79)', () => {
   it('offers retry only for retryable errors', async () => {
     const onRetry = vi.fn()
@@ -148,9 +155,12 @@ describe('ChatInput', () => {
     expect(box).toHaveValue('')
   })
 
-  it('is disabled while streaming', () => {
-    render(<ChatInput disabled onSend={vi.fn()} />)
-    expect(screen.getByLabelText('Сообщение')).toBeDisabled()
+  it('does not send while streaming: the send button is disabled and Enter is ignored', async () => {
+    const onSend = vi.fn()
+    render(<ChatInput disabled onSend={onSend} />)
+    await userEvent.type(screen.getByLabelText('Сообщение'), 'привет{Enter}')
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled()
+    expect(onSend).not.toHaveBeenCalled()
   })
 
   it('send button submits', async () => {
@@ -162,13 +172,68 @@ describe('ChatInput', () => {
   })
 })
 
-describe('Suggestions and MessageBubble', () => {
-  it('shows three chips and reports the picked one', async () => {
-    const onPick = vi.fn()
-    render(<Suggestions onPick={onPick} />)
-    expect(screen.getAllByRole('button')).toHaveLength(3)
-    await userEvent.click(screen.getByRole('button', { name: 'Кто мой наставник?' }))
-    expect(onPick).toHaveBeenCalledWith('Кто мой наставник?')
+describe('ChatInput suggestions (combobox)', () => {
+  const setup = () => {
+    const onSend = vi.fn()
+    render(<ChatInput disabled={false} onSend={onSend} />)
+    return { onSend, box: screen.getByRole('combobox', { name: 'Сообщение' }) }
+  }
+
+  it('opens on focus with 6 grouped options and closes on Escape', async () => {
+    const { box } = setup()
+    expect(box).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(box)
+    expect(box).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    expect(screen.getAllByRole('option')).toHaveLength(6)
+    expect(screen.getByRole('group', { name: 'Доступы' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('filters by typed text, case-insensitive', async () => {
+    const { box } = setup()
+    await userEvent.type(box, 'ОТГУЛ')
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Хочу взять отгул в пятницу', 'Как оформить отгул?'])
+    await userEvent.type(box, 'zzz')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('ArrowDown/ArrowUp move the active option and Enter sends it', async () => {
+    const { box, onSend } = setup()
+    await userEvent.click(box)
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    const options = screen.getAllByRole('option')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    expect(box).toHaveAttribute('aria-activedescendant', options[1]!.id)
+    await userEvent.keyboard('{ArrowUp}')
+    expect(box).toHaveAttribute('aria-activedescendant', options[0]!.id)
+    await userEvent.keyboard('{ArrowUp}')
+    expect(box).toHaveAttribute('aria-activedescendant', options[5]!.id) // wraps
+    await userEvent.keyboard('{Enter}')
+    expect(onSend).toHaveBeenCalledWith('Что мне сделать на этой неделе?')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+
+  it('click picks and sends; outside click closes; the toggle button toggles', async () => {
+    const { box, onSend } = setup()
+    await userEvent.click(box)
+    await userEvent.click(screen.getByRole('option', { name: 'Кто мой наставник?' }))
+    expect(onSend).toHaveBeenCalledWith('Кто мой наставник?')
+    await userEvent.click(screen.getByRole('button', { name: 'Подсказки' }))
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    await userEvent.click(document.body)
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Подсказки' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Подсказки' }))
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
+})
+
+describe('MessageBubble', () => {
+  it('welcome bubble greets by name', () => {
+    render(<WelcomeBubble name="Анна" />)
+    expect(screen.getByText(/Привет, Анна! Я помогу с адаптацией/)).toBeInTheDocument()
   })
 
   it('renders user and buddy bubbles, typing indicator and status', () => {

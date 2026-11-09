@@ -1,4 +1,4 @@
-import { Avatar } from '@/components/ui/Avatar'
+import { Logo } from '@/components/ui/Logo'
 import type { ChatMessage } from '../stream'
 import { SourceChips } from './SourceChips'
 
@@ -13,7 +13,7 @@ export function MessageBubble({ message, typing, status }: { message: ChatMessag
   const showBubble = message.text !== '' || typing
   return (
     <div className="chat-row chat-row-buddy">
-      <Avatar name="AI Buddy" size="sm" />
+      <Logo size={28} />
       <div className="chat-col">
         {showBubble && (
           <div className="chat-bubble chat-bubble-buddy">
@@ -33,6 +33,20 @@ export function MessageBubble({ message, typing, status }: { message: ChatMessag
           </p>
         )}
         <SourceChips sources={message.sources} />
+      </div>
+    </div>
+  )
+}
+
+/** Client-side greeting for an empty conversation; never sent to the server. */
+export function WelcomeBubble({ name }: { name: string }) {
+  return (
+    <div className="chat-row chat-row-buddy">
+      <Logo size={28} />
+      <div className="chat-col">
+        <div className="chat-bubble chat-bubble-buddy">
+          Привет, {name}! Я помогу с адаптацией: подскажу, кто есть кто, помогу оформить отгул и доступы. С чего начнём?
+        </div>
       </div>
     </div>
   )

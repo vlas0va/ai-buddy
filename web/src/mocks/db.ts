@@ -31,23 +31,92 @@ export interface MockProposal {
   result?: Record<string, unknown>
 }
 
+export interface StoredMessage {
+  id: string
+  author: 'user' | 'assistant'
+  text: string
+  sources: unknown[]
+  created_at: string
+  proposal?: unknown
+  proposal_state?: 'pending' | 'confirmed' | 'cancelled'
+  result?: unknown
+}
+
 export interface MockState {
   actions: Map<string, Action[]>
   proposals: Map<string, MockProposal>
-  sessions: Set<string>
+  sessions: Map<string, StoredMessage[]>
   extraTasks: Map<string, Plan['periods'][number]['tasks']>
   failedOnce: Set<string>
   seq: number
 }
 
 export function freshState(): MockState {
-  return { actions: new Map(), proposals: new Map(), sessions: new Set(), extraTasks: new Map(), failedOnce: new Set(), seq: 1041 }
+  return { actions: new Map(), proposals: new Map(), sessions: new Map(), extraTasks: new Map(), failedOnce: new Set(), seq: 1041 }
 }
 
 export let state: MockState = freshState()
 
 export function resetMockState(): void {
   state = freshState()
+}
+
+// Browser mock mode keeps the whole db under one localStorage key so it survives F5 (R66).
+export const MOCK_STORAGE_KEY = 'ai-buddy-mock-db'
+let persistEnabled = false
+
+export function serializeState(s: MockState): string {
+  return JSON.stringify({
+    actions: [...s.actions],
+    proposals: [...s.proposals],
+    sessions: [...s.sessions],
+    extraTasks: [...s.extraTasks],
+    failedOnce: [...s.failedOnce],
+    seq: s.seq,
+  })
+}
+
+export function parseState(raw: string | null): MockState | null {
+  if (!raw) return null
+  try {
+    const d = JSON.parse(raw) as Record<string, unknown>
+    return {
+      actions: new Map(d.actions as []),
+      proposals: new Map(d.proposals as []),
+      sessions: new Map(d.sessions as []),
+      extraTasks: new Map(d.extraTasks as []),
+      failedOnce: new Set(d.failedOnce as []),
+      seq: typeof d.seq === 'number' ? d.seq : 1041,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function enableMockPersistence(): void {
+  persistEnabled = true
+  try {
+    state = parseState(localStorage.getItem(MOCK_STORAGE_KEY)) ?? freshState()
+  } catch {
+    state = freshState()
+  }
+}
+
+export function saveState(): void {
+  if (!persistEnabled) return
+  try {
+    localStorage.setItem(MOCK_STORAGE_KEY, serializeState(state))
+  } catch {
+    /* storage unavailable: the mock db lives in memory only */
+  }
+}
+
+export function clearMockStorage(): void {
+  try {
+    localStorage.removeItem(MOCK_STORAGE_KEY)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function userByToken(header: string | null): User | null {

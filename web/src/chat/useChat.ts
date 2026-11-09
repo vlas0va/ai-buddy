@@ -1,11 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { cancelProposal, createSession } from '@/api/chat'
+import { cancelProposal, createSession, getSession } from '@/api/chat'
 import { ApiError, errorMessage, isRetryable } from '@/api/client'
 import { keys } from '@/api/keys'
+import { useChatStore } from '@/store/chat'
+import { useSession } from '@/store/session'
 import type { StreamEvent } from './events'
 import { streamPost } from './sse'
 import {
+  fromHistory,
   initialState,
   reduce,
   restartTurn,
@@ -17,7 +20,9 @@ import {
 
 export function useChat() {
   const qc = useQueryClient()
+  const userId = useSession((s) => s.user?.id ?? 'anonymous')
   const [state, setState] = useState<ChatState>(initialState)
+  const [restoring, setRestoring] = useState(() => Boolean(useChatStore.getState().sessions[userId]))
   const streamingRef = useRef(false)
   const sessionRef = useRef<Promise<string> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -25,17 +30,42 @@ export function useChat() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // restore the previous conversation; a missing session (404) or any failure falls back to a new one
+  useEffect(() => {
+    const stored = useChatStore.getState().sessions[userId]
+    if (!stored) return
+    let cancelled = false
+    sessionRef.current = Promise.resolve(stored)
+    getSession(stored)
+      .then((h) => {
+        if (!cancelled) setState(fromHistory(h))
+      })
+      .catch((e: unknown) => {
+        sessionRef.current = null
+        if (e instanceof ApiError && e.status === 404) useChatStore.getState().clearSession(userId)
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
   const ensureSession = useCallback(() => {
     if (!sessionRef.current) {
       sessionRef.current = createSession()
-        .then((r) => r.session_id)
+        .then((r) => {
+          useChatStore.getState().setSession(userId, r.session_id)
+          return r.session_id
+        })
         .catch((e: unknown) => {
           sessionRef.current = null
           throw e
         })
     }
     return sessionRef.current
-  }, [])
+  }, [userId])
 
   const apply = useCallback(
     (event: StreamEvent) => {
@@ -142,5 +172,14 @@ export function useChat() {
     }
   }, [ensureSession])
 
-  return { state, send, retry, confirm, cancel }
+  const newDialog = useCallback(() => {
+    abortRef.current?.abort()
+    streamingRef.current = false
+    sessionRef.current = null
+    inflight.current.clear()
+    useChatStore.getState().clearSession(userId)
+    setState(initialState)
+  }, [userId])
+
+  return { state, restoring, send, retry, confirm, cancel, newDialog }
 }

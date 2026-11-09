@@ -53,3 +53,16 @@ export const EyeOffIcon = () => (
     <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
   </Icon>
 )
+
+export const SuggestIcon = () => (
+  <Icon>
+    <path d="M9 18h6M10 21h4" />
+    <path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" />
+  </Icon>
+)
+
+export const CloseIcon = () => (
+  <Icon>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </Icon>
+)

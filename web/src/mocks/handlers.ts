@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
 import type { Plan, User } from '@/api/schemas'
-import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, state, userByToken, uuid } from './db'
+import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, saveState, state, userByToken, uuid } from './db'
+import { recordConfirm, recordTurn, setStoredProposalState } from './history'
 import { confirmEvents, messageEvents } from './scenario'
 import { sseResponse } from './sse'
 
@@ -64,20 +65,27 @@ export const handlers = [
   http.post('*/api/chat/sessions', ({ request }) => {
     if (!userByToken(request.headers.get('Authorization'))) return unauthorized()
     const id = uuid()
-    state.sessions.add(id)
+    state.sessions.set(id, [])
+    saveState()
     return HttpResponse.json({ session_id: id }, { status: 201 })
   }),
 
   http.get('*/api/chat/sessions/:sessionId', ({ params }) => {
     const id = String(params.sessionId)
-    return state.sessions.has(id) ? HttpResponse.json({ session_id: id, messages: [] }) : notFound()
+    const messages = state.sessions.get(id)
+    return messages ? HttpResponse.json({ session_id: id, messages }) : notFound()
   }),
 
   http.post('*/api/chat/sessions/:sessionId/messages', async ({ request, params }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
     const body = (await request.json()) as { text?: string }
-    return sseResponse(messageEvents(String(params.sessionId), user, body.text ?? ''))
+    const sessionId = String(params.sessionId)
+    if (!state.sessions.has(sessionId)) return notFound()
+    const events = messageEvents(sessionId, user, body.text ?? '')
+    recordTurn(sessionId, body.text ?? '', events)
+    saveState()
+    return sseResponse(events)
   }),
 
   http.post('*/api/chat/sessions/:sessionId/proposals/:proposalId/confirm', ({ request, params }) => {
@@ -88,13 +96,20 @@ export const handlers = [
     if (proposal.state === 'cancelled') {
       return HttpResponse.json({ code: 'conflict', message: 'Заявка уже отменена.', retryable: false }, { status: 409 })
     }
-    return sseResponse(confirmEvents(proposal))
+    const events = confirmEvents(proposal)
+    recordConfirm(String(params.sessionId), proposal.id, events)
+    saveState()
+    return sseResponse(events)
   }),
 
   http.post('*/api/chat/sessions/:sessionId/proposals/:proposalId/cancel', ({ params }) => {
     const proposal = state.proposals.get(String(params.proposalId))
     if (!proposal) return notFound()
-    if (proposal.state === 'pending') proposal.state = 'cancelled'
+    if (proposal.state === 'pending') {
+      proposal.state = 'cancelled'
+      setStoredProposalState(String(params.sessionId), proposal.id, 'cancelled')
+      saveState()
+    }
     return new HttpResponse(null, { status: 204 })
   }),
 

@@ -1,5 +1,5 @@
 import type { Action, User } from '@/api/schemas'
-import { MOCK_USERS, state, uuid, type MockProposal } from './db'
+import { MOCK_USERS, saveState, state, uuid, type MockProposal } from './db'
 import { words, type MockEvent } from './sse'
 
 // Scripted S3 conversation (docs/context/product.md, S3).
@@ -22,8 +22,9 @@ const ru = (d: Date) => `${String(d.getDate()).padStart(2, '0')}.${String(d.getM
 export function messageEvents(sessionId: string, user: User, text: string): MockEvent[] {
   const lower = text.toLowerCase()
 
-  if (lower.includes('ошибка') && !state.failedOnce.has(text)) {
-    state.failedOnce.add(text)
+  if (lower.includes('ошибк') && !state.failedOnce.has(lower)) {
+    state.failedOnce.add(lower)
+    saveState()
     return [
       { event: 'status', data: { stage: 'thinking' } },
       { event: 'error', data: { code: 'upstream_unavailable', message: 'Сервис ответов временно недоступен. Повторите попытку.', retryable: true } },
@@ -127,11 +128,12 @@ export function confirmEvents(proposal: MockProposal): MockEvent[] {
   }
   proposal.state = 'executed'
   proposal.result = result
+  saveState()
   return [
     { event: 'status', data: { stage: 'calling_service' } },
     { event: 'status', data: { stage: 'saving' } },
     { event: 'action_result', data: result },
-    ...words('Заявка создана и отправлена на согласование.'),
+    ...words('Заявка создана и отправлена на согласование. Если отгул влияет на ваши задачи, предупредите наставника.'),
     { event: 'done', data: { message_id: uuid() } },
   ]
 }

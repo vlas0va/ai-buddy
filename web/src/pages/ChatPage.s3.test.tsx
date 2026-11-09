@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { handlers } from '@/mocks/handlers'
 import { MOCK_USERS, resetMockState } from '@/mocks/db'
 import { mockConfig } from '@/mocks/sse'
+import { useChatStore } from '@/store/chat'
 import { useSession } from '@/store/session'
 import { ChatPage } from './ChatPage'
 
@@ -17,6 +18,7 @@ afterEach(() => server.resetHandlers())
 
 beforeEach(() => {
   resetMockState()
+  useChatStore.setState({ sessions: {} })
   mockConfig.stepDelayMs = 0
   const anna = MOCK_USERS[0]!
   useSession.setState({ token: `mock-token-${anna.login}`, user: anna })
@@ -40,8 +42,7 @@ async function ask(text: string) {
 describe('S3 day off flow', () => {
   it('S3_R66: message -> draft -> confirm -> result card -> saved and visible after reload', async () => {
     const { spy, unmount } = mount()
-    expect(screen.getAllByRole('button', { name: /отгул|доступы|наставник/i })).toHaveLength(3)
-    expect(await screen.findByText('Заявок пока нет.')).toBeInTheDocument()
+    expect((await screen.findAllByText('Заявок пока нет.')).length).toBeGreaterThan(0)
 
     await ask('хочу отгул в пятницу')
     const draft = await screen.findByLabelText('Черновик заявки')
@@ -57,13 +58,17 @@ describe('S3 day off flow', () => {
     expect(within(result).getByText('Сохранено в журнале действий')).toBeInTheDocument()
     expect(spy).toHaveBeenCalledWith({ queryKey: ['plan'] })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['actions'] })
-    expect(await screen.findByText(/ABS-1042: Отгул/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Сообщение')).toBeEnabled() // done unlocks the input
+    expect(await screen.findByText('ABS-1042')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled() // empty input
 
-    // reload: a fresh page gets the request from GET /api/actions
+    // reload: a fresh page restores the conversation (GET /api/chat/sessions/{id}) and the request list
     unmount()
     mount()
-    expect(await screen.findByText(/ABS-1042: Отгул/)).toBeInTheDocument()
+    expect(await screen.findByText('ABS-1042')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Результат заявки')).toBeInTheDocument()
+    expect(screen.getByText('хочу отгул в пятницу')).toBeInTheDocument()
+    expect(screen.getByLabelText('Черновик заявки')).toHaveTextContent('Заявка отправлена.')
+    expect(screen.queryByText(/Привет, Анна/)).not.toBeInTheDocument()
   })
 
   it('R79: a double click on "Отправить" creates exactly one request', async () => {
@@ -73,7 +78,7 @@ describe('S3 day off flow', () => {
     const btn = within(draft).getByRole('button', { name: 'Отправить' })
     await userEvent.dblClick(btn)
     await screen.findByLabelText('Результат заявки')
-    expect(await screen.findAllByText(/ABS-\d+: Отгул/)).toHaveLength(1)
+    expect(await screen.findAllByText(/^ABS-\d+$/)).toHaveLength(1)
   })
 
   it('S3: cancelling the draft sends nothing', async () => {
@@ -83,7 +88,56 @@ describe('S3 day off flow', () => {
     await userEvent.click(within(draft).getByRole('button', { name: 'Отменить' }))
     expect(await screen.findByText(/ничего не отправлено/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Результат заявки')).not.toBeInTheDocument()
-    expect(screen.getByText('Заявок пока нет.')).toBeInTheDocument()
+    expect(screen.getAllByText('Заявок пока нет.').length).toBeGreaterThan(0)
+  })
+
+  it('R66: a missing stored session (404) starts a new one; "Новый диалог" clears the chat', async () => {
+    useChatStore.setState({ sessions: { 'intern.anna': 'gone' } })
+    mount()
+    expect(await screen.findByText(/Привет, Анна/)).toBeInTheDocument()
+    await ask('привет')
+    expect(await screen.findByText(/тестовый ответ прототипа/i)).toBeInTheDocument()
+    expect(useChatStore.getState().sessions['intern.anna']).not.toBe('gone')
+    await userEvent.click(screen.getByRole('button', { name: 'Новый диалог' }))
+    expect(await screen.findByText(/Привет, Анна/)).toBeInTheDocument()
+    expect(useChatStore.getState().sessions['intern.anna']).toBeUndefined()
+  })
+
+  it('welcome bubble only for an empty conversation; exactly one text field', async () => {
+    const { container } = mount()
+    expect(await screen.findByText(/Привет, Анна! Я помогу с адаптацией/)).toBeInTheDocument()
+    expect(container.querySelectorAll('textarea, input')).toHaveLength(1)
+    await ask('привет')
+    await screen.findByText(/тестовый ответ прототипа/i)
+    expect(screen.queryByText(/Привет, Анна/)).not.toBeInTheDocument()
+  })
+
+  it('S3_R05: the buddy reminds to warn the mentor after the request is created', async () => {
+    mount()
+    await ask('хочу отгул в пятницу')
+    const draft = await screen.findByLabelText('Черновик заявки')
+    await userEvent.click(within(draft).getByRole('button', { name: 'Отправить' }))
+    expect(await screen.findByText(/предупредите наставника/)).toBeInTheDocument()
+    expect(within(await screen.findByLabelText('Результат заявки')).getAllByText(/Мария Лебедева/)).toHaveLength(1)
+  })
+
+  it('"Мои заявки" drawer opens and closes on Escape', async () => {
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: /Мои заявки \(0\)/ }))
+    const dialog = screen.getByRole('dialog', { name: 'Мои заявки' })
+    expect(within(dialog).getByText('Заявок пока нет.')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('R79: "Покажи ОШИБКУ" fails once per text, then retry answers', async () => {
+    mount()
+    await ask('Покажи ОШИБКУ')
+    const alert = await screen.findByRole('alert')
+    await userEvent.click(within(alert).getByRole('button', { name: 'Повторить' }))
+    expect(await screen.findByText(/тестовый ответ прототипа/i)).toBeInTheDocument()
+    await ask('другая ошибка')
+    expect(await screen.findByRole('alert')).toBeInTheDocument() // the flag is per text, not global
   })
 
   it('R79: a retryable error shows "Повторить" and the retry succeeds', async () => {
@@ -99,7 +153,8 @@ describe('S3 day off flow', () => {
 
   it('R69: any other message answers with a test source and the badge', async () => {
     mount()
-    await userEvent.click(screen.getByRole('button', { name: 'Кто мой наставник?' }))
+    await userEvent.click(screen.getByRole('combobox'))
+    await userEvent.click(screen.getByRole('option', { name: 'Кто мой наставник?' }))
     expect(await screen.findByText('Первая неделя стажёра')).toBeInTheDocument()
     expect(screen.getByText('Тестовая инструкция прототипа')).toBeInTheDocument()
   })

@@ -9,7 +9,7 @@ interface SessionState {
   clear: () => void
 }
 
-const safeStorage = {
+export const safeStorage = {
   getItem: (name: string) => {
     try {
       return localStorage.getItem(name)

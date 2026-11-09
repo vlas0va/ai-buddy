@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { getMe } from '@/api/auth'
 import { keys } from '@/api/keys'
+import { useChatStore } from '@/store/chat'
 import { useSession } from '@/store/session'
 import { ROLE_LABELS } from './roles'
 import { Avatar } from './ui/Avatar'
@@ -19,6 +20,17 @@ export function AppLayout() {
   function logout() {
     clear()
     void navigate({ to: '/login' })
+  }
+
+  // mock mode only: wipe the persisted demo db and the chat session pointer, then reload
+  function resetDemo() {
+    try {
+      localStorage.removeItem('ai-buddy-mock-db')
+    } catch {
+      /* storage unavailable */
+    }
+    useChatStore.setState({ sessions: {} })
+    window.location.reload()
   }
 
   return (
@@ -49,6 +61,11 @@ export function AppLayout() {
           <Button variant="ghost" size="sm" onClick={logout}>
             Выйти
           </Button>
+          {import.meta.env.VITE_USE_MOCKS === 'true' && (
+            <button type="button" className="reset-demo" onClick={resetDemo}>
+              Сбросить демо-данные
+            </button>
+          )}
         </div>
       </aside>
       <main className="content">

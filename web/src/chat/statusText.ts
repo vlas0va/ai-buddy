@@ -31,3 +31,8 @@ export const ROLE_TEXT: Record<string, string> = {
   hrbp: 'HR BP',
   curator: 'куратору',
 }
+
+/** The summary may end with ", согласующий — Имя"; the approver is shown on its own line, so drop it here. */
+export function withoutApprover(summary: string): string {
+  return summary.replace(/,?\s*согласующий\s*[—-].*$/i, '').trim()
+}

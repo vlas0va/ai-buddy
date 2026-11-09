@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import type { ChatHistory } from '@/api/chat'
 import type { sourceSchema } from '@/api/schemas'
 import type {
   ActionResult,
@@ -34,6 +35,25 @@ export interface ChatState {
 }
 
 export const initialState: ChatState = { messages: [], streaming: false, stage: null }
+
+/** Rebuilds the message list from GET /api/chat/sessions/{id}, cards included. */
+export function fromHistory(history: ChatHistory): ChatState {
+  const messages = history.messages.map((m): ChatMessage => {
+    const proposalState: ProposalState = m.proposal_state === 'confirmed' ? 'confirmed' : m.proposal_state === 'cancelled' ? 'cancelled' : 'pending'
+    return {
+      id: m.id,
+      author: m.author,
+      text: m.text,
+      sources: m.sources ?? [],
+      proposal: m.proposal ? { ...m.proposal, state: proposalState } : null,
+      result: m.result ?? null,
+      escalation: null,
+      refusal: null,
+      error: null,
+    }
+  })
+  return { messages, streaming: false, stage: null }
+}
 
 let counter = 0
 const nextId = () => `m${++counter}`
