@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Proposal } from '@/chat/events'
 import { withoutApprover } from '@/chat/statusText'
@@ -79,12 +80,20 @@ describe('ActionProposalCard (S3, R66)', () => {
   })
 })
 
+function withClient(ui: ReactElement) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])))
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+}
+
 describe('ActionResultCard (S3, R66)', () => {
   it('shows number, status, approver and the saved note', () => {
     render(
-      <ActionResultCard
-        result={{ action_id: 'a1', kind: 'absence_request', external_id: 'ABS-1042', status: 'pending_approval', approver_display_name: 'Мария Лебедева', summary: 'Отгул 13.11.2026' }}
-      />,
+      withClient(
+        <ActionResultCard
+          result={{ action_id: 'a1', kind: 'absence_request', external_id: 'ABS-1042', status: 'pending_approval', approver_display_name: 'Мария Лебедева', summary: 'Отгул 13.11.2026' }}
+        />,
+      ),
     )
     expect(screen.getByText(/ABS-1042/)).toBeInTheDocument()
     expect(screen.getByText('На согласовании')).toBeInTheDocument()
@@ -93,7 +102,7 @@ describe('ActionResultCard (S3, R66)', () => {
   })
 
   it('falls back to the action id', () => {
-    render(<ActionResultCard result={{ action_id: 'a9', kind: 'access_request', status: 'granted' }} />)
+    render(withClient(<ActionResultCard result={{ action_id: 'a9', kind: 'access_request', status: 'granted' }} />))
     expect(screen.getByText(/a9/)).toBeInTheDocument()
     expect(screen.getByText('Доступ выдан')).toBeInTheDocument()
   })
@@ -243,6 +252,28 @@ describe('MessageBubble', () => {
     rerender(<MessageBubble message={{ ...base, author: 'assistant', text: '' }} typing status="Ищу в базе знаний…" />)
     expect(screen.getByLabelText('Buddy печатает')).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Ищу в базе знаний…')
+  })
+})
+
+describe('MessageBubble layout rules', () => {
+  const base = { id: '1', text: '', sources: [], proposal: null, result: null, escalation: null, refusal: null, error: null, author: 'assistant' as const }
+
+  it('an assistant message without text shows the error next to the avatar, no empty bubble', () => {
+    const { container } = render(
+      <MessageBubble message={base} typing={false} status={null} error={<ErrorBlock error={{ code: 'internal', message: 'Сбой', retryable: false }} />} />,
+    )
+    expect(container.querySelector('.chat-bubble')).toBeNull()
+    expect(container.querySelector('.chat-row-buddy .chat-col [role="alert"]')).not.toBeNull()
+  })
+
+  it('status line comes before the text and disappears once tokens arrive or the answer is finished', () => {
+    const { container, rerender } = render(<MessageBubble message={base} typing status="Ищу в базе знаний…" />)
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(container.querySelector('.chat-status')!.compareDocumentPosition(container.querySelector('.chat-bubble')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    rerender(<MessageBubble message={{ ...base, text: 'Ответ' }} typing status="Ищу в базе знаний…" />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    rerender(<MessageBubble message={{ ...base, text: 'Ответ' }} typing={false} status="Сохраняю…" />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })
 

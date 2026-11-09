@@ -153,8 +153,7 @@ describe('S3 day off flow', () => {
 
   it('R69: any other message answers with a test source and the badge', async () => {
     mount()
-    await userEvent.click(screen.getByRole('combobox'))
-    await userEvent.click(screen.getByRole('option', { name: 'Кто мой наставник?' }))
+    await ask('Расскажи про офис')
     expect(await screen.findByText('Первая неделя стажёра')).toBeInTheDocument()
     expect(screen.getByText('Тестовая инструкция прототипа')).toBeInTheDocument()
   })

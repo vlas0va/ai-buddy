@@ -19,7 +19,7 @@ import { useSession } from '@/store/session'
 
 export function ChatPage() {
   const { state, restoring, send, retry, confirm, cancel, newDialog } = useChat()
-  const actions = useQuery({ queryKey: keys.actions, queryFn: listActions })
+  const actions = useQuery({ queryKey: keys.actions, queryFn: listActions, refetchOnWindowFocus: true })
   const user = useSession((s) => s.user)
   const [drawer, setDrawer] = useState(false)
   const closeDrawer = useCallback(() => setDrawer(false), [])
@@ -54,21 +54,29 @@ export function ChatPage() {
             {state.messages.length === 0 && !restoring && <WelcomeBubble name={firstName} />}
             {state.messages.map((m) => {
               const typing = state.streaming && m.id === lastId && m.author === 'assistant'
+              const errorBlock = m.error && (
+                <ErrorBlock
+                  error={m.error}
+                  onRetry={m.retryText && !state.streaming ? () => retry(m.id, m.retryText as string) : undefined}
+                />
+              )
+              // an error without any text sits next to the avatar, like a buddy message
+              const inlineError = m.text === '' && !m.proposal && !m.result && !m.escalation && !m.refusal
               return (
                 <div key={m.id} className="chat-turn">
-                  <MessageBubble message={m} typing={typing} status={state.stage ? STAGE_TEXT[state.stage] : null} />
+                  <MessageBubble
+                    message={m}
+                    typing={typing}
+                    status={state.stage ? STAGE_TEXT[state.stage] : null}
+                    error={inlineError ? errorBlock : undefined}
+                  />
                   {m.proposal && (
                     <ActionProposalCard proposal={m.proposal} disabled={state.streaming} onConfirm={confirm} onCancel={(id) => void cancel(id)} />
                   )}
                   {m.result && <ActionResultCard result={m.result} />}
                   {m.escalation && <EscalationDraft draft={m.escalation} />}
                   {m.refusal && <RefusalBlock refusal={m.refusal} />}
-                  {m.error && (
-                    <ErrorBlock
-                      error={m.error}
-                      onRetry={m.retryText && !state.streaming ? () => retry(m.id, m.retryText as string) : undefined}
-                    />
-                  )}
+                  {!inlineError && errorBlock}
                 </div>
               )
             })}

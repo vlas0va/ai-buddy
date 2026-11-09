@@ -48,11 +48,13 @@ export interface MockState {
   sessions: Map<string, StoredMessage[]>
   extraTasks: Map<string, Plan['periods'][number]['tasks']>
   failedOnce: Set<string>
+  /** Idempotency-Key -> decision already applied (replay of POST /api/approvals/{id}/decision) */
+  decisions: Map<string, { actionId: string; decision: 'approved' | 'rejected' }>
   seq: number
 }
 
 export function freshState(): MockState {
-  return { actions: new Map(), proposals: new Map(), sessions: new Map(), extraTasks: new Map(), failedOnce: new Set(), seq: 1041 }
+  return { actions: new Map(), proposals: new Map(), sessions: new Map(), extraTasks: new Map(), failedOnce: new Set(), decisions: new Map(), seq: 1041 }
 }
 
 export let state: MockState = freshState()
@@ -72,6 +74,7 @@ export function serializeState(s: MockState): string {
     sessions: [...s.sessions],
     extraTasks: [...s.extraTasks],
     failedOnce: [...s.failedOnce],
+    decisions: [...s.decisions],
     seq: s.seq,
   })
 }
@@ -86,6 +89,7 @@ export function parseState(raw: string | null): MockState | null {
       sessions: new Map(d.sessions as []),
       extraTasks: new Map(d.extraTasks as []),
       failedOnce: new Set(d.failedOnce as []),
+      decisions: new Map((d.decisions as []) ?? []),
       seq: typeof d.seq === 'number' ? d.seq : 1041,
     }
   } catch {

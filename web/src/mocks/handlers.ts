@@ -1,6 +1,7 @@
 import { http, HttpResponse } from 'msw'
-import type { Plan, User } from '@/api/schemas'
 import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, saveState, state, userByToken, uuid } from './db'
+import { decideApproval, listPendingApprovals } from './approvals'
+import { planFor } from './plan'
 import { recordConfirm, recordTurn, setStoredProposalState } from './history'
 import { confirmEvents, messageEvents } from './scenario'
 import { sseResponse } from './sse'
@@ -9,35 +10,9 @@ import { sseResponse } from './sse'
 
 const unauthorized = () =>
   HttpResponse.json({ code: 'unauthorized', message: 'Войдите в систему.', retryable: false }, { status: 401 })
+const forbidden = () =>
+  HttpResponse.json({ code: 'forbidden', message: 'Недостаточно прав для этого действия.', retryable: false }, { status: 403 })
 const notFound = () => HttpResponse.json({ code: 'not_found', message: 'Не найдено.', retryable: false }, { status: 404 })
-
-function plan(user: User): Plan {
-  return {
-    user_id: user.id,
-    plan_role: user.role === 'mentor' ? 'mentor' : 'intern',
-    current_period: 'week_2',
-    periods: [
-      {
-        id: 'week_1',
-        label: '1 неделя',
-        tasks: [
-          { id: '00000000-0000-4000-8000-000000000001', source: 'checklist', checklist_item_id: 'CL-03', period: 'week_1', title: 'Познакомиться с командой', status: 'done', human_only: false },
-          { id: '00000000-0000-4000-8000-000000000002', source: 'checklist', checklist_item_id: 'CL-04', period: 'week_1', title: 'Получить доступы', status: 'in_progress', human_only: false },
-        ],
-      },
-      {
-        id: 'week_2',
-        label: '2 неделя',
-        tasks: [
-          { id: '00000000-0000-4000-8000-000000000003', source: 'checklist', checklist_item_id: 'CL-07', period: 'week_2', title: 'Встреча с наставником', status: 'not_started', human_only: true },
-          ...(state.extraTasks.get(user.id) ?? []),
-        ],
-      },
-    ],
-    goals: [],
-    next_step: null,
-  }
-}
 
 export const handlers = [
   http.post('*/api/auth/login', async ({ request }) => {
@@ -54,12 +29,38 @@ export const handlers = [
 
   http.get('*/api/plan', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
-    return user ? HttpResponse.json(plan(user)) : unauthorized()
+    return user ? HttpResponse.json(planFor(user)) : unauthorized()
   }),
 
   http.get('*/api/actions', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     return user ? HttpResponse.json(state.actions.get(user.id) ?? []) : unauthorized()
+  }),
+
+  http.get('*/api/approvals', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'lead') return forbidden()
+    return HttpResponse.json(listPendingApprovals(user))
+  }),
+
+  http.post('*/api/approvals/:approvalId/decision', async ({ request, params }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'lead') return forbidden()
+    const key = request.headers.get('Idempotency-Key')
+    const body = (await request.json().catch(() => ({}))) as { decision?: string; comment?: string }
+    if (!key || (body.decision !== 'approved' && body.decision !== 'rejected')) {
+      return HttpResponse.json({ code: 'validation_error', message: 'Укажите решение.', retryable: false }, { status: 400 })
+    }
+    const out = decideApproval(user, String(params.approvalId), body.decision, key, body.comment)
+    if (out === 'not_found') return notFound()
+    if (out === 'forbidden') return forbidden()
+    if (out === 'conflict') {
+      return HttpResponse.json({ code: 'conflict', message: 'По этой заявке уже принято решение.', retryable: false }, { status: 409 })
+    }
+    saveState()
+    return HttpResponse.json(out)
   }),
 
   http.post('*/api/chat/sessions', ({ request }) => {

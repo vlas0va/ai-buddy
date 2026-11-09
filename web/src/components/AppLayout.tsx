@@ -47,6 +47,11 @@ export function AppLayout() {
           <Link to="/plan" className="nav-link">
             Мой план
           </Link>
+          {user?.role === 'lead' && (
+            <Link to="/approvals" className="nav-link">
+              Согласования
+            </Link>
+          )}
         </nav>
         <div className="sidebar-user">
           {user && (

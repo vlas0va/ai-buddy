@@ -1,4 +1,8 @@
 .layout { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+/* chat page: the shell is exactly one viewport tall, only the message list scrolls */
+.layout:has(.chat-page) { height: 100vh; height: 100dvh; min-height: 0; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.layout:has(.chat-page) .sidebar { height: 100dvh; }
+.layout:has(.chat-page) .content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .sidebar {
   position: sticky; top: 0; height: 100vh;
   display: flex; flex-direction: column; gap: var(--space-6);
@@ -26,6 +30,8 @@
 
 @media (max-width: 767px) {
   .layout { grid-template-columns: 1fr; }
+  .layout:has(.chat-page) { grid-template-rows: auto minmax(0, 1fr); }
+  .layout:has(.chat-page) .sidebar { height: auto; }
   .sidebar {
     position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center;
     gap: var(--space-3); padding: var(--space-3) var(--space-4);

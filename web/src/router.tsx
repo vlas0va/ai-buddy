@@ -8,6 +8,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router'
 import { AppLayout } from '@/components/AppLayout'
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PlanPage } from '@/pages/PlanPage'
@@ -47,7 +48,17 @@ const indexRoute = createRoute({
 const chatRoute = createRoute({ getParentRoute: () => appRoute, path: '/chat', component: ChatPage })
 const planRoute = createRoute({ getParentRoute: () => appRoute, path: '/plan', component: PlanPage })
 
-const routeTree = rootRoute.addChildren([loginRoute, appRoute.addChildren([indexRoute, chatRoute, planRoute])])
+// only a lead decides requests; the server returns 403 for everyone else, this guard just keeps the page out of reach
+const approvalsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/approvals',
+  beforeLoad: () => {
+    if (useSession.getState().user?.role !== 'lead') throw redirect({ to: '/chat' })
+  },
+  component: ApprovalsPage,
+})
+
+const routeTree = rootRoute.addChildren([loginRoute, appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute])])
 
 export function createAppRouter(history?: RouterHistory) {
   return createRouter({ routeTree, history })
