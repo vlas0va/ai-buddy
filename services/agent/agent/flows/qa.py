@@ -90,6 +90,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     min_score = float(turn.config.retrieval.get("min_score", 1.2))
     raw = items(turn.gateway.read("kb.search", query=text[:500], k=int(turn.config.retrieval.get("k", 4))))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
+    if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
+        hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
     if not hits:
         ranking = turn.meta.get("ranking", [])
         work_words = re.search(r"команд|работ|стажир|наставник|задач|проект|офис|сервис", normalize(text))
