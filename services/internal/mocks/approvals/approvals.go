@@ -107,6 +107,7 @@ var underlying = map[string]struct {
 }{
 	"absence_request": {"absence.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
 	"access_request":  {"access.requests", map[string]string{"approved": "granted", "rejected": "rejected"}},
+	"trip_request":    {"trips.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
 }
 
 // decide approves or rejects one of the caller's pending items and propagates the decision to the request.
@@ -163,6 +164,20 @@ WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Dec
 	}
 	if tag.RowsAffected() != 1 {
 		return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
+	}
+	if it.Kind == "absence_request" && in.Decision == "approved" {
+		// The HR admin registers the approved day off in the HR system and the HR BP of the employee is notified
+		// (organizers' Q&A 10.11: a day off involves the lead, the HR admin and the HR BP). In this imitation both
+		// happen at once; a real HR system would report them asynchronously.
+		if _, err := tx.Exec(ctx, `
+UPDATE absence.requests r SET
+    hr_admin_id = (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1),
+    registered_at = now(),
+    hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
+    hrbp_notified_at = now()
+WHERE r.id = $1`, it.RefID); err != nil {
+			return nil, fmt.Errorf("register absence: %w", err)
+		}
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)

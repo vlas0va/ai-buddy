@@ -121,6 +121,46 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "steps": {
+                  "type": "array",
+                  "description": "Lead approves, HR admin registers in the HR system, HR BP is notified",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "lead",
+                          "hr_admin",
+                          "hrbp"
+                        ]
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "waiting",
+                          "approved",
+                          "rejected",
+                          "registered",
+                          "notified",
+                          "skipped"
+                        ]
+                      },
+                      "at": {
+                        "type": "string",
+                        "format": "date-time"
+                      }
+                    },
+                    "required": [
+                      "role",
+                      "status"
+                    ]
+                  }
+                },
                 "replayed": {
                   "type": "boolean"
                 }
@@ -299,6 +339,46 @@
             "type": "string",
             "format": "date-time"
           },
+          "steps": {
+            "type": "array",
+            "description": "Lead approves, HR admin registers in the HR system, HR BP is notified",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "lead",
+                    "hr_admin",
+                    "hrbp"
+                  ]
+                },
+                "display_name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "waiting",
+                    "approved",
+                    "rejected",
+                    "registered",
+                    "notified",
+                    "skipped"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "role",
+                "status"
+              ]
+            }
+          },
           "replayed": {
             "type": "boolean"
           }
@@ -381,6 +461,46 @@
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "steps": {
+            "type": "array",
+            "description": "Lead approves, HR admin registers in the HR system, HR BP is notified",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "lead",
+                    "hr_admin",
+                    "hrbp"
+                  ]
+                },
+                "display_name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "waiting",
+                    "approved",
+                    "rejected",
+                    "registered",
+                    "notified",
+                    "skipped"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "role",
+                "status"
+              ]
+            }
           },
           "replayed": {
             "type": "boolean"

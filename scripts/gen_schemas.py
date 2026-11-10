@@ -21,6 +21,11 @@ abs_req = obj({
     "status": {"type": "string", "enum": ["pending_approval", "approved", "rejected", "cancelled"]},
     "approver_id": {"type": "string"}, "approver_display_name": {"type": "string"},
     "created_at": {"type": "string", "format": "date-time"},
+    "steps": {"type": "array", "description": "Lead approves, HR admin registers in the HR system, HR BP is notified",
+              "items": obj({"role": {"type": "string", "enum": ["lead", "hr_admin", "hrbp"]},
+                            "display_name": {"type": "string"},
+                            "status": {"type": "string", "enum": ["waiting", "approved", "rejected", "registered", "notified", "skipped"]},
+                            "at": {"type": "string", "format": "date-time"}}, ["role", "status"])},
     "replayed": {"type": "boolean"}},
     ["id", "type", "start_date", "end_date", "status", "approver_id", "created_at"])
 absence = [
@@ -42,7 +47,7 @@ absence = [
   tool("get_request", "Заявка по номеру; только своя.", ["intern","mentor","lead"], False,
        obj({"id": {"type":"string","pattern":"^ABS-[0-9]{6}$"}}, ["id"]), abs_req),
 ]
-appr_item = obj({"id": {"type":"string"}, "kind": {"type":"string","enum":["absence_request","access_request"]},
+appr_item = obj({"id": {"type":"string"}, "kind": {"type":"string","enum":["absence_request","access_request","trip_request"]},
                  "ref_id": {"type":"string"}, "requester_id": {"type":"string"}, "requester_display_name": {"type":"string"},
                  "summary": {"type":"string"}, "status": {"type":"string","enum":["pending","approved","rejected"]},
                  "comment": {"type":"string"}, "created_at": {"type":"string","format":"date-time"}, "replayed": {"type":"boolean"}},
@@ -110,7 +115,42 @@ kb = [
             "idempotency_key":idem,"confirmation_token":conf}, ["title","body","idempotency_key","confirmation_token"]),
        obj({"doc_id":{"type":"string"},"title":{"type":"string"},"source_type":{"const":"test"},"replayed":{"type":"boolean"}}, ["doc_id","title","source_type"])),
 ]
-for name, tools in [("absence",absence),("approvals",approvals),("directory",directory),("checklist",checklist),("access",access),("kb",kb)]:
+trip_req = obj({"id":{"type":"string","pattern":"^TRP-[0-9]{6}$"},"city":{"type":"string"},"start_date":date,"end_date":date,
+                "purpose":{"type":"string"},"status":{"type":"string","enum":["pending_approval","approved","rejected","cancelled"]},
+                "approver_id":{"type":"string"},"approver_display_name":{"type":"string"},
+                "created_at":{"type":"string","format":"date-time"},"replayed":{"type":"boolean"}},
+               ["id","city","start_date","end_date","purpose","status","approver_id","created_at"])
+trip_in = {"city":{"type":"string","minLength":2,"maxLength":80},"start_date":date,"end_date":date,
+           "purpose":{"type":"string","minLength":3,"maxLength":300}}
+trips = [
+  tool("get_policy", "Правила командировок (тестовые): офисы, срок подачи, длительность.", ["intern","mentor","lead"], False,
+       obj({}), obj({"offices":{"type":"array","items":{"type":"string"}},"min_notice_days":{"type":"integer"},
+                     "max_days":{"type":"integer"},"text":{"type":"string"}}, ["offices","min_notice_days","max_days","text"])),
+  tool("list_my_requests", "Заявки на командировку текущего пользователя.", ["intern","mentor","lead"], False,
+       obj({}), obj({"items":{"type":"array","items":trip_req}}, ["items"])),
+  tool("validate_request", "Проверка без записи: офис из списка, не свой город, срок подачи, длительность, нет пересечений.", ["intern","mentor","lead"], False,
+       obj(trip_in, ["city","start_date","end_date","purpose"]),
+       obj({"valid":{"type":"boolean"},"problems":{"type":"array","items":{"type":"string"}},
+            "approver_id":{"type":"string"},"approver_display_name":{"type":"string"}}, ["valid","problems"])),
+  tool("create_request", "Создать заявку на командировку от имени пользователя из JWT; согласует руководитель. Только после подтверждения.", ["intern","mentor","lead"], True,
+       obj({**trip_in, "idempotency_key": idem, "confirmation_token": conf}, ["city","start_date","end_date","purpose","idempotency_key","confirmation_token"]),
+       trip_req),
+]
+consent = obj({"consent_id":{"type":"string"},"title":{"type":"string"},"description":{"type":"string"},
+               "signable":{"type":"boolean"},"required":{"type":"boolean"},
+               "status":{"type":"string","enum":["signed","not_signed"]},"signed_via":{"type":"string","enum":["hr_portal","buddy"]},
+               "signed_at":{"type":"string","format":"date-time"}}, ["consent_id","title","signable","required","status"])
+signature = obj({"id":{"type":"string","pattern":"^CNS-[0-9]{6}$"},"consent_id":{"type":"string"},"title":{"type":"string"},
+                 "status":{"const":"signed"},"signed_at":{"type":"string","format":"date-time"},"replayed":{"type":"boolean"}},
+                ["id","consent_id","title","status","signed_at"])
+consents = [
+  tool("list", "Согласия сотрудника со статусами: подписанные в кадровом портале при оформлении и добровольные.", ["intern","mentor","lead","hrbp","alumni"], False,
+       obj({}), obj({"items":{"type":"array","items":consent}}, ["items"])),
+  tool("sign", "Подписать добровольное согласие от имени пользователя из JWT. Только после подтверждения.", ["intern","mentor","lead","hrbp","alumni"], True,
+       obj({"consent_id":{"type":"string"},"idempotency_key":idem,"confirmation_token":conf}, ["consent_id","idempotency_key","confirmation_token"]),
+       signature),
+]
+for name, tools in [("absence",absence),("approvals",approvals),("directory",directory),("checklist",checklist),("access",access),("kb",kb),("trips",trips),("consents",consents)]:
     with open(os.path.join(out, f"{name}.json"), "w", encoding="utf-8") as f:
         json.dump({"server": name, "tools": tools}, f, ensure_ascii=False, indent=2); f.write("\n")
 print("ok")

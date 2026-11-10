@@ -32,7 +32,8 @@
                   "type": "string",
                   "enum": [
                     "absence_request",
-                    "access_request"
+                    "access_request",
+                    "trip_request"
                   ]
                 },
                 "ref_id": {
@@ -138,7 +139,8 @@
             "type": "string",
             "enum": [
               "absence_request",
-              "access_request"
+              "access_request",
+              "trip_request"
             ]
           },
           "ref_id": {

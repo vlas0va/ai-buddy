@@ -70,29 +70,73 @@ type request struct {
 	ApproverID          string `json:"approver_id"`
 	ApproverDisplayName string `json:"approver_display_name,omitempty"`
 	CreatedAt           string `json:"created_at"`
+	Steps               []step `json:"steps"`
 	Replayed            *bool  `json:"replayed,omitempty"`
 
 	employeeID     string
 	idempotencyKey string
 }
 
+// step is one stage of a day off after it is created (organizers' Q&A 10.11): the lead approves, the HR admin registers
+// the approved day off in the HR system, the HR BP is notified.
+type step struct {
+	Role        string `json:"role"`
+	DisplayName string `json:"display_name,omitempty"`
+	Status      string `json:"status"`
+	At          string `json:"at,omitempty"`
+}
+
 const selectRequest = `
 SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
-       coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text
+       coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
+       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at
 FROM absence.requests r
-LEFT JOIN directory.employees a ON a.id = r.approver_id`
+LEFT JOIN directory.employees a ON a.id = r.approver_id
+LEFT JOIN directory.employees emp ON emp.id = r.employee_id
+LEFT JOIN directory.employees ha ON ha.id = coalesce(r.hr_admin_id,
+    (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1))
+LEFT JOIN directory.employees hb ON hb.id = coalesce(r.hrbp_id, emp.hrbp_id)`
 
 func scanRequest(row pgx.CollectableRow) (request, error) {
 	var (
-		r          request
-		start, end time.Time
-		created    time.Time
+		r                             request
+		start, end                    time.Time
+		created                       time.Time
+		decided, registered, notified *time.Time
+		hrAdmin, hrbp                 string
 	)
 	err := row.Scan(&r.ID, &r.Type, &start, &end, &r.Comment, &r.Status, &r.ApproverID, &r.ApproverDisplayName,
-		&created, &r.employeeID, &r.idempotencyKey)
+		&created, &r.employeeID, &r.idempotencyKey, &decided, &hrAdmin, &registered, &hrbp, &notified)
 	r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
 	r.CreatedAt = created.UTC().Format(time.RFC3339)
+	r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, decided, registered, notified)
 	return r, err
+}
+
+// steps derives the stages of a request from its status and HR timestamps.
+func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *time.Time) []step {
+	at := func(t *time.Time) string {
+		if t == nil {
+			return ""
+		}
+		return t.UTC().Format(time.RFC3339)
+	}
+	out := []step{{Role: "lead", DisplayName: lead, Status: "waiting"}, {Role: "hr_admin", DisplayName: hrAdmin, Status: "waiting"},
+		{Role: "hrbp", DisplayName: hrbp, Status: "waiting"}}
+	switch status {
+	case "approved":
+		out[0].Status, out[0].At = "approved", at(decided)
+	case "rejected", "cancelled":
+		out[0].Status, out[0].At = "rejected", at(decided)
+		out[1].Status, out[2].Status = "skipped", "skipped"
+	}
+	if registered != nil {
+		out[1].Status, out[1].At = "registered", at(registered)
+	}
+	if notified != nil {
+		out[2].Status, out[2].At = "notified", at(notified)
+	}
+	return out
 }
 
 // findRequest returns the request matching where (a condition on alias r with parameter $1), or ok=false.
