@@ -41,7 +41,7 @@ func TestChat_DatabaseFailures_Internal(t *testing.T) {
 	if r := e.do(http.MethodPost, "/api/chat/sessions/"+sid+"/messages", anna, map[string]string{"text": "Привет"}); r.status != http.StatusInternalServerError {
 		t.Fatalf("message without plan tasks: %d", r.status)
 	}
-	if r := e.do(http.MethodPost, e.confirmPath(sid, pending), anna, nil); r.status != http.StatusInternalServerError || e.proposalStatus(pending) != "failed" {
+	if r := e.do(http.MethodPost, e.confirmPath(sid, pending), anna, nil); r.status != http.StatusInternalServerError || e.proposalStatus(pending) != "pending" {
 		t.Fatalf("confirm without plan tasks: %d %s", r.status, e.proposalStatus(pending))
 	}
 
@@ -109,7 +109,7 @@ func TestConfirm_S3_DecisionResultWithoutRef_Failed(t *testing.T) {
 			return []agenttest.Event{{Name: "tool_result", Data: map[string]any{"result": result}}}
 		})
 		s := e.stream(e.confirmPath(sid, pid), maria, nil)
-		if s.last()["code"] != "internal" || e.proposalStatus(pid) != "failed" {
+		if s.last()["code"] != "upstream_unavailable" || s.last()["message"] != msgBadResult || e.proposalStatus(pid) != "failed" {
 			t.Fatalf("%v: %s %v", result, s.names(), s.last())
 		}
 	}

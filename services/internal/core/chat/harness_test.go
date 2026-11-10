@@ -75,7 +75,7 @@ func newEnv(t *testing.T, opts ...envOpt) *env {
 	acts := actions.NewService(emitter, notify.Store{}, nil)
 	lim := &stubLimiter{allow: true}
 	d := Deps{Pool: pool, Agent: agentclient.New(ag.URL, 2*time.Second), Actions: acts, Limiter: lim,
-		Flags: stubFlags{flags: map[string]bool{"scenario_s3": true}}, Emitter: emitter}
+		Flags: stubFlags{flags: map[string]bool{"scenario_s3": true}}, Emitter: emitter, MCP: mcp}
 	cfg := Config{ConfirmationSecret: hmacSecret}
 	for _, o := range opts {
 		o(&d, &cfg)

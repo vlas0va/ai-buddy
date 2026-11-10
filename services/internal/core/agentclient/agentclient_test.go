@@ -223,3 +223,60 @@ func TestTurn_S3_ConfirmTurnShape(t *testing.T) {
 		t.Fatalf("nil mentees must be omitted: %v", uc)
 	}
 }
+
+func TestStream_SizeLimits_R76(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: token\ndata: {\"text\":\"ok\"}\n\n")
+		switch r.URL.Query().Get("case") {
+		case "event":
+			fmt.Fprintf(w, "event: token\ndata: {\"text\":\"%s\"}\n\n", strings.Repeat("я", 2000))
+		case "stream":
+			for i := 0; i < 200; i++ {
+				fmt.Fprint(w, "event: token\ndata: {\"text\":\"0123456789\"}\n\n")
+			}
+		}
+	}))
+	defer srv.Close()
+	for _, tc := range []struct{ name, query string }{{"one event over the limit", "event"}, {"stream over the limit", "stream"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &agentclient.Client{BaseURL: srv.URL, MaxEventBytes: 1024, MaxStreamBytes: 2048}
+			c.HTTPClient = &http.Client{Transport: rewriteQuery{tc.query}}
+			st, err := c.Turn(context.Background(), "tok", agentclient.TurnRequest{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			if ev, err := st.Next(); err != nil || ev.Name != "token" {
+				t.Fatalf("first: %v %v", ev, err)
+			}
+			for {
+				_, err = st.Next()
+				if err != nil {
+					break
+				}
+			}
+			var ue *agentclient.UnavailableError
+			if !errors.Is(err, agentclient.ErrTooLarge) || !errors.As(err, &ue) {
+				t.Fatalf("got %v", err)
+			}
+		})
+	}
+	st, err := agentclient.New(srv.URL, time.Second).Turn(context.Background(), "tok", agentclient.TurnRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.Next(); err != nil {
+		t.Fatalf("defaults: %v", err)
+	}
+}
+
+// rewriteQuery adds ?case=<q> to every request.
+type rewriteQuery struct{ q string }
+
+func (r rewriteQuery) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.URL.RawQuery = "case=" + r.q
+	return http.DefaultTransport.RoundTrip(req)
+}

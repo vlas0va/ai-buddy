@@ -126,7 +126,7 @@ func New(cfg Config, pool *pgxpool.Pool, rdb redis.Cmdable, log *slog.Logger) (*
 	api := http.NewServeMux()
 	auth.Register(api)
 	plan.New(pool, emitter, log).Register(api)
-	chat.New(chat.Deps{Pool: pool, Agent: agent, Actions: acts, Limiter: ratelimit.New(rdb), Flags: flagSvc, Emitter: emitter, Log: log},
+	chat.New(chat.Deps{Pool: pool, Agent: agent, Actions: acts, Limiter: ratelimit.New(rdb), Flags: flagSvc, Emitter: emitter, MCP: mcp, Log: log},
 		chat.Config{ConfirmationSecret: hmac, RatePerMin: cfg.ChatRatePerMin}).Register(api)
 	actions.New(pool, acts, log).Register(api)
 	approvals.New(pool, mcp, acts, emitter, log).Register(api)

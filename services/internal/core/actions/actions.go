@@ -228,7 +228,7 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 		if r.StartDate != "" {
 			d.dueAt = &r.StartDate
 		}
-		d.checklistItem = in.ChecklistItemID // S3: none, a new source = action task is created
+		// S3: never a checklist task (the agent's task_checklist_item_id hint is ignored); a source = action task is created.
 		if name != "" {
 			d.summary += ", согласующий — " + name
 		}
@@ -287,6 +287,7 @@ func (s *Service) linkTask(ctx context.Context, q DBTX, userID, actionID string,
 		var taskID string
 		err := q.QueryRow(ctx, `SELECT t.id::text FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id
 			WHERE p.user_id = $1 AND p.plan_role = 'intern' AND t.parent_task_id IS NULL AND t.checklist_item_id = $2
+				AND NOT t.human_only -- buddy only reminds about human-only items, an action never completes them (R05)
 			ORDER BY t.position, t.id LIMIT 1`, userID, d.checklistItem).Scan(&taskID)
 		switch {
 		case err == nil:
@@ -365,17 +366,29 @@ func (s *Service) List(ctx context.Context, q DBTX, userID string) ([]Action, er
 	return out, nil
 }
 
+// Scope restricts ApplyDecision to the action of one requester whose request names one approver (R71). Both come
+// from the approvals service's decide result and the deciding lead's verified claims, never from the agent.
+type Scope struct {
+	RequesterID string // owner of the action (approvals requester_id)
+	ApproverID  string // approver_id in the saved MCP result of the request (the deciding lead)
+}
+
 // ApplyDecision applies the approver's decision ("approved" or "rejected", as returned by approvals.decide) to the
-// action of kind with externalID (ABS-…/ACC-…): action status approved/granted/rejected, the linked task done or
-// not_started, and a status_change notification for the owner, all through q. It reports whether anything changed
-// (a repeated decision is a no-op) and returns ErrNotFound when core has no such action.
-func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, decision string) (Action, bool, error) {
+// action of kind with externalID (ABS-…/ACC-…) owned by scope.RequesterID whose request names scope.ApproverID as
+// approver: action status approved/granted/rejected, the linked task done or not_started (never a human_only task),
+// and a status_change notification for the owner, all through q. It reports whether anything changed (a repeated
+// decision is a no-op) and returns ErrNotFound when core has no such action; both scope fields are required.
+func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, decision string, scope Scope) (Action, bool, error) {
 	status, err := decisionStatus(kind, decision)
 	if err != nil {
 		return Action{}, false, err
 	}
+	if scope.RequesterID == "" || scope.ApproverID == "" {
+		return Action{}, false, ErrNotFound
+	}
 	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
-		WHERE a.kind = $1 AND a.external_id = $2 ORDER BY a.created_at LIMIT 1 FOR UPDATE`, kind, externalID))
+		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 AND a.payload->'result'->>'approver_id' = $4
+		ORDER BY a.created_at LIMIT 1 FOR UPDATE`, kind, externalID, scope.RequesterID, scope.ApproverID))
 	if err != nil {
 		return Action{}, false, err
 	}
@@ -386,7 +399,8 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 		return Action{}, false, fmt.Errorf("update action status: %w", err)
 	}
 	if a.TaskID != nil {
-		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now() WHERE id = $1 AND linked_action_id = $3`,
+		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now()
+			WHERE id = $1 AND linked_action_id = $3 AND NOT human_only`,
 			*a.TaskID, taskStatus(status), a.ID); err != nil {
 			return Action{}, false, fmt.Errorf("update linked task: %w", err)
 		}

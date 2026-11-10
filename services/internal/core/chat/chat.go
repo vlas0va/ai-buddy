@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,6 +57,12 @@ type Emitter interface {
 	Emit(ctx context.Context, q analytics.DBTX, ev analytics.Event) error
 }
 
+// MCP executes a confirmed write with a core-signed confirmation token; *mcpclient.Client implements it. Core uses it
+// to read back a lead's approvals.decide by its idempotency key instead of trusting the agent's tool_result (R71).
+type MCP interface {
+	Execute(ctx context.Context, userToken, tool string, args map[string]any, key string) (json.RawMessage, error)
+}
+
 // Defaults of Config.
 const (
 	DefaultProposalTTL     = 30 * time.Minute // same as the agent (PROPOSAL_TTL_S) and the core.proposals default
@@ -64,6 +71,11 @@ const (
 	historyLimit           = 10
 	maxTextRunes           = 4000
 	openTasksLimit         = 50
+	// Bounds of what one agent turn may make core relay and store (the agent stream itself is bounded by
+	// agentclient: 256 KiB per event, 4 MiB per answer). Over a bound the turn ends with upstream_unavailable.
+	maxTurnText   = 64 << 10 // assistant text (tokens and follow-up) per turn, bytes
+	maxSources    = 50       // source items per turn
+	maxDraftBytes = 16 << 10 // stored proposal draft
 )
 
 // Config holds chat settings.
@@ -83,6 +95,7 @@ type Deps struct {
 	Limiter Limiter    // nil: no rate limiting
 	Flags   FlagSource // nil: no flags in user_context
 	Emitter Emitter    // nil: no analytics
+	MCP     MCP        // nil: lead decisions in chat (approval_decision) are refused
 	Log     *slog.Logger
 }
 
@@ -94,6 +107,7 @@ type Handler struct {
 	limiter Limiter
 	flags   FlagSource
 	emitter Emitter
+	mcp     MCP
 	log     *slog.Logger
 	cfg     Config
 	// Now is the clock (proposal expiry, current period); tests may replace it.
@@ -115,7 +129,7 @@ func New(d Deps, cfg Config) *Handler {
 		cfg.RatePerMin = DefaultRatePerMin
 	}
 	return &Handler{pool: d.Pool, agent: d.Agent, actions: d.Actions, limiter: d.Limiter, flags: d.Flags,
-		emitter: d.Emitter, log: d.Log, cfg: cfg, Now: time.Now}
+		emitter: d.Emitter, mcp: d.MCP, log: d.Log, cfg: cfg, Now: time.Now}
 }
 
 // Register adds the chat routes (behind authn.Middleware).
@@ -268,6 +282,8 @@ const (
 	msgNoResult         = "Не удалось получить результат заявки, попробуйте ещё раз"
 	msgSaveFailed       = "Заявка отправлена, но результат не сохранён. Повторите подтверждение, повторной заявки не будет"
 	msgBadProposal      = "Ассистент предложил действие, которое нельзя выполнить через чат"
+	msgTooLarge         = "Ответ ассистента слишком большой, попробуйте ещё раз"
+	msgBadResult        = "Не удалось подтвердить результат заявки, попробуйте ещё раз"
 )
 
 // agentError turns a failed agent call into the error event of the stream: an agent that answered 4xx with a JSON
@@ -282,4 +298,31 @@ func agentError(err error) streamError {
 		return streamError{Code: ue.Code, Message: msg, Retryable: ue.Retryable}
 	}
 	return streamError{Code: string(apierr.CodeUpstreamUnavailable), Message: msgAgentUnavailable, Retryable: true}
+}
+
+// errTooLarge ends a turn whose content exceeds the bounds (R76).
+var errTooLarge = streamError{Code: string(apierr.CodeUpstreamUnavailable), Message: msgTooLarge, Retryable: true}
+
+// exactObject decodes a JSON object and rejects keys that differ only in case from one of want: Go's struct decoding
+// would match them case-insensitively while the agent reads the exact key, so both sides must see the same value.
+func exactObject(raw json.RawMessage, want ...string) (map[string]json.RawMessage, error) {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
+		return nil, errors.New("not a JSON object")
+	}
+	for k := range m {
+		for _, w := range want {
+			if k != w && strings.EqualFold(k, w) {
+				return nil, fmt.Errorf("key %q differs from %q only in case", k, w)
+			}
+		}
+	}
+	return m, nil
+}
+
+// str returns the string value of key in m ("" when missing or not a string).
+func str(m map[string]json.RawMessage, key string) string {
+	var s string
+	_ = json.Unmarshal(m[key], &s)
+	return s
 }

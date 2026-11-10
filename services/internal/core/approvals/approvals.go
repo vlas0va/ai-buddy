@@ -171,7 +171,9 @@ func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Appro
 		return fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	a, changed, err := h.actions.ApplyDecision(ctx, tx, res.Kind, res.RefID, res.Status)
+	// Only the requester's action whose request names the deciding lead as approver (R71).
+	a, changed, err := h.actions.ApplyDecision(ctx, tx, res.Kind, res.RefID, res.Status,
+		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub})
 	switch {
 	case errors.Is(err, actions.ErrNotFound):
 		h.log.Info("decision for a request without a core action", "approval", res.ID, "ref", res.RefID)

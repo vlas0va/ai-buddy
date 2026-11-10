@@ -18,6 +18,8 @@ import (
 	"aibuddy/services/internal/platform/pgtest"
 )
 
+var byMaria = Scope{RequesterID: "intern.anna", ApproverID: "lead.maria"}
+
 var (
 	anna  = authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}
 	ivan  = authn.Claims{Sub: "intern.ivan", Role: "intern", TeamID: "search"}
@@ -169,7 +171,7 @@ func TestSave_S4_AccessLinksChecklistTask_R66(t *testing.T) {
 		t.Fatalf("task %+v", task)
 	}
 
-	got, changed, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000041", "approved")
+	got, changed, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000041", "approved", byMaria)
 	if err != nil || !changed || got.Status != StatusGranted {
 		t.Fatalf("decision: %+v %v %v", got, changed, err)
 	}
@@ -179,7 +181,7 @@ func TestSave_S4_AccessLinksChecklistTask_R66(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND kind = 'status_change' AND title = 'Доступ выдан'`); n != 1 {
 		t.Fatalf("notifications = %d", n)
 	}
-	if _, changed, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000041", "approved"); err != nil || changed {
+	if _, changed, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000041", "approved", byMaria); err != nil || changed {
 		t.Fatalf("repeat decision: %v %v", changed, err)
 	}
 
@@ -195,8 +197,8 @@ func TestSave_S4_AccessLinksChecklistTask_R66(t *testing.T) {
 	if task := loadTask(t, pool, *pending.TaskID); task.status != "done" || *task.linked != pending.ID {
 		t.Fatalf("task after second request %+v", task)
 	}
-	if _, _, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000042", "rejected"); err != nil {
-		t.Fatal(err)
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000042", "rejected", byMaria); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a request without this approver must not be touched: %v", err)
 	}
 	if task := loadTask(t, pool, *pending.TaskID); task.status != "done" {
 		t.Fatalf("rejecting an unlinked action changed the task: %+v", task)
@@ -235,14 +237,14 @@ func TestApplyDecision_S3_AbsenceRejectedAndApproved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "rejected")
+	got, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "rejected", byMaria)
 	if err != nil || !changed || got.Status != StatusRejected {
 		t.Fatalf("%+v %v %v", got, changed, err)
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.status != "not_started" {
 		t.Fatalf("task %+v", task)
 	}
-	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved"); err != nil {
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byMaria); err != nil {
 		t.Fatal(err)
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.status != "done" {
@@ -251,11 +253,11 @@ func TestApplyDecision_S3_AbsenceRejectedAndApproved(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title IN ('Отгул отклонён', 'Отгул согласован')`); n != 2 {
 		t.Fatalf("notifications = %d", n)
 	}
-	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-999999", "approved"); !errors.Is(err, ErrNotFound) {
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-999999", "approved", byMaria); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown: %v", err)
 	}
 	for _, tc := range [][2]string{{KindAbsence, "granted"}, {"other", "approved"}, {KindAccess, "maybe"}} {
-		if _, _, err := svc.ApplyDecision(ctx, pool, tc[0], "X", tc[1]); !apierr.HasCode(err, apierr.CodeValidation) {
+		if _, _, err := svc.ApplyDecision(ctx, pool, tc[0], "X", tc[1], byMaria); !apierr.HasCode(err, apierr.CodeValidation) {
 			t.Fatalf("%v: %v", tc, err)
 		}
 	}
@@ -303,7 +305,7 @@ func TestService_DependencyFailures(t *testing.T) {
 		Result: absenceResult("ABS-000113", "2026-11-13", "2026-11-13", "")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, changed, err := quiet.ApplyDecision(ctx, pool, KindAbsence, "ABS-000113", "approved"); err != nil || !changed {
+	if _, changed, err := quiet.ApplyDecision(ctx, pool, KindAbsence, "ABS-000113", "approved", byMaria); err != nil || !changed {
 		t.Fatalf("no notifier: %v %v", changed, err)
 	}
 	if _, err := bad.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000014", Kind: KindAbsence,
@@ -314,7 +316,7 @@ func TestService_DependencyFailures(t *testing.T) {
 		Result: absenceResult("ABS-000115", "2026-11-13", "2026-11-13", "")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := bad.ApplyDecision(ctx, pool, KindAbsence, "ABS-000115", "approved"); err == nil {
+	if _, _, err := bad.ApplyDecision(ctx, pool, KindAbsence, "ABS-000115", "approved", byMaria); err == nil {
 		t.Fatal("notifier failure must fail ApplyDecision")
 	}
 }
@@ -400,5 +402,70 @@ func TestHelpers(t *testing.T) {
 	r := Action{ID: "1", Kind: KindAbsence, Status: StatusApproved}.Result()
 	if r.ActionID != "1" || r.Status != StatusApproved {
 		t.Fatalf("%+v", r)
+	}
+}
+
+func TestApplyDecision_S3_ScopedToRequesterAndApprover_R71(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	a, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000041", Kind: KindAbsence,
+		Result: absenceResult("ABS-000141", "2026-11-13", "2026-11-13", "")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []Scope{
+		{RequesterID: "intern.ivan", ApproverID: "lead.maria"},  // another intern
+		{RequesterID: "intern.anna", ApproverID: "lead.dmitry"}, // a lead who is not the approver
+		{RequesterID: "intern.anna"},                            // no approver
+		{},                                                      // no scope at all
+	} {
+		if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000141", "approved", scope); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("%+v: %v", scope, err)
+		}
+	}
+	if got, _ := svc.ByID(ctx, pool, a.ID); got.Status != StatusPendingApproval {
+		t.Fatalf("out-of-scope decision applied: %+v", got)
+	}
+	if _, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000141", "approved", byMaria); err != nil || !changed {
+		t.Fatalf("in scope: %v %v", changed, err)
+	}
+}
+
+func TestSave_S4_NeverLinksHumanOnlyTask_R05(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE core.plan_tasks t SET human_only = true FROM core.plans p
+		WHERE p.id = t.plan_id AND p.user_id = 'intern.anna' AND t.checklist_item_id = 'CL-05'`); err != nil {
+		t.Fatal(err)
+	}
+	lead := "lead.maria"
+	a, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000042", Kind: KindAccess,
+		Result: accessResult("ACC-000061", "space-delivery-incidents", "Инциденты", "pending_approval", "CL-05", &lead)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := loadTask(t, pool, *a.TaskID)
+	if task.source != "action" || task.checklist != nil {
+		t.Fatalf("human-only checklist task linked: %+v", task)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000061", "approved", byMaria); err != nil {
+		t.Fatal(err)
+	}
+	var open int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id
+		WHERE p.user_id = 'intern.anna' AND t.checklist_item_id = 'CL-05' AND t.parent_task_id IS NULL AND t.status = 'done'`).Scan(&open); err != nil || open != 0 {
+		t.Fatalf("human-only task completed by an action: %d %v", open, err)
+	}
+}
+
+func TestSave_S3_AbsenceIgnoresChecklistHint_R66(t *testing.T) {
+	svc, pool := newSvc(t)
+	a, err := svc.Save(context.Background(), pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000043", Kind: KindAbsence,
+		Result: absenceResult("ABS-000143", "2026-11-13", "2026-11-13", ""), ChecklistItemID: "CL-05"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task := loadTask(t, pool, *a.TaskID); task.source != "action" || task.checklist != nil {
+		t.Fatalf("absence linked to a checklist task: %+v", task)
 	}
 }

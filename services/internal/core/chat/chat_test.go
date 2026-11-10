@@ -431,7 +431,7 @@ func TestConfirm_S3_AgentWithoutUsableResult_Failed(t *testing.T) {
 	}{
 		{"no tool_result", []agenttest.Event{agenttest.Done()}, "upstream_unavailable"},
 		{"tool_result for another proposal", []agenttest.Event{{Name: "tool_result", Data: map[string]any{"proposal_id": agenttest.NewID(), "result": map[string]any{"id": "ABS-1"}}}}, "upstream_unavailable"},
-		{"result cannot be saved", []agenttest.Event{{Name: "tool_result", Data: map[string]any{"result": map[string]any{"status": "pending_approval"}}}}, "internal"},
+		{"tool_result without binding", []agenttest.Event{{Name: "tool_result", Data: map[string]any{"result": map[string]any{"id": "ABS-1", "status": "pending_approval"}}}}, "upstream_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
@@ -450,22 +450,18 @@ func TestConfirm_S3_AgentWithoutUsableResult_Failed(t *testing.T) {
 	}
 }
 
-func TestConfirm_S3_BareResultAndLateEvents(t *testing.T) {
+func TestConfirm_S3_LateEventsAfterSave(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
 	sid := e.session(anna)
 	pid := e.propose(sid, anna)
-	var proposals int
 	e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
-		evs := e.agent.Confirm(context.Background(), req)
-		var raw map[string]json.RawMessage
-		b, _ := json.Marshal(evs[2].Data)
-		_ = json.Unmarshal(b, &raw)
-		proposals++
+		result := e.agent.Confirm(context.Background(), req)[2]
+		result.Data.(map[string]any)["followup"] = ""
 		return []agenttest.Event{
 			agenttest.AccessProposal(agenttest.NewID(), "jira"), // ignored in a confirm turn
-			{Name: "tool_result", Data: raw["result"]},          // bare MCP result
-			{Name: "tool_result", Data: raw["result"]},          // duplicate, ignored
+			result,
+			result, // duplicate, ignored
 			{Name: "token", Data: map[string]string{"text": "Готово"}},
 			{Name: "error", Data: map[string]any{"code": "llm_timeout", "message": "x", "retryable": true}}, // after the save
 		}
@@ -491,8 +487,12 @@ func TestConfirm_TamperedDraftHash_Internal(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := e.do(http.MethodPost, e.confirmPath(sid, pid), anna, nil)
-	if r.status != http.StatusInternalServerError || e.proposalStatus(pid) != "failed" || e.agent.Count(agentclient.KindConfirm) != 0 {
+	// Rejected before the agent was called: the proposal stays pending and can still be cancelled.
+	if r.status != http.StatusInternalServerError || e.proposalStatus(pid) != "pending" || e.agent.Count(agentclient.KindConfirm) != 0 {
 		t.Fatalf("%d %s", r.status, e.proposalStatus(pid))
+	}
+	if r := e.do(http.MethodPost, e.cancelPath(sid, pid), anna, nil); r.status != http.StatusNoContent {
+		t.Fatalf("cancel: %d", r.status)
 	}
 }
 
@@ -638,7 +638,8 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	}
 	c := e.stream(e.confirmPath(sid, pid), maria, nil)
 	got := c.find("action_result")
-	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "approved" || e.mcp.Calls("approvals.decide") != 1 {
+	// Two decide calls: the agent's write and core's read-back with the same idempotency key (a replay).
+	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "approved" || e.mcp.Calls("approvals.decide") != 2 {
 		t.Fatalf("%s %v", c.names(), got)
 	}
 	if e.str(`SELECT status FROM core.plan_tasks WHERE id = $1`, ar["task_id"]) != "done" ||
@@ -648,7 +649,7 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	}
 	again := e.stream(e.confirmPath(sid, pid), maria, nil)
 	if again.names() != "action_result,done" || again.find("action_result")["status"] != "approved" ||
-		again.last()["message_id"] != c.last()["message_id"] || e.mcp.Calls("approvals.decide") != 1 {
+		again.last()["message_id"] != c.last()["message_id"] || e.mcp.Calls("approvals.decide") != 2 {
 		t.Fatalf("replay %s %v", again.names(), again.last())
 	}
 
@@ -677,25 +678,64 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	})
 }
 
-func TestParseToolResult(t *testing.T) {
-	const pid = "11111111-1111-4111-8111-111111111111"
+func TestParseToolResult_BoundToProposal_R71(t *testing.T) {
+	p := proposal{id: "11111111-1111-4111-8111-111111111111", kind: "access_request"}
+	d := draft{Tool: "access.request_access", Args: json.RawMessage(`{"resource_id":"jira","reason":""}`)}
+	wrap := func(extra string) string {
+		return `{"proposal_id":"` + p.id + `","kind":"access_request","tool":"access.request_access",` + extra + `}`
+	}
 	for _, tc := range []struct {
-		name, data, result, followup string
-		ok                           bool
+		name, data string
+		ok         bool
 	}{
-		{"agent wrapper", `{"proposal_id":"` + pid + `","tool":"absence.create_request","result":{"id":"ABS-1"},"followup":"ok"}`, `{"id":"ABS-1"}`, "ok", true},
-		{"structuredContent", `{"structuredContent":{"id":"ACC-1"}}`, `{"id":"ACC-1"}`, "", true},
-		{"structured_content", `{"structured_content":{"id":"ACC-1"}}`, `{"id":"ACC-1"}`, "", true},
-		{"bare result", `{"id":"ABS-1","status":"pending_approval"}`, `{"id":"ABS-1","status":"pending_approval"}`, "", true},
-		{"result not an object falls back to bare id", `{"id":"ABS-1","result":"x"}`, `{"id":"ABS-1","result":"x"}`, "", true},
-		{"other proposal", `{"proposal_id":"22222222-2222-4222-8222-222222222222","result":{"id":"ABS-1"}}`, "", "", false},
-		{"nothing usable", `{"status":"ok"}`, "", "", false},
-		{"not an object", `[1]`, "", "", false},
+		{"agent wrapper", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"},"followup":"ok","task_checklist_item_id":"CL-01"`), true},
+		{"bare MCP result", `{"id":"ACC-1","resource_id":"jira","status":"granted"}`, false},
+		{"other proposal", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), p.id, "22222222-2222-4222-8222-222222222222", 1), false},
+		{"other kind", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"kind":"access_request"`, `"kind":"absence_request"`, 1), false},
+		{"other tool", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"tool":"access.request_access"`, `"tool":"absence.create_request"`, 1), false},
+		{"other resource", wrap(`"result":{"id":"ACC-1","resource_id":"gitlab","status":"granted"}`), false},
+		{"rejected at creation", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"rejected"}`), false},
+		{"not an access id", wrap(`"result":{"id":"ABS-1","resource_id":"jira","status":"granted"}`), false},
+		{"case variant of result", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"},"Result":{}`), false},
+		{"case variant inside result", wrap(`"result":{"id":"ACC-1","ID":"ACC-2","resource_id":"jira","status":"granted"}`), false},
+		{"result not an object", wrap(`"result":"ok"`), false},
+		{"not an object", `[1]`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseToolResult(json.RawMessage(tc.data), pid)
-			if (err == nil) != tc.ok || string(got.Result) != tc.result || got.Followup != tc.followup {
-				t.Fatalf("%s %q %v", got.Result, got.Followup, err)
+			got, err := parseToolResult(json.RawMessage(tc.data), p, d)
+			if (err == nil) != tc.ok {
+				t.Fatalf("%+v %v", got, err)
+			}
+			if tc.ok && (got.Followup != "ok" || got.ChecklistItemID != "CL-01" || !strings.Contains(string(got.Result), "ACC-1")) {
+				t.Fatalf("%+v", got)
+			}
+		})
+	}
+}
+
+func TestCheckResult_S3_MatchesConfirmedDraft_R71(t *testing.T) {
+	absence := draft{Tool: "absence.create_request", Args: json.RawMessage(`{"type":"day_off","start_date":"2026-11-13","end_date":"2026-11-13","comment":""}`)}
+	decision := draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"approved","comment":""}`)}
+	for _, tc := range []struct {
+		name   string
+		d      draft
+		result string
+		ok     bool
+	}{
+		{"absence as confirmed", absence, `{"id":"ABS-000101","type":"day_off","start_date":"2026-11-13","end_date":"2026-11-13","status":"pending_approval"}`, true},
+		{"absence other dates", absence, `{"id":"ABS-000101","type":"day_off","start_date":"2026-11-12","end_date":"2026-11-13","status":"pending_approval"}`, false},
+		{"absence approved at creation", absence, `{"id":"ABS-000101","type":"day_off","start_date":"2026-11-13","end_date":"2026-11-13","status":"approved"}`, false},
+		{"decision as confirmed", decision, `{"id":"APR-1","status":"approved"}`, true},
+		{"decision on another approval", decision, `{"id":"APR-2","status":"approved"}`, false},
+		{"decision reversed", decision, `{"id":"APR-1","status":"rejected"}`, false},
+		{"decision still pending", draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"pending"}`)}, `{"id":"APR-1","status":"pending"}`, false},
+		{"unknown tool", draft{Tool: "kb.add_faq", Args: json.RawMessage(`{}`)}, `{"id":"x"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var res map[string]json.RawMessage
+			_ = json.Unmarshal([]byte(tc.result), &res)
+			if err := checkResult(tc.d, res); (err == nil) != tc.ok {
+				t.Fatal(err)
 			}
 		})
 	}

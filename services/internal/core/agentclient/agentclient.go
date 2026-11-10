@@ -40,6 +40,16 @@ const (
 // TimeoutMargin is added to LLM_TIMEOUT_S for the overall agent call timeout (contracts/agent-stream.md).
 const TimeoutMargin = 10 * time.Second
 
+// Size limits of an agent stream (defaults of Client.MaxEventBytes and Client.MaxStreamBytes).
+const (
+	DefaultMaxEventBytes  = 256 << 10
+	DefaultMaxStreamBytes = 4 << 20
+)
+
+// ErrTooLarge is matched (errors.Is) by the error of a stream whose event or total size exceeds the client's
+// limits; such an error is also an *UnavailableError.
+var ErrTooLarge = errors.New("agentclient: agent stream too large")
+
 // TurnRequest is the body of POST /v1/turn.
 type TurnRequest struct {
 	SessionID   string          `json:"session_id"`
@@ -131,6 +141,9 @@ type Client struct {
 	HTTPClient   *http.Client  // nil means http.DefaultClient (no client timeout: Timeout bounds the call)
 	Timeout      time.Duration // whole call including the stream; <= 0 means none
 	ServiceToken string        // AGENT_SERVICE_TOKEN, sent as X-Service-Token when set
+	// MaxEventBytes bounds one event, MaxStreamBytes the whole answer; <= 0 means the defaults.
+	MaxEventBytes  int
+	MaxStreamBytes int64
 }
 
 // New returns a client for baseURL whose calls are cancelled after llmTimeout + TimeoutMargin.
@@ -195,7 +208,33 @@ func (c *Client) Turn(ctx context.Context, userToken string, req TurnRequest) (*
 		cancel()
 		return nil, ue
 	}
-	return &Stream{body: resp.Body, r: httpx.NewSSEReader(resp.Body), cancel: cancel}, nil
+	maxEvent, maxStream := c.MaxEventBytes, c.MaxStreamBytes
+	if maxEvent <= 0 {
+		maxEvent = DefaultMaxEventBytes
+	}
+	if maxStream <= 0 {
+		maxStream = DefaultMaxStreamBytes
+	}
+	limited := &limitedBody{r: resp.Body, left: maxStream}
+	return &Stream{body: resp.Body, r: httpx.NewSSEReaderLimit(limited, maxEvent), cancel: cancel}, nil
+}
+
+// limitedBody fails with ErrTooLarge once more than left bytes were read.
+type limitedBody struct {
+	r    io.Reader
+	left int64
+}
+
+func (l *limitedBody) Read(p []byte) (int, error) {
+	if l.left <= 0 {
+		return 0, ErrTooLarge
+	}
+	if int64(len(p)) > l.left {
+		p = p[:l.left]
+	}
+	n, err := l.r.Read(p)
+	l.left -= int64(n)
+	return n, err
 }
 
 // Stream is an open agent event stream. It is not safe for concurrent use.
@@ -217,6 +256,8 @@ func (s *Stream) Next() (Event, error) {
 			continue
 		case errors.Is(err, io.EOF):
 			return Event{}, io.EOF
+		case errors.Is(err, httpx.ErrSSETooLarge) && !errors.Is(err, ErrTooLarge):
+			return Event{}, &UnavailableError{Op: "read", Err: fmt.Errorf("%w: %w", ErrTooLarge, err)}
 		default:
 			return Event{}, &UnavailableError{Op: "read", Err: err}
 		}

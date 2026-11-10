@@ -337,7 +337,38 @@ func TestSSEReader_InvalidDataAndLongLine(t *testing.T) {
 		t.Fatalf("reader must continue: %+v %v", ev, err)
 	}
 	long := "data: \"" + strings.Repeat("a", MaxSSELine+10) + "\"\n\n"
-	if _, err := NewSSEReader(strings.NewReader(long)).Next(); err == nil || errors.Is(err, io.EOF) {
+	if _, err := NewSSEReader(strings.NewReader(long)).Next(); !errors.Is(err, ErrSSETooLarge) {
 		t.Fatalf("long line: %v", err)
+	}
+}
+
+func TestSSEReader_EventLimit_R76(t *testing.T) {
+	small := "event: token\ndata: {\"text\":\"ok\"}\n\n"
+	for _, tc := range []struct {
+		name, stream string
+		limit        int
+		ok           bool
+	}{
+		{"within limit", small, 64, true},
+		{"one long line", "data: \"" + strings.Repeat("a", 200) + "\"\n\n", 64, false},
+		{"many short data lines", strings.Repeat("data: 1\n", 40) + "\n", 64, false},
+		{"negative limit means none", "data: \"" + strings.Repeat("a", 200) + "\"\n\n", -1, true},
+		{"limit above MaxSSELine", small, MaxSSELine * 2, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := NewSSEReaderLimit(strings.NewReader(small+tc.stream), tc.limit)
+			if ev, err := r.Next(); err != nil || ev.Name != "token" {
+				t.Fatalf("first event: %+v %v", ev, err)
+			}
+			_, err := r.Next()
+			if tc.ok != (err == nil) || (!tc.ok && !errors.Is(err, ErrSSETooLarge)) {
+				t.Fatalf("second event: %v", err)
+			}
+			if !tc.ok {
+				if _, again := r.Next(); !errors.Is(again, ErrSSETooLarge) {
+					t.Fatalf("the reader must stop after an oversized event: %v", again)
+				}
+			}
+		})
 	}
 }

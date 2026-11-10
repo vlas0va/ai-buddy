@@ -49,6 +49,16 @@ type turnState struct {
 	doneProvider  string
 	doneLatencyMS *int64
 	doneEscalated bool
+	tooLarge      bool // text or sources over the per-turn bounds
+}
+
+// addText appends assistant text unless the turn would exceed maxTurnText (then tooLarge is set).
+func (s *turnState) addText(t string) {
+	if s.text.Len()+len(t) > maxTurnText {
+		s.tooLarge = true
+		return
+	}
+	s.text.WriteString(t)
 }
 
 // collect records the parts of an event core persists or reports.
@@ -59,14 +69,18 @@ func (s *turnState) collect(ev agentclient.Event) {
 			Text string `json:"text"`
 		}
 		if json.Unmarshal(ev.Data, &t) == nil {
-			s.text.WriteString(t.Text)
+			s.addText(t.Text)
 		}
 	case agentclient.EventSources:
 		var src struct {
 			Items []json.RawMessage `json:"items"`
 		}
 		if json.Unmarshal(ev.Data, &src) == nil {
-			s.sources = append(s.sources, src.Items...)
+			if len(s.sources)+len(src.Items) > maxSources {
+				s.tooLarge = true
+			} else {
+				s.sources = append(s.sources, src.Items...)
+			}
 		}
 	case agentclient.EventRefusal:
 		var r struct {
@@ -188,6 +202,12 @@ loop:
 			return
 		}
 		st.collect(ev)
+		if st.tooLarge {
+			h.log.Warn("agent turn over the size bounds", "session", sid, "event", ev.Name)
+			h.saveAssistant(ctx, assistantID, sid, &st)
+			_ = sse.Send(agentclient.EventError, errTooLarge)
+			return
+		}
 		switch {
 		case internalEvents[ev.Name]:
 			h.log.Warn("agent event dropped", "event", ev.Name, "session", sid)
@@ -265,18 +285,33 @@ func (h *Handler) saveAssistant(ctx context.Context, id, sessionID string, st *t
 	return true
 }
 
-// proposalEvent is the data of an action_proposal event.
-type proposalEvent struct {
-	ProposalID string          `json:"proposal_id"`
-	Kind       string          `json:"kind"`
-	Draft      json.RawMessage `json:"draft"`
-	Summary    string          `json:"summary"`
-}
-
 // draft is the part of a proposal draft core checks; the whole draft is stored and sent back unchanged.
 type draft struct {
-	Tool string          `json:"tool"`
-	Args json.RawMessage `json:"args"`
+	Tool string
+	Args json.RawMessage
+}
+
+// decodeDraft reads tool and args with exact keys (no case variants of tool, args or display); args must be an
+// object without idempotency_key and confirmation_token.
+func decodeDraft(raw json.RawMessage) (draft, error) {
+	m, err := exactObject(raw, "tool", "args", "display")
+	if err != nil {
+		return draft{}, fmt.Errorf("draft: %w", err)
+	}
+	d := draft{Tool: str(m, "tool"), Args: m["args"]}
+	if d.Tool == "" {
+		return draft{}, errors.New("draft without tool")
+	}
+	args, err := exactObject(d.Args, confirm.KeyIdempotency, confirm.KeyConfirmation)
+	if err != nil {
+		return draft{}, fmt.Errorf("draft args: %w", err)
+	}
+	for _, k := range []string{confirm.KeyIdempotency, confirm.KeyConfirmation} {
+		if _, ok := args[k]; ok {
+			return draft{}, fmt.Errorf("draft args carry %s", k)
+		}
+	}
+	return d, nil
 }
 
 // storeProposal validates an action_proposal and stores it in core.proposals for the caller and session with
@@ -284,13 +319,18 @@ type draft struct {
 // approval decisions only from leads.
 func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID string, data json.RawMessage) (string, error) {
 	bad := apierr.Forbidden().WithMessage(msgBadProposal)
-	var p proposalEvent
-	if err := json.Unmarshal(data, &p); err != nil {
+	ev, err := exactObject(data, "proposal_id", "kind", "draft", "summary")
+	if err != nil {
 		return "", fmt.Errorf("decode proposal: %w: %w", bad, err)
 	}
-	var d draft
-	if err := json.Unmarshal(p.Draft, &d); err != nil {
-		return "", fmt.Errorf("decode draft: %w: %w", bad, err)
+	p := struct{ ProposalID, Kind, Summary string }{str(ev, "proposal_id"), str(ev, "kind"), str(ev, "summary")}
+	rawDraft := ev["draft"]
+	if len(rawDraft) > maxDraftBytes {
+		return "", fmt.Errorf("draft of %d bytes: %w", len(rawDraft), apierr.UpstreamUnavailable().WithMessage(msgTooLarge))
+	}
+	d, err := decodeDraft(rawDraft)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", bad, err)
 	}
 	if !uuidRE.MatchString(p.ProposalID) {
 		return "", fmt.Errorf("proposal id %q is not a uuid: %w", p.ProposalID, bad)
@@ -298,25 +338,15 @@ func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID s
 	if tool, ok := allowedTools[p.Kind]; !ok || tool != d.Tool {
 		return "", fmt.Errorf("tool %q of kind %q is not allowed: %w", d.Tool, p.Kind, bad)
 	}
-	if p.Kind == kindApprovalDecision && c.Role != "lead" {
+	if p.Kind == kindApprovalDecision && (c.Role != "lead" || h.mcp == nil) {
 		return "", fmt.Errorf("approval decision proposed to role %q: %w", c.Role, bad)
-	}
-	var args map[string]json.RawMessage
-	if err := json.Unmarshal(d.Args, &args); err != nil || args == nil {
-		return "", fmt.Errorf("draft args are not an object: %w", bad)
-	}
-	if _, ok := args[confirm.KeyIdempotency]; ok {
-		return "", fmt.Errorf("draft args carry %s: %w", confirm.KeyIdempotency, bad)
-	}
-	if _, ok := args[confirm.KeyConfirmation]; ok {
-		return "", fmt.Errorf("draft args carry %s: %w", confirm.KeyConfirmation, bad)
 	}
 	hash, err := canonjson.SHA256Hex(d.Args)
 	if err != nil {
 		return "", fmt.Errorf("hash draft args: %w: %w", bad, err)
 	}
 	var compact bytes.Buffer
-	if err := json.Compact(&compact, p.Draft); err != nil {
+	if err := json.Compact(&compact, rawDraft); err != nil {
 		return "", fmt.Errorf("compact draft: %w: %w", bad, err)
 	}
 	tag, err := h.pool.Exec(ctx, `INSERT INTO core.proposals (id, session_id, user_id, kind, draft, draft_hash, expires_at)

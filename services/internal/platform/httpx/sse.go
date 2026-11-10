@@ -156,6 +156,10 @@ const MaxSSELine = 1 << 20
 // ErrSSEData marks an event whose data is not valid JSON; the reader can continue with the next event.
 var ErrSSEData = errors.New("httpx: sse: event data is not valid JSON")
 
+// ErrSSETooLarge marks a line longer than MaxSSELine or an event over the reader's limit (NewSSEReaderLimit).
+// The stream cannot be read further.
+var ErrSSETooLarge = errors.New("httpx: sse: event too large")
+
 // Event is one Server-Sent Event. Name defaults to "message"; ID is the last id seen on the stream (the SSE
 // "last event ID"), so it persists across events that carry no id line.
 type Event struct {
@@ -168,22 +172,43 @@ type Event struct {
 // `field:value` with one optional space, several data lines joined with "\n", unknown fields and retry ignored.
 // Unlike the browser, a final event that is not followed by a blank line is still delivered.
 type SSEReader struct {
-	sc      *bufio.Scanner
-	lastID  string
-	started bool
+	sc       *bufio.Scanner
+	lastID   string
+	started  bool
+	maxEvent int // bytes of data per event; 0 = no limit beyond MaxSSELine per line
+	failed   error
 }
 
 // NewSSEReader returns a reader over r (typically an HTTP response body).
 func NewSSEReader(r io.Reader) *SSEReader {
+	return NewSSEReaderLimit(r, 0)
+}
+
+// sseLineSlack is room for the field name ("data: ") on a line of a limited reader.
+const sseLineSlack = 64
+
+// NewSSEReaderLimit is NewSSEReader with a limit of maxEvent bytes on the data of one event (all its data lines
+// together) and on one line (plus room for the field name), for streams from less trusted peers; maxEvent <= 0
+// means no event limit. A larger event makes Next return ErrSSETooLarge and stop.
+func NewSSEReaderLimit(r io.Reader, maxEvent int) *SSEReader {
+	maxLine := MaxSSELine
+	if maxEvent > 0 && maxEvent+sseLineSlack < maxLine {
+		maxLine = maxEvent + sseLineSlack
+	} else if maxEvent < 0 {
+		maxEvent = 0
+	}
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 4096), MaxSSELine)
+	sc.Buffer(make([]byte, 0, min(4096, maxLine)), maxLine)
 	sc.Split(splitLines)
-	return &SSEReader{sc: sc}
+	return &SSEReader{sc: sc, maxEvent: maxEvent}
 }
 
 // Next returns the next event, io.EOF at the end of the stream, a read error, or the event together with an
 // error wrapping ErrSSEData when its data is not valid JSON (Next may be called again after that).
 func (r *SSEReader) Next() (Event, error) {
+	if r.failed != nil {
+		return Event{}, r.failed
+	}
 	var (
 		name    string
 		data    []byte
@@ -211,6 +236,10 @@ func (r *SSEReader) Next() (Event, error) {
 		case "event":
 			name = string(value)
 		case "data":
+			if r.maxEvent > 0 && len(data)+1+len(value) > r.maxEvent {
+				r.failed = fmt.Errorf("%w: more than %d bytes of data", ErrSSETooLarge, r.maxEvent)
+				return Event{}, r.failed
+			}
 			if hasData {
 				data = append(data, '\n')
 			}
@@ -223,6 +252,10 @@ func (r *SSEReader) Next() (Event, error) {
 		}
 	}
 	if err := r.sc.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			r.failed = fmt.Errorf("%w: line too long", ErrSSETooLarge)
+			return Event{}, r.failed
+		}
 		return Event{}, fmt.Errorf("httpx: sse: read: %w", err)
 	}
 	if hasData {
