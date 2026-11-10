@@ -65,6 +65,7 @@ def register_dev(app: Flask, agent: Agent, settings: Settings) -> None:
             "display_name": e["display_name"],
             "role": e["role"],
             "team_id": e["team_id"],
+            "location": e.get("location", ""),
             "plan": {"tasks": _plan(agent, user_id, e, overrides.get(user_id, {}))},
         }
         if "cohort_days_ago" in e and e["role"] == "intern":

@@ -145,6 +145,36 @@ services:
     ports:
       - "127.0.0.1:11434:11434"
 
+  avibe:
+    # Optional own-compute LLM: A-Vibe (AvitoTech/avibe, 8B, Apache-2.0) served by vLLM, OpenAI-compatible, with tool calling.
+    #   docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d
+    #   .env: LLM_PROVIDER=openai_compat LLM_BASE_URL=http://avibe:8000/v1 LLM_MODEL=AvitoTech/avibe LLM_TIMEOUT_S=60
+    # Needs an NVIDIA GPU (~23 GB VRAM in 16-bit; AVIBE_QUANTIZATION=fp8 halves it on Ada/Hopper) and the NVIDIA runtime.
+    image: vllm/vllm-openai:v0.10.1.1
+    profiles: [avibe]
+    command:
+      - --model=AvitoTech/avibe
+      - --served-model-name=AvitoTech/avibe
+      - --max-model-len=${AVIBE_MAX_LEN:-8192}
+      - --gpu-memory-utilization=0.90
+      - --enable-auto-tool-choice
+      - --tool-call-parser=hermes
+      - ${AVIBE_QUANTIZATION_FLAG:---dtype=auto}
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "127.0.0.1:8000:8000"
+
   web:
     # Owner C. SPA served by nginx. VITE_API_BASE_URL is a BUILD-time value: the browser calls core directly, so it must
     # match the host port of core, and the web origin must be in core's CORS_ORIGINS (default http://localhost:5173).
@@ -206,3 +236,4 @@ services:
 volumes:
   pgdata:
   ollama:
+  hf-cache:

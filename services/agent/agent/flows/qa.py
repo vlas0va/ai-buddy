@@ -9,7 +9,7 @@ from typing import Any
 
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
-from ..text import normalize
+from ..text import normalize, stems
 from .common import CONTACT_LABELS, Turn, first_name, items, person_name, say
 
 CURATOR_TOPICS = re.compile(r"практик|вуз|учебн|диплом|курсов|экватор|выпускн|методичк|опрос")
@@ -56,6 +56,15 @@ def escalation_event(turn: Turn, question: str, role: str, topic: str = "questio
     )
 
 
+CITY_WORDS = re.compile(r"москв|петербург|питер|спб|удал[её]н|казан|новосибирск|екатеринбург")
+
+
+def _location_hint(turn: Turn, query: str) -> str:
+    if not turn.user.location or CITY_WORDS.search(normalize(query)):
+        return ""
+    return turn.user.location
+
+
 def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict[str, Any]]:
     """Defense in depth + context (ADR-003 layer 1, R02, R15): drop results the user may not read according to the
     agent's own copy of the KB ACL, then boost documents of the user's team and of open plan tasks."""
@@ -81,7 +90,12 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
                 score *= team_boost
             if open_items.intersection(checklist):
                 score *= stage_boost
-        out.append({**h, "snippet": sanitize_snippet(h.get("snippet", "")), "score": score, "checklist": checklist})
+        snippet = h.get("snippet", "")
+        if doc is not None and query:
+            # the local copy gives clean paragraphs (no ts_headline fragments or markdown) and lets the user's office
+            # city pick the right section («Москва» / «Санкт-Петербург» / «Удалённо») when the question has none
+            snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
+        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist})
     return sorted(out, key=lambda h: h["score"], reverse=True)
 
 
@@ -250,7 +264,13 @@ def handle_refusal(turn: Turn, reason: str, redirect_role: str = "", topic: str 
 HELP = {
     "intern": "Я AI-buddy — помогаю освоиться в команде. Могу:\n- показать план адаптации и следующий шаг («что дальше?»);\n"
     "- ответить на вопросы о команде и инструментах со ссылкой на источник;\n- оформить отгул («хочу отгул в пятницу»);\n"
-    "- запросить доступы и подсказать каналы команды;\n- подсказать, к кому идти, и подготовить сообщение наставнику.",
+    "- запросить доступы (Confluence, Jira, Bitbucket) и подсказать каналы команды;\n"
+    "- помочь с инженерным онбордингом: репозиторий, ветки и pull request, CI/CD, секреты, dev-стенд;\n"
+    "- подготовить к код-ревью и подсказать, кого позвать («кого позвать на ревью?»);\n"
+    "- разобрать ошибку из лога — пришли текст, секреты я скрою;\n"
+    "- проверить понимание инструкции («проверь меня по защите данных»);\n"
+    "- подсказать, к кому идти, и подготовить сообщение наставнику.\n"
+    "Задачи за тебя я не делаю — помогаю разобраться, чтобы ты сделал их сам.",
     "mentor": "Я AI-buddy. Наставнику могу: показать твой план и пункты чек-листа, что запросили твои стажёры, подготовить "
     "сводку прогресса к 1:1 и экватору, ответить по методичке и базе знаний.",
     "lead": "Я AI-buddy. Руководителю могу: показать заявки на согласование и оформить решение («согласуй ABS-1001»), ответить "

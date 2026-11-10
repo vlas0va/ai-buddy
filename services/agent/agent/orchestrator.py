@@ -18,7 +18,7 @@ from .auth import User
 from .canonical import args_hash, verify_confirmation_token
 from .config import AgentConfig, Settings
 from .errors import AgentError, BadRequest, Forbidden, LLMError, ToolDenied, ToolError
-from .flows import absence, access, plan, qa, team
+from .flows import absence, access, coach, plan, qa, team
 from .flows.common import Turn, items, say
 from .llm.openai_compat import EmbeddingsClient
 from .llm.writer import make_writer
@@ -46,6 +46,24 @@ ROLE_DENIED = {
     "mentee": "Прогресс стажёров видят их наставник и руководитель.",
     "summary": "Сводку прогресса готовлю для стажёра и наставника.",
     "plan": "У этой роли нет плана адаптации.",
+}
+# A message that clearly starts another scenario ends the quiz instead of being scored as an answer.
+QUIZ_BREAK_INTENTS = {
+    "absence",
+    "absence_status",
+    "access",
+    "channels",
+    "plan",
+    "summary",
+    "approvals",
+    "mentee",
+    "escalate",
+    "help",
+    "quiz",
+    "code_review",
+    "troubleshoot",
+    "learning",
+    "benefit",
 }
 SLOT_INTENTS_BLOCKING = {
     "absence_status",
@@ -173,6 +191,12 @@ class Agent:
             and absence.looks_like_slot_answer(message)
         ):
             return Route("absence", 0.9, "state")
+        quiz_state = turn.state()
+        if quiz_state.get("quiz"):
+            if route.source != "guardrail" and route.intent not in QUIZ_BREAK_INTENTS:
+                return Route("quiz_answer", 0.9, "state")
+            quiz_state.pop("quiz")
+            turn.save_state(quiz_state)
         if route.intent == "refusal" and route.reason == "no_rights":
             person = route.detail.get("person", "colleague")
             if person != "colleague":
@@ -234,6 +258,12 @@ class Agent:
             "smalltalk": qa.handle_smalltalk,
             "offtopic": qa.handle_offtopic,
             "kb_question": qa.handle_question,
+            "learning": coach.handle_learning,
+            "code_review": coach.handle_code_review,
+            "troubleshoot": coach.handle_troubleshoot,
+            "quiz": coach.handle_quiz,
+            "quiz_answer": coach.handle_quiz_answer,
+            "benefit": coach.handle_benefit,
         }
         yield from handlers.get(intent, qa.handle_question)(turn, message)
 

@@ -223,7 +223,7 @@ func TestSave_S4_AccessWithoutInternTask(t *testing.T) {
 		t.Fatalf("rejected %+v %v", rejected, err)
 	}
 	odd, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000009", Kind: KindAccess,
-		Result: accessResult("ACC-000045", "gitlab", "GitLab", "weird", "", nil)})
+		Result: accessResult("ACC-000045", "bitbucket", "Bitbucket", "weird", "", nil)})
 	if err != nil || odd.Status != StatusCreated || loadTask(t, pool, *odd.TaskID).status != "in_progress" {
 		t.Fatalf("unknown status %+v %v", odd, err)
 	}

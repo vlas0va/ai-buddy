@@ -30,7 +30,7 @@ from agent import clock  # noqa: E402
 from agent.app import create_app  # noqa: E402
 from agent.sse import parse_stream  # noqa: E402
 
-GUARD_CATEGORIES = {"refusal", "injection", "rights"}
+GUARD_CATEGORIES = {"refusal", "injection", "rights", "secrets"}
 TODAY = date(2026, 11, 9)
 
 

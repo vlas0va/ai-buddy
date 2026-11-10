@@ -32,7 +32,7 @@ PEOPLE = [
 RESOURCES = [
     ("confluence", "Confluence", "tool", None, False, "Вики и документация", "CL-01"),
     ("jira", "Jira", "tool", None, False, "Задачи и доски команды", "CL-01"),
-    ("gitlab", "GitLab", "tool", None, False, "Репозитории и ревью кода", "CL-01"),
+    ("bitbucket", "Bitbucket", "tool", None, False, "Репозитории и ревью кода", "CL-01"),
     ("space-delivery", "Пространство кластера «Доставка»", "space", "delivery", False, "Документы и мануалы команды", "CL-05"),
     ("space-search", "Пространство кластера «Поиск»", "space", "search", False, "Документы и мануалы команды", "CL-05"),
     ("space-delivery-incidents", "Закрытое пространство инцидентов «Доставки»", "space", "delivery", True, "Разборы инцидентов, нужен апрув руководителя", "CL-05"),

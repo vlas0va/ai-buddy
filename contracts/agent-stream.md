@@ -68,7 +68,7 @@ closes). The agent emits its first `status` within ~100 ms, so the UI never wait
 ```
 Optional, all additive: `message_id`; `user_context.display_name`; `open_tasks[].status|due_at|period|human_only|task_id`;
 `user_context.plan.tasks` (full plan, same item shape — preferred when available, gives «готово N из M»);
-`user_context.mentees` (mentor and lead: what core returns from `GET /api/team/interns`); `flags` (runtime feature flags of the
+`user_context.location` (office city: «Москва», «Санкт-Петербург» or «Удалённо» — picks the matching KB section); `user_context.mentees` (mentor and lead: what core returns from `GET /api/team/interns`); `flags` (runtime feature flags of the
 user's team, R55 — a disabled scenario answers «пилот выключен»); `today` (ISO date, honoured only with
 `AGENT_ALLOW_CLOCK_OVERRIDE=true`, for demo and e2e).
 Headers: `Authorization: Bearer <user JWT>` (the agent verifies it with `JWT_SECRET` and forwards it to MCP servers unchanged),

@@ -34,9 +34,9 @@ func TestListRequired_S4_TeamScope_R71(t *testing.T) {
 		c    mcpx.Caller
 		want []string
 	}{
-		{"intern of delivery", anna, []string{"confluence", "gitlab", "jira", "space-delivery", "space-delivery-incidents"}},
-		{"mentor of delivery", oleg, []string{"confluence", "gitlab", "jira", "space-delivery", "space-delivery-incidents"}},
-		{"intern of search", ivan, []string{"confluence", "gitlab", "jira", "space-search"}},
+		{"intern of delivery", anna, []string{"bitbucket", "confluence", "jira", "space-delivery", "space-delivery-incidents"}},
+		{"mentor of delivery", oleg, []string{"bitbucket", "confluence", "jira", "space-delivery", "space-delivery-incidents"}},
+		{"intern of search", ivan, []string{"bitbucket", "confluence", "jira", "space-search"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -66,10 +66,10 @@ func TestListRequired_S4_LatestStatusWins(t *testing.T) {
 	e.addRequest("intern.anna", "jira", "granted", 10)
 	e.addRequest("intern.anna", "jira", "rejected", 1)
 	e.addRequest("intern.anna", "space-delivery-incidents", "pending_approval", 1)
-	e.addRequest("intern.ivan", "gitlab", "granted", 1) // other people's requests do not count
+	e.addRequest("intern.ivan", "bitbucket", "granted", 1) // other people's requests do not count
 	m := mustCall[statusList](e, anna, "list_required", nil).byID()
 	want := map[string]string{"confluence": "granted", "jira": "rejected", "space-delivery-incidents": "pending_approval",
-		"gitlab": "not_requested", "space-delivery": "not_requested"}
+		"bitbucket": "not_requested", "space-delivery": "not_requested"}
 	for id, status := range want {
 		if m[id].Status != status {
 			t.Errorf("%s: %q, want %q", id, m[id].Status, status)

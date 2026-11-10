@@ -1,0 +1,15 @@
+- [x] CO-01 Delegation is coached — test `test_CO_01_*`
+- [x] CO-02 Reviewers and draft — test `test_CO_02_*`
+- [x] CO-03 Team-specific reviewers — test `test_CO_03_*`
+- [x] CO-04 Known error — test `test_CO_04_*`
+- [x] CO-05 Secrets masked — test `test_CO_05_*`
+- [x] CO-06 Unknown error — test `test_CO_06_*`
+- [x] CO-07 Quiz from topic — test `test_CO_07_*`
+- [x] CO-08 Full score — test `test_CO_08_*`
+- [x] CO-09 Corrections — test `test_CO_09_*`
+- [x] CO-10 Quiz ends — test `test_CO_10_*`
+- [x] CO-11 No document — test `test_CO_11_*`
+- [x] CO-12 Benefit operation — test `test_CO_12_*`
+- [x] CO-13 Engineering answers — test `test_CO_13_*`
+- [x] CO-14 Location — test `test_CO_14_*`
+- [x] CO-15 Help and roles — test `test_CO_15_*`

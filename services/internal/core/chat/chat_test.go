@@ -693,7 +693,7 @@ func TestParseToolResult_BoundToProposal_R71(t *testing.T) {
 		{"other proposal", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), p.id, "22222222-2222-4222-8222-222222222222", 1), false},
 		{"other kind", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"kind":"access_request"`, `"kind":"absence_request"`, 1), false},
 		{"other tool", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"tool":"access.request_access"`, `"tool":"absence.create_request"`, 1), false},
-		{"other resource", wrap(`"result":{"id":"ACC-1","resource_id":"gitlab","status":"granted"}`), false},
+		{"other resource", wrap(`"result":{"id":"ACC-1","resource_id":"bitbucket","status":"granted"}`), false},
 		{"rejected at creation", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"rejected"}`), false},
 		{"not an access id", wrap(`"result":{"id":"ABS-1","resource_id":"jira","status":"granted"}`), false},
 		{"case variant of result", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"},"Result":{}`), false},

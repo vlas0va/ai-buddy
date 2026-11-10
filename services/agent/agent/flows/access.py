@@ -19,7 +19,7 @@ TEAM_NAMES = {"delivery": re.compile(r"доставк"), "search": re.compile(r"
 SYNONYMS = {
     "confluence": ["confluence", "конфлюенс", "вики", "wiki", "базе знаний", "база знаний"],
     "jira": ["jira", "джир", "жир", "трекер"],
-    "gitlab": ["gitlab", "гитлаб", "репозитор", "git", "гит", "код"],
+    "bitbucket": ["bitbucket", "битбакет", "репозитор", "git", "гит", "код"],
 }
 KIND_SYNONYMS = {"space": ["пространств"], "channel": ["канал"]}
 STATUS_LABEL = {

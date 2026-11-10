@@ -106,7 +106,7 @@ tools:
   - name: access.list_required
     roles: [intern, mentor]
     write: false
-    description: Доступы, нужные в моей команде, со статусами (Confluence, Jira, GitLab, пространство).
+    description: Доступы, нужные в моей команде, со статусами (Confluence, Jira, Bitbucket, пространство).
     input_schema: {type: object, properties: {}}
   - name: access.list_my_access
     roles: [intern, mentor]
@@ -138,3 +138,9 @@ intents:
   approvals:    {roles: [lead]}
   mentee:       {roles: [mentor, lead]}
   kb_question:  {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}
+  quiz:         {roles: [intern, alumni], flag: scenario_s2}
+  quiz_answer:  {roles: [intern, alumni], flag: scenario_s2}
+  code_review:  {roles: [intern, mentor, lead], flag: scenario_s2}
+  troubleshoot: {roles: [intern, mentor, lead], flag: scenario_s2}
+  learning:     {roles: [intern, mentor, lead, alumni], flag: scenario_s2}
+  benefit:      {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}

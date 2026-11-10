@@ -20,4 +20,19 @@
 
 Что модель **никогда** не делает (ADR-003, ADR-007): не видит документов вне прав пользователя, не получает пишущих
 инструментов, не создаёт заявки — заявки собирает детерминированный сценарий и выполняет только после кнопки «Отправить».
-Локальная модель на ноутбуке: профиль `ollama` в compose, см. `services/agent/README.md`.
+
+## Свои мощности: A-Vibe или Ollama
+
+Организаторы разрешили A-Vibe и предпочитают собственные мощности; поддержаны оба варианта, переключение — только `.env`.
+
+| Вариант | Запуск | `.env` |
+|---|---|---|
+| **A-Vibe** (`AvitoTech/avibe`, 8B на базе Qwen3-8B, Apache-2.0) через vLLM, GPU NVIDIA ~23 ГБ (16 бит) | `docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d` | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=http://avibe:8000/v1` `LLM_MODEL=AvitoTech/avibe` `LLM_TIMEOUT_S=60` |
+| A-Vibe в FP8 (GPU Ada/Hopper, ~12 ГБ) | то же, плюс `AVIBE_QUANTIZATION_FLAG=--quantization=fp8` | то же |
+| **Ollama** на ноутбуке (CPU/GPU, без ключа) | `docker compose ... --profile core --profile ollama up -d`, затем `docker compose exec ollama ollama pull qwen2.5:7b-instruct` | `LLM_BASE_URL=http://ollama:11434/v1` `LLM_MODEL=qwen2.5:7b-instruct` |
+| Внешний API (любой OpenAI-совместимый) | — | `LLM_BASE_URL=https://<provider>/v1` `LLM_API_KEY=...` `LLM_MODEL=...` |
+
+A-Vibe поддерживает вызов функций (`--enable-auto-tool-choice --tool-call-parser hermes`), поэтому `LLM_TOOL_CALLING=true`
+работает и с ним. Сценарии записи и guardrails от модели не зависят: смена модели не меняет права и проверки.
+Без GPU A-Vibe не запустить в разумное время — для демо на ноутбуке используйте Ollama или stub.
+
