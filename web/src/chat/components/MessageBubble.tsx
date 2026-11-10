@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { RichText } from '@/components/rich/RichText'
 import { Logo } from '@/components/ui/Logo'
 import type { ChatMessage } from '../stream'
 import { SourceChips } from './SourceChips'
@@ -39,7 +40,7 @@ export function MessageBubble({ message, typing, status, error }: BubbleProps) {
         )}
         {showBubble && (
           <div className="chat-bubble chat-bubble-buddy">
-            {body}
+            {typing ? body : <RichText text={body} />}
             {typing && (
               <span className="chat-typing" aria-label="Buddy печатает">
                 <i />

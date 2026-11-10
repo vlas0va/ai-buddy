@@ -66,13 +66,14 @@ describe('SseParser (R78)', () => {
 })
 
 describe('readEvents', () => {
-  it('yields typed events across chunks and turns bad payloads into an error event', async () => {
+  it('yields typed events across chunks and turns bad payloads into an error event, skips unknown events', async () => {
     const events = await collect(
       readEvents(bodyOf(['event: token\ndata: {"text":"При', 'вет"}\n\nevent: token\ndata: not json\n\n', 'event: nope\ndata: {}\n\nevent: done\ndata: {"message_id":"m1"}'])),
     )
     expect(events[0]).toEqual({ type: 'token', data: { text: 'Привет' } })
     expect(events[1]).toMatchObject({ type: 'error', data: { retryable: true } })
-    expect(events[2]).toMatchObject({ type: 'error' })
+    // contracts/agent-stream.md: new events are additive, an unknown one is skipped instead of breaking the turn
+    expect(events[2]).toEqual({ type: 'ignored', data: { name: 'nope' } })
     expect(events[3]).toEqual({ type: 'done', data: { message_id: 'm1' } })
   })
 

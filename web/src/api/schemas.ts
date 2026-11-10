@@ -96,6 +96,7 @@ export const taskSchema: z.ZodType<Task> = z.lazy(() =>
 export const planSchema = z.object({
   user_id: z.string(),
   plan_role: z.enum(['intern', 'mentor']),
+  intern_id: z.string().nullable().optional(),
   current_period: periodSchema,
   periods: z.array(z.object({ id: periodSchema, label: z.string(), tasks: z.array(taskSchema) })),
   goals: z.array(goalSchema),
@@ -182,3 +183,8 @@ export type Role = z.infer<typeof roleSchema>
 export type User = z.infer<typeof userSchema>
 export type Plan = z.infer<typeof planSchema>
 export type Action = z.infer<typeof actionSchema>
+export type Goal = z.infer<typeof goalSchema>
+export type NextStepInfo = z.infer<typeof nextStepSchema>
+export type InternProgress = z.infer<typeof internProgressSchema>
+export type Period = z.infer<typeof periodSchema>
+export type TaskStatus = z.infer<typeof taskStatusSchema>

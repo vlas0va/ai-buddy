@@ -10,8 +10,11 @@ import {
 import { AppLayout } from '@/components/AppLayout'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { ChatPage } from '@/pages/ChatPage'
+import { EscalationsPage } from '@/pages/EscalationsPage'
+import { InternPlanPage } from '@/pages/InternPlanPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PlanPage } from '@/pages/PlanPage'
+import { TeamPage } from '@/pages/TeamPage'
 import { useSession } from '@/store/session'
 
 const rootRoute = createRootRoute({ component: Outlet })
@@ -58,7 +61,36 @@ const approvalsRoute = createRoute({
   component: ApprovalsPage,
 })
 
-const routeTree = rootRoute.addChildren([loginRoute, appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute])])
+const teamGuard = () => {
+  const role = useSession.getState().user?.role
+  if (role !== 'mentor' && role !== 'lead') throw redirect({ to: '/chat' })
+}
+
+// mentor and lead: interns of the team; the server filters by team (R71), the guard only keeps others off the page
+const teamRoute = createRoute({ getParentRoute: () => appRoute, path: '/team', beforeLoad: teamGuard, component: TeamPage })
+const internRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/team/$internId',
+  beforeLoad: teamGuard,
+  component: function InternPlan() {
+    const { internId } = internRoute.useParams()
+    return <InternPlanPage internId={internId} />
+  },
+})
+
+const questionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/questions',
+  beforeLoad: () => {
+    if (useSession.getState().user?.role === 'alumni') throw redirect({ to: '/chat' })
+  },
+  component: EscalationsPage,
+})
+
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute, teamRoute, internRoute, questionsRoute]),
+])
 
 export function createAppRouter(history?: RouterHistory) {
   return createRouter({ routeTree, history })

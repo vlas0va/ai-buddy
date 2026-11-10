@@ -93,3 +93,7 @@
   }
 }
 .reset-demo { border: 0; background: none; padding: 0; color: var(--color-text-muted); font-size: var(--text-xs); text-decoration: underline; cursor: pointer; text-align: left; }
+/* the sidebar column keeps its background on long pages (the sticky aside itself is one viewport tall) */
+@media (min-width: 768px) {
+  .layout { background: linear-gradient(to right, var(--color-surface) 247px, var(--color-border) 247px, var(--color-border) 248px, transparent 248px); }
+}

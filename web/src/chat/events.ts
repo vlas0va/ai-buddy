@@ -41,6 +41,17 @@ export const refusalSchema = z.object({
 })
 export type Refusal = z.infer<typeof refusalSchema>
 
+export const nextStepSchema = z.object({
+  task_id: z.string().optional(),
+  checklist_item_id: z.string().nullable().optional(),
+  title: z.string(),
+  period: z.string().nullable().optional(),
+  status: z.string().optional(),
+  human_only: z.boolean().optional(),
+  cta: z.object({ kind: z.string(), label: z.string(), message: z.string() }).optional(),
+})
+export type NextStep = z.infer<typeof nextStepSchema>
+
 export const streamErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -57,7 +68,10 @@ export type StreamEvent =
   | { type: 'escalation_draft'; data: EscalationDraftData }
   | { type: 'refusal'; data: Refusal }
   | { type: 'error'; data: StreamError }
+  | { type: 'next_step'; data: NextStep }
   | { type: 'done'; data: { message_id?: string } }
+  /** an event this client does not know: contracts/agent-stream.md says new events are additive and must be skipped */
+  | { type: 'ignored'; data: { name: string } }
 
 const payloads = {
   status: z.object({ stage: stageSchema }),
@@ -68,6 +82,7 @@ const payloads = {
   escalation_draft: escalationDraftSchema,
   refusal: refusalSchema,
   error: streamErrorSchema,
+  next_step: nextStepSchema,
   done: z.object({ message_id: z.string().optional() }),
 } as const
 
@@ -81,7 +96,7 @@ export const BAD_EVENT: StreamEvent = {
 }
 
 export function parseEvent(name: string, raw: string): StreamEvent {
-  if (!(name in payloads)) return BAD_EVENT
+  if (!(name in payloads)) return { type: 'ignored', data: { name } }
   let json: unknown
   try {
     json = JSON.parse(raw)

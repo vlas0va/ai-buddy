@@ -1,7 +1,8 @@
 import { http, HttpResponse } from 'msw'
-import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, saveState, state, userByToken, uuid } from './db'
+import type { User } from '@/api/schemas'
+import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, saveState, state, userByToken, uuid, type MockEscalation } from './db'
 import { decideApproval, listPendingApprovals } from './approvals'
-import { planFor } from './plan'
+import { findTask, planFor } from './plan'
 import { recordConfirm, recordTurn, setStoredProposalState } from './history'
 import { confirmEvents, messageEvents } from './scenario'
 import { sseResponse } from './sse'
@@ -13,6 +14,16 @@ const unauthorized = () =>
 const forbidden = () =>
   HttpResponse.json({ code: 'forbidden', message: 'Недостаточно прав для этого действия.', retryable: false }, { status: 403 })
 const notFound = () => HttpResponse.json({ code: 'not_found', message: 'Не найдено.', retryable: false }, { status: 404 })
+
+/** mentor and lead see interns of their own team only (R71) */
+const teamOf = (viewer: User, other: User) => viewer.team_id === other.team_id
+
+/** the wire shape has no sender id (openapi Escalation) */
+function publicEscalation(e: MockEscalation) {
+  const out: Partial<MockEscalation> = { ...e }
+  delete out.from_id
+  return out
+}
 
 export const handlers = [
   http.post('*/api/auth/login', async ({ request }) => {
@@ -29,7 +40,113 @@ export const handlers = [
 
   http.get('*/api/plan', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
-    return user ? HttpResponse.json(planFor(user)) : unauthorized()
+    if (!user) return unauthorized()
+    const target = new URL(request.url).searchParams.get('user_id')
+    if (!target || target === user.id) return HttpResponse.json(planFor(user))
+    const intern = MOCK_USERS.find((u) => u.id === target)
+    if (!intern || intern.role !== 'intern' || !teamOf(user, intern)) return forbidden()
+    return HttpResponse.json(planFor(intern))
+  }),
+
+  http.patch('*/api/plan/tasks/:taskId', async ({ request, params }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    const body = (await request.json().catch(() => ({}))) as { status?: string }
+    if (!['not_started', 'in_progress', 'done'].includes(body.status ?? '')) {
+      return HttpResponse.json({ code: 'validation_error', message: 'Недопустимый статус.', retryable: false }, { status: 400 })
+    }
+    const task = findTask(user.id, String(params.taskId))
+    if (!task) return notFound()
+    state.taskStatus.set(`${user.id}:${task.id}`, body.status as string)
+    // like core: a done parent completes its subtasks, the last done subtask completes the parent
+    if (body.status === 'done') task.subtasks?.forEach((s) => state.taskStatus.set(`${user.id}:${s.id}`, 'done'))
+    if (task.parent_task_id) {
+      const parent = findTask(user.id, task.parent_task_id)
+      if (parent?.subtasks?.every((s) => s.status === 'done')) state.taskStatus.set(`${user.id}:${parent.id}`, 'done')
+      else if (parent?.status === 'done') state.taskStatus.set(`${user.id}:${parent.id}`, 'in_progress')
+    }
+    saveState()
+    return HttpResponse.json({ ...task, status: body.status })
+  }),
+
+  http.put('*/api/plan/goals', async ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'mentor' && user.role !== 'lead') return forbidden()
+    const body = (await request.json().catch(() => ({}))) as { user_id?: string; goals?: { title: string; criteria?: string }[] }
+    const intern = MOCK_USERS.find((u) => u.id === body.user_id)
+    if (!intern || !teamOf(user, intern)) return forbidden()
+    const goals = (body.goals ?? []).slice(0, 10).map((g) => ({ id: uuid(), created_by: user.id, title: g.title, ...(g.criteria ? { criteria: g.criteria } : {}) }))
+    state.goals.set(intern.id, goals)
+    saveState()
+    return HttpResponse.json(goals)
+  }),
+
+  http.get('*/api/team/interns', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'mentor' && user.role !== 'lead') return forbidden()
+    const interns = MOCK_USERS.filter((u) => u.role === 'intern' && teamOf(user, u))
+    return HttpResponse.json(
+      interns.map((i) => {
+        const tasks = planFor(i).periods.flatMap((p) => p.tasks)
+        return {
+          user_id: i.id,
+          display_name: i.display_name,
+          current_period: 'week_2',
+          done: tasks.filter((t) => t.status === 'done').length,
+          total: tasks.length,
+          overdue: tasks.filter((t) => t.status === 'overdue').length,
+          pending_access_requests: 0,
+        }
+      }),
+    )
+  }),
+
+  http.get('*/api/escalations', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    const mine = state.escalations.filter((e) =>
+      user.role === 'intern' ? e.from_id === user.id : e.to_role === user.role && (user.role === 'hrbp' || teamOf(user, MOCK_USERS.find((u) => u.id === e.from_id)!)),
+    )
+    return HttpResponse.json(mine.map(publicEscalation))
+  }),
+
+  http.post('*/api/escalations/:id/answer', async ({ request, params }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    const e = state.escalations.find((x) => x.id === params.id)
+    if (!e) return notFound()
+    if (e.to_role !== user.role) return forbidden()
+    const body = (await request.json().catch(() => ({}))) as { text?: string; add_to_kb?: boolean }
+    if (!body.text?.trim()) return HttpResponse.json({ code: 'validation_error', message: 'Введите ответ.', retryable: false }, { status: 400 })
+    e.status = 'answered'
+    e.answer = body.text.trim()
+    e.added_to_kb = Boolean(body.add_to_kb)
+    const list = state.notifications.get(e.from_id) ?? []
+    list.unshift({ id: uuid(), kind: 'escalation_answer', title: `Ответ от ${user.display_name}`, body: e.answer, read: false, created_at: new Date().toISOString() })
+    state.notifications.set(e.from_id, list)
+    saveState()
+    return HttpResponse.json(publicEscalation(e))
+  }),
+
+  http.get('*/api/notifications', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    return user ? HttpResponse.json(state.notifications.get(user.id) ?? []) : unauthorized()
+  }),
+
+  http.post('*/api/notifications/:id/read', ({ request, params }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    const n = (state.notifications.get(user.id) ?? []).find((x) => x.id === params.id)
+    if (n) n.read = true
+    saveState()
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.post('*/api/feedback', ({ request }) => {
+    if (!userByToken(request.headers.get('Authorization'))) return unauthorized()
+    return new HttpResponse(null, { status: 204 })
   }),
 
   http.get('*/api/actions', ({ request }) => {
@@ -117,10 +234,11 @@ export const handlers = [
   http.post('*/api/escalations', async ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
-    const body = (await request.json()) as { to_role: string; text: string }
-    return HttpResponse.json(
-      { id: uuid(), from_display_name: user.display_name, to_role: body.to_role, text: body.text, status: 'open', answer: null, added_to_kb: false, created_at: new Date().toISOString() },
-      { status: 201 },
-    )
+    if (user.role !== 'intern') return forbidden()
+    const body = (await request.json()) as { to_role: MockEscalation['to_role']; text: string }
+    const e: MockEscalation = { id: uuid(), from_id: user.id, from_display_name: user.display_name, to_role: body.to_role, text: body.text, status: 'open', answer: null, added_to_kb: false, created_at: new Date().toISOString() }
+    state.escalations.unshift(e)
+    saveState()
+    return HttpResponse.json(publicEscalation(e), { status: 201 })
   }),
 ]

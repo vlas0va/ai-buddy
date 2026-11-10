@@ -4,6 +4,7 @@ import { getMe } from '@/api/auth'
 import { keys } from '@/api/keys'
 import { useChatStore } from '@/store/chat'
 import { useSession } from '@/store/session'
+import { NotificationsBell } from './NotificationsBell'
 import { ROLE_LABELS } from './roles'
 import { Avatar } from './ui/Avatar'
 import { Button } from './ui/Button'
@@ -44,14 +45,27 @@ export function AppLayout() {
           <Link to="/chat" className="nav-link">
             Чат
           </Link>
-          <Link to="/plan" className="nav-link">
-            Мой план
-          </Link>
+          {user?.role !== 'lead' && user?.role !== 'hrbp' && user?.role !== 'alumni' && (
+            <Link to="/plan" className="nav-link">
+              Мой план
+            </Link>
+          )}
+          {(user?.role === 'mentor' || user?.role === 'lead') && (
+            <Link to="/team" className="nav-link">
+              Мои стажёры
+            </Link>
+          )}
+          {user && user.role !== 'alumni' && (
+            <Link to="/questions" className="nav-link">
+              {user.role === 'intern' ? 'Мои вопросы' : 'Вопросы стажёров'}
+            </Link>
+          )}
           {user?.role === 'lead' && (
             <Link to="/approvals" className="nav-link">
               Согласования
             </Link>
           )}
+          <NotificationsBell />
         </nav>
         <div className="sidebar-user">
           {user && (

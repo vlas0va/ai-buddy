@@ -4,6 +4,7 @@ import type { sourceSchema } from '@/api/schemas'
 import type {
   ActionResult,
   EscalationDraftData,
+  NextStep,
   Proposal,
   Refusal,
   Stage,
@@ -24,6 +25,9 @@ export interface ChatMessage {
   escalation: EscalationDraftData | null
   refusal: Refusal | null
   error: StreamError | null
+  nextStep?: NextStep | null
+  /** server id of a saved assistant message (done.message_id or history), used for «Полезно / Не полезно» */
+  serverId?: string
   /** user text that produced this assistant message, used by "Повторить" */
   retryText?: string
 }
@@ -50,6 +54,7 @@ export function fromHistory(history: ChatHistory): ChatState {
       escalation: null,
       refusal: null,
       error: null,
+      serverId: m.author === 'assistant' ? m.id : undefined,
     }
   })
   return { messages, streaming: false, stage: null }
@@ -142,7 +147,11 @@ export const handlers = {
       stage: null,
     }
   },
-  done: (s: ChatState): ChatState => ({ ...s, streaming: false, stage: null }),
+  next_step: (s: ChatState, d: NextStep): ChatState => patchLast(s, (m) => ({ ...m, nextStep: d })),
+  done: (s: ChatState, d: { message_id?: string } = {}): ChatState => {
+    const next = d.message_id ? patchLast(s, (m) => ({ ...m, serverId: d.message_id })) : s
+    return { ...next, streaming: false, stage: null }
+  },
 }
 
 export function reduce(state: ChatState, event: StreamEvent): ChatState {
@@ -163,7 +172,11 @@ export function reduce(state: ChatState, event: StreamEvent): ChatState {
       return handlers.refusal(state, event.data)
     case 'error':
       return handlers.error(state, event.data)
+    case 'next_step':
+      return handlers.next_step(state, event.data)
     case 'done':
-      return handlers.done(state)
+      return handlers.done(state, event.data)
+    case 'ignored':
+      return state
   }
 }

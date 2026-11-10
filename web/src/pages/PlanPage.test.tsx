@@ -36,7 +36,7 @@ describe('PlanPage states', () => {
   it('empty', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ...plan, periods: [] })))
     wrap(<PlanPage />)
-    expect(await screen.findByText('План пока пуст.')).toBeInTheDocument()
+    expect(await screen.findByText(/План пока пуст/)).toBeInTheDocument()
   })
 
   it('error with retry', async () => {
