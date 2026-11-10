@@ -9,7 +9,7 @@ from typing import Any
 
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
-from ..text import normalize, stems
+from ..text import STOPWORDS, normalize, stems, words
 from .common import CONTACT_LABELS, Turn, first_name, items, person_name, say
 
 CURATOR_TOPICS = re.compile(r"практик|вуз|учебн|диплом|курсов|экватор|выпускн|методичк|опрос")
@@ -99,11 +99,41 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
     return sorted(out, key=lambda h: h["score"], reverse=True)
 
 
+def _remote_kb(turn: Turn) -> bool:
+    backend = getattr(turn.gateway, "backends", {}).get("kb")
+    return backend is not None and backend.__class__.__name__ != "InProcessServer"
+
+
+def _or_query(text: str) -> str:
+    """mcp-kb uses websearch_to_tsquery (all words must match): the fallback asks for any meaningful word."""
+    return " or ".join(w for w in words(text) if len(w) > 2 and w not in STOPWORDS)[:500]
+
+
+def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
+    return not hits or max(turn.kb.coverage(text, h["doc_id"]) for h in hits) < 0.5
+
+
 def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     yield status("searching_kb")
-    min_score = float(turn.config.retrieval.get("min_score", 1.2))
-    raw = items(turn.gateway.read("kb.search", query=text[:500], k=int(turn.config.retrieval.get("k", 4))))
+    remote = _remote_kb(turn)
+    min_score = float(turn.config.retrieval.get("min_score_remote" if remote else "min_score", 0.0 if remote else 1.2))
+    k = int(turn.config.retrieval.get("k", 4))
+    raw = items(turn.gateway.read("kb.search", query=text[:500], k=k))
+    if remote and not raw and _or_query(text):
+        raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
+    if remote and turn.kb is not None and _weak(turn, hits, text):
+        # Postgres FTS misses short terms (CI/CD) and synonyms; the agent's own copy of the same test KB, filtered by the
+        # same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking used in eval
+        local = [
+            {**hit.source(), "score": hit.score, "snippet": hit.snippet}
+            for hit in turn.kb.search(text, turn.user.role, turn.user.team_id, k=k)
+        ]
+        local_hits = [
+            h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
+        ]
+        if local_hits:
+            hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
     if not hits:

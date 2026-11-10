@@ -170,3 +170,32 @@ def test_CO_15_help_lists_coaching_and_roles(client, anna):
     ev = hrbp.say("кого позвать на код-ревью?")
     assert first(ev, "refusal")["reason"] == "no_rights"
     assert coach._section("## A\nx\n## B\ny", "C") == ""
+
+
+class _RemoteKb:
+    """Stands in for mcp-kb: ts_rank scores in 0..1 and websearch_to_tsquery AND semantics."""
+
+    def __init__(self, inner, answers):  # noqa: ANN001
+        self.inner, self.answers, self.queries = inner, answers, []
+
+    def call(self, tool, args, token):  # noqa: ANN001, ANN201
+        if tool != "kb.search":
+            return self.inner.call(tool, args, token)
+        self.queries.append(args["query"])
+        return {"items": self.answers(args["query"])}
+
+
+def test_CO_13_remote_kb_scores_retry_and_local_fallback(client, anna):
+    agent = client.agent
+    inner = agent.backends["kb"]
+    hit = {"doc_id": "delivery-team-overview", "title": "Кто есть кто", "source_type": "test", "score": 0.72, "snippet": "x"}
+    remote = _RemoteKb(inner, lambda q: [hit] if "команд" in q else [])
+    agent.backends["kb"] = remote
+    try:
+        ev = anna.say("кто есть кто в команде?")  # FTS score 0.72 < local min_score 1.2 must still answer
+        assert _sources(ev) == ["delivery-team-overview"]
+        ev = anna.say("как создать ветку для задачи?")  # AND query finds nothing → OR retry → local fallback
+        assert " or " in remote.queries[-1]
+        assert _sources(ev)[0] == "eng-branches-pr"
+    finally:
+        agent.backends["kb"] = inner

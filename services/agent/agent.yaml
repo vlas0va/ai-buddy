@@ -26,7 +26,8 @@ embeddings:                     # optional hybrid retrieval (BM25 + vectors, RRF
 
 retrieval:
   k: 4
-  min_score: 1.2                # BM25 score below which «не нашёл» + escalation is offered
+  min_score: 1.2                # BM25 score below which «не нашёл» + escalation is offered (in-process index)
+  min_score_remote: 0.0         # mcp-kb returns ts_rank (0..1): there the coverage check below is the gate
   min_coverage: 0.25            # IDF-weighted share of query terms that must appear in the document
   team_boost: 1.25              # documents of the user's team rank higher (R02)
   stage_boost: 1.15             # documents linked to the user's open plan tasks rank higher (R15)
