@@ -24,7 +24,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Обращения к наставнику на стажёра в неделю",
-      "description": "chat.escalated / число стажёров, по неделям",
+      "description": "escalation.sent / число стажёров, по неделям",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "buddy-pg"
@@ -44,7 +44,7 @@
           },
           "editorMode": "code",
           "rawQuery": true,
-          "rawSql": "SELECT date_trunc('week', ts) AS time, count(*)::float / GREATEST((SELECT count(*) FROM core.users WHERE role='intern'),1) AS \"эскалаций на стажёра\"\nFROM core.analytics_events WHERE name='chat.escalated' AND $__timeFilter(ts)\nGROUP BY 1 ORDER BY 1",
+          "rawSql": "SELECT date_trunc('week', ts) AS time, count(*)::float / GREATEST((SELECT count(*) FROM core.users WHERE role='intern'),1) AS \"эскалаций на стажёра\"\nFROM core.analytics_events WHERE name='escalation.sent' AND $__timeFilter(ts)\nGROUP BY 1 ORDER BY 1",
           "format": "time_series"
         }
       ],
