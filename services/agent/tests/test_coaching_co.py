@@ -207,3 +207,38 @@ def test_CO_13_remote_kb_scores_retry_and_local_fallback(client, anna):
         assert _sources(ev)[0] == "eng-branches-pr"
     finally:
         agent.backends["kb"] = inner
+
+
+def test_CO_16_colloquial_words_find_the_document(anna):
+    from agent.text import canonical_query
+
+    cases = {
+        "будет ли у меня рабочий ноут?": "common-laptop",
+        "где взять комп?": "common-laptop",
+        "как сделать пр в репу?": "eng-branches-pr",
+        "как настроить впн?": "common-network-email",
+        "как задеплоить сервис?": "eng-cicd-gitops",
+    }
+    for question, doc in cases.items():
+        ev = anna.say(question)
+        assert _sources(ev)[0] == doc, question
+        assert first(ev, "escalation_draft") is None, question
+    assert canonical_query("когда у нас стендап?") == "когда у нас стендап?"  # not a dev stand
+    assert "ноутбук" not in canonical_query("как работает квантовый компьютер?")
+
+
+def test_CO_17_nearby_documents_before_escalation_and_kb_loop(anna, monkeypatch):
+    from agent.flows import qa
+
+    class _Doc:
+        doc_id, title, url = "common-team-values", "Ценности команды", ""
+
+    monkeypatch.setattr(qa, "_nearby", lambda turn, text: [_Doc()])
+    ev = anna.say("Где посмотреть расписание командного митапа по архитектуре?")
+    text = text_of(ev)
+    assert "Возможно, поможет: «Ценности команды»" in text and "в базу знаний" in text
+    assert _sources(ev) == ["common-team-values"]
+    assert first(ev, "escalation_draft")["to_role"] == "mentor"
+    monkeypatch.undo()
+    ev = anna.say("Где посмотреть расписание командного митапа по архитектуре?")
+    assert "Ниже черновик" in text_of(ev) and first(ev, "sources") is None

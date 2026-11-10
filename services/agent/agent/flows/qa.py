@@ -9,7 +9,7 @@ from typing import Any
 
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
-from ..text import STOPWORDS, normalize, stems, words
+from ..text import STOPWORDS, canonical_query, normalize, stems, words
 from .common import CONTACT_LABELS, Turn, first_name, items, person_name, say
 
 CURATOR_TOPICS = re.compile(r"практик|вуз|учебн|диплом|курсов|экватор|выпускн|методичк|опрос")
@@ -113,11 +113,22 @@ def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
     return not hits or max(turn.kb.coverage(text, h["doc_id"]) for h in hits) < 0.5
 
 
+def _nearby(turn: Turn, text: str) -> list[Any]:
+    """Documents that share some meaningful words with the question but fail the answer threshold: offered as «maybe
+    this», never quoted as an answer. Same ACL as search (readable_by before ranking)."""
+    if turn.kb is None:
+        return []
+    found = turn.kb.search(text, turn.user.role, turn.user.team_id, k=2)
+    return [h.doc for h in found if turn.kb.coverage(text, h.doc.doc_id) >= 0.2]
+
+
 def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     yield status("searching_kb")
     remote = _remote_kb(turn)
     min_score = float(turn.config.retrieval.get("min_score_remote" if remote else "min_score", 0.0 if remote else 1.2))
     k = int(turn.config.retrieval.get("k", 4))
+    asked = text
+    text = canonical_query(text)  # «ноут», «репа», «пр» → the words the KB is written with
     raw = items(turn.gateway.read("kb.search", query=text[:500], k=k))
     if remote and not raw and _or_query(text):
         raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
@@ -144,13 +155,29 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ):
             yield from handle_offtopic(turn, text)
             return
-        role = _addressee(text)
+        role = _addressee(asked)
         label = CONTACT_LABELS.get(role, "наставник")
+        near = _nearby(turn, text)
+        if near:
+            yield Event(
+                "sources",
+                {
+                    "items": [
+                        {"doc_id": d.doc_id, "title": d.title, "source_type": "test", "url": d.url, "badge": TEST_BADGE}
+                        for d in near
+                    ]
+                },
+            )
+            titles = ", ".join(f"«{d.title}»" for d in near)
+            lead = f"Точного ответа в базе знаний нет. Возможно, поможет: {titles} — загляни туда сначала."
+        else:
+            lead = "В базе знаний команды я не нашёл ответа на этот вопрос."
+        tail = "Если не то — ниже" if near else "Ниже"
         yield from say(
-            f"В базе знаний команды я не нашёл ответа на этот вопрос. Лучше уточнить у человека — "
-            f"подготовил черновик сообщения ({label}), можешь отредактировать и отправить."
+            f"{lead} {tail} черновик вопроса ({label}). Когда он ответит, ответ можно одной галочкой "
+            "добавить в базу знаний, и в следующий раз я отвечу сам."
         )
-        yield escalation_event(turn, text, role)
+        yield escalation_event(turn, asked, role)
         turn.meta["escalated"] = True
         return
     yield Event(
@@ -176,7 +203,7 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             break
     yield status("composing", "Формулирую ответ")
     for chunk in turn.writer.answer(
-        text, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
+        asked, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
     ):
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):

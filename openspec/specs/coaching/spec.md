@@ -82,3 +82,14 @@ The agent SHALL answer engineering onboarding questions (repository, branches an
 #### Scenario: CO-15 Help and roles
 - **WHEN** an intern asks what buddy can do; an HR BP asks about code review
 - **THEN** help lists the coaching abilities; code review is not available to the HR BP role
+
+### Requirement: Fewer needless escalations
+The agent SHALL understand the colloquial words interns type (ноут, репа, пр, впн, задеплоить) and, when no document answers the question, SHALL offer the closest documents before the draft to the mentor and SHALL say that the mentor's answer can be added to the knowledge base.
+
+#### Scenario: CO-16 Colloquial words
+- **WHEN** an intern asks «будет ли у меня рабочий ноут?», «как сделать пр в репу?» or «как настроить впн?»
+- **THEN** the matching document answers with its source and no escalation; «стендап» and «квантовый компьютер» are not rewritten
+
+#### Scenario: CO-17 Nearby documents and the knowledge loop
+- **WHEN** no document answers the question
+- **THEN** the closest readable documents are offered as «возможно, поможет», a draft to the mentor follows and the text explains that the answer can be added to the knowledge base
