@@ -100,26 +100,27 @@ func TestNew_FailsOnKeywordDSNAndDropsDatabase(t *testing.T) {
 	}
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database)
-	count := func() int {
-		conn, err := pgx.Connect(context.Background(), admin)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close(context.Background())
-		var n int
-		if err := conn.QueryRow(context.Background(), "SELECT count(*) FROM pg_database WHERE datname LIKE 't\\_%'").Scan(&n); err != nil {
-			t.Fatal(err)
-		}
-		return n
-	}
-	before := count()
+	// Follow this test's own database by name: other packages create and drop test databases concurrently.
+	name := "t_keyword_dsn_" + randomHex(4)
+	orig := newName
+	newName = func() string { return name }
+	defer func() { newName = orig }()
 	t.Setenv(EnvVar, dsn)
 	f := runNew(t)
 	if f.kind != "fatal" {
 		t.Fatalf("got %s %q", f.kind, f.msg)
 	}
-	if after := count(); after > before {
-		t.Fatalf("test database leaked: %d -> %d", before, after)
+	conn, err := pgx.Connect(context.Background(), admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(context.Background())
+	var exists bool
+	if err := conn.QueryRow(context.Background(), "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1)", name).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatalf("test database %s leaked", name)
 	}
 }
 

@@ -34,7 +34,7 @@ func New(t testing.TB) *pgxpool.Pool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	name := "t_" + randomHex(8)
+	name := newName()
 	adminConn, err := pgx.Connect(ctx, admin)
 	if err != nil {
 		t.Fatalf("pgtest: connect admin: %v", err)
@@ -120,3 +120,6 @@ func randomHex(n int) string {
 	}
 	return hex.EncodeToString(b)
 }
+
+// newName returns the name of a fresh test database; a variable so tests can follow one database exactly.
+var newName = func() string { return "t_" + randomHex(8) }
