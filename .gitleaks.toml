@@ -1,0 +1,12 @@
+# gitleaks (CI job secrets, v8.21.2). Default rules plus an allowlist for synthetic test secrets: Go tests and
+# test fixtures sign JWTs and confirmation tokens with made-up keys. Real secrets live only in .env (not in git).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic secrets in tests and fixtures"
+paths = [
+  '''_test\.go$''',
+  '''(^|/)testdata/''',
+  '''^services/agent/tests/''',
+]
