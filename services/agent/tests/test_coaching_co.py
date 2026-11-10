@@ -44,7 +44,9 @@ def test_CO_03_reviewers_are_team_specific(ivan):
 
 
 def test_CO_04_log_gets_main_line_and_hint(anna):
-    ev = anna.say("$ git clone ssh://bitbucket/dlv/app.git\nERROR: Permission denied (publickey).\nfatal: Could not read")
+    ev = anna.say(
+        "$ git clone ssh://bitbucket/dlv/app.git\nERROR: Permission denied (publickey).\nfatal: Could not read"
+    )
     text = text_of(ev)
     assert "Permission denied (publickey)" in text
     assert "Bitbucket" in text
@@ -188,7 +190,13 @@ class _RemoteKb:
 def test_CO_13_remote_kb_scores_retry_and_local_fallback(client, anna):
     agent = client.agent
     inner = agent.backends["kb"]
-    hit = {"doc_id": "delivery-team-overview", "title": "Кто есть кто", "source_type": "test", "score": 0.72, "snippet": "x"}
+    hit = {
+        "doc_id": "delivery-team-overview",
+        "title": "Кто есть кто",
+        "source_type": "test",
+        "score": 0.72,
+        "snippet": "x",
+    }
     remote = _RemoteKb(inner, lambda q: [hit] if "команд" in q else [])
     agent.backends["kb"] = remote
     try:
