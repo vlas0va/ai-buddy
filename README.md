@@ -101,7 +101,7 @@ web (React, SSE) ──► core (Go: REST, SSE-прокси, план, журн�
 
 | Команда | Что | Результат |
 |---|---|---|
-| `make test` | Go (core, mocks, platform) + агент (pytest) | 34 Go-пакета, 330+ тестов агента |
+| `make test` | Go (core, mocks, platform) + агент (pytest) | 34 Go-пакета, 190 тестов агента |
 | `make coverage` | покрытие по сервисам, падает < 80% | agent 97%, web 97%, Go-наборы ≥ 80% |
 | `cd web && npm run coverage` | vitest | 150+ тестов |
 | `make eval` | 115 кейсов качества ответов, guard-метрики | 100%, guard 100% |
