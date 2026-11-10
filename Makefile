@@ -12,7 +12,7 @@ up: ## Start profile core (web, core, agent, mcp-mocks, postgres, redis)
 	$(COMPOSE) --profile core up -d --build
 
 up-full: ## Start profile full (+Kafka, Grafana)
-	$(COMPOSE) --profile full up -d --build
+	KAFKA_BROKERS=kafka:9092 $(COMPOSE) --profile full up -d --build
 
 down: ## Stop everything (keeps the database volume)
 	$(COMPOSE) --profile full down
