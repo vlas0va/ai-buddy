@@ -416,6 +416,7 @@ paths:
   /api/notifications/{notification_id}/read:
     post:
       tags: [notifications]
+      summary: Mark a notification of the caller as read
       parameters:
         - name: notification_id
           in: path
@@ -576,7 +577,7 @@ components:
         code:
           type: string
           enum: [unauthorized, forbidden, not_found, validation_error, conflict, expired, rate_limited, upstream_unavailable, internal]
-        message: { type: string, description: Russian, user-facing }
+        message: { type: string, description: "Russian, user-facing" }
         retryable: { type: boolean }
 
     Role:
