@@ -1,4 +1,4 @@
-.PHONY: help up up-full down reset build logs ps test test-demo coverage lint contracts seed vendor test-db-up test-db-down e2e test-agent lint-agent eval train agent-dev
+.PHONY: help up up-full down reset build logs ps test test-demo coverage lint contracts seed vendor test-db-up test-db-down e2e smoke test-agent lint-agent eval train agent-dev
 .DEFAULT_GOAL := help
 
 # Thin wrapper: logic lives in scripts/ so this file rarely changes.
@@ -61,6 +61,9 @@ test-db-down: ## Stop the disposable test Postgres
 
 e2e: ## Playwright e2e against a running stack (owner C)
 	bash scripts/e2e.sh
+
+smoke: ## S3 + S4 through the core API on a running stack (make up)
+	bash scripts/smoke.sh
 
 # ---- Agent (owner A, services/agent; Python deps: pip install -r services/agent/requirements-dev.txt)
 test-agent: ## Agent tests only (stub LLM, in-process MCP mocks, no network)
