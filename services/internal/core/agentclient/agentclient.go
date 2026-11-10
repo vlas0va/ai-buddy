@@ -78,6 +78,7 @@ type UserContext struct {
 	TeamID        string     `json:"team_id"`
 	CurrentPeriod string     `json:"current_period"`
 	DisplayName   string     `json:"display_name,omitempty"`
+	Location      string     `json:"location,omitempty"` // office city or «Удалённо» (migration 0005)
 	OpenTasks     []OpenTask `json:"open_tasks"`
 	Mentees       any        `json:"mentees,omitempty"` // mentor and lead: GET /api/team/interns items
 }

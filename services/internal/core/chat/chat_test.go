@@ -41,7 +41,7 @@ func TestChat_S3_DayOffEndToEnd_R66(t *testing.T) {
 		uc := msgTurn.UserContext
 		if msgTurn.Auth != "Bearer "+anna || msgTurn.Turn.Kind != "message" || msgTurn.Turn.Text != "Хочу отгул в пятницу" ||
 			msgTurn.SessionID != sid || uc.UserID != "intern.anna" || uc.Role != "intern" || uc.TeamID != "delivery" ||
-			uc.CurrentPeriod != "week_2" || uc.DisplayName != "Анна Котова" || !msgTurn.Flags["scenario_s3"] {
+			uc.CurrentPeriod != "week_2" || uc.DisplayName != "Анна Котова" || uc.Location != "Москва" || !msgTurn.Flags["scenario_s3"] {
 			t.Fatalf("turn %+v", msgTurn)
 		}
 		if _, ok := msgTurn.Raw["user_context"].(map[string]any)["flags"]; ok {
