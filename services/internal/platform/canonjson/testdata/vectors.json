@@ -1,0 +1,72 @@
+[
+  {
+    "input": "{\"type\":\"day_off\",\"start_date\":\"2026-11-14\",\"end_date\":\"2026-11-14\",\"comment\":\"\"}",
+    "canonical": "{\"comment\":\"\",\"end_date\":\"2026-11-14\",\"start_date\":\"2026-11-14\",\"type\":\"day_off\"}",
+    "sha256": "b946d5b570165186cbaed6d112c8735faba3b7a9d4f4f72721fa2fe3ba152f4b"
+  },
+  {
+    "input": "{\"resource_id\":\"space-delivery\",\"reason\":\"\"}",
+    "canonical": "{\"reason\":\"\",\"resource_id\":\"space-delivery\"}",
+    "sha256": "18fd085c725d2a95b3713214846a50e393f831f8083872046c3a78666e9dd0f7"
+  },
+  {
+    "input": "{\"approval_id\":\"0b9a3f6e-2c1d-4e5f-8a7b-9c0d1e2f3a4b\",\"decision\":\"approve\",\"comment\":\"Ок, хорошего отдыха\"}",
+    "canonical": "{\"approval_id\":\"0b9a3f6e-2c1d-4e5f-8a7b-9c0d1e2f3a4b\",\"comment\":\"Ок, хорошего отдыха\",\"decision\":\"approve\"}",
+    "sha256": "e584ce524ed9a0a06f8104efefa327e8e3d9f967296c95fad40b07c6503002e2"
+  },
+  {
+    "input": " { \"b\" : 1 , \"a\" : [ 3 , 2 , { \"z\" : null , \"y\" : true , \"x\" : false } ] , \"c\" : { } , \"d\" : [ ] } ",
+    "canonical": "{\"a\":[3,2,{\"x\":false,\"y\":true,\"z\":null}],\"b\":1,\"c\":{},\"d\":[]}",
+    "sha256": "99aba798bd0f262939f9892909f34d3ed825b46949d8ee122a6b1c918afd4cad"
+  },
+  {
+    "input": "{\"я\":1,\"а\":2,\"z\":3,\"Z\":4,\"\\u00e9\":5,\"\\ue000\":6,\"\\ud83d\\ude00\":7,\"\":8,\"aa\":9,\"a\":10}",
+    "canonical": "{\"\":8,\"Z\":4,\"a\":10,\"aa\":9,\"z\":3,\"é\":5,\"а\":2,\"я\":1,\"\":6,\"😀\":7}",
+    "sha256": "9f409439e9fb6df87ad30f512aea903159d2fa8ad717abc3d039e33b1f510c20"
+  },
+  {
+    "input": "{\"s\":\"quote\\\" backslash\\\\ slash/ nl\\n cr\\r tab\\t bs\\b ff\\f nul\\u0000 us\\u001f del\\u007f ls\\u2028 ps\\u2029 html<>& emoji😀 кириллица\"}",
+    "canonical": "{\"s\":\"quote\\\" backslash\\\\ slash/ nl\\n cr\\r tab\\t bs\\b ff\\f nul\\u0000 us\\u001f del ls  ps  html<>& emoji😀 кириллица\"}",
+    "sha256": "f8e2628f8436a6724caba1872866b48328102840c82bcf83c28dd75bde0ff001"
+  },
+  {
+    "input": "{\"k\":\"\\u0041\\/\\u00e9\\u0430\"}",
+    "canonical": "{\"k\":\"A/éа\"}",
+    "sha256": "c98813a372d2b15c7e44b30d5800445e4169333a26fe52f067728ab13604e1bd"
+  },
+  {
+    "input": "[0,-0,-1,10,9007199254740993,-123456789012345678901234567890]",
+    "canonical": "[0,0,-1,10,9007199254740993,-123456789012345678901234567890]",
+    "sha256": "546607a9765a076d771e970bef241ef4f515c2a236977d38ab69f04008d7cc20"
+  },
+  {
+    "input": "{\"a\":1,\"a\":2}",
+    "canonical": "{\"a\":2}",
+    "sha256": "7e8059f495589fcd981232cc11d00b00da3802c01d688fa1cf1f6bed6e5bb33c"
+  },
+  {
+    "input": "\"строка\"",
+    "canonical": "\"строка\"",
+    "sha256": "18714f293aa91631ed7b94b390d3703ef27bf760ae3dc17f6e09aeda985687ef"
+  },
+  {
+    "input": "true",
+    "canonical": "true",
+    "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+  },
+  {
+    "input": "null",
+    "canonical": "null",
+    "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+  },
+  {
+    "input": "42",
+    "canonical": "42",
+    "sha256": "73475cb40a568e8da8a045ced110137e159f890ac4da883b6b17dc651b3a8049"
+  },
+  {
+    "input": "{\"outer\":{\"inner\":{\"list\":[{\"b\":[],\"a\":{}},[[]],\"x\"]}}}",
+    "canonical": "{\"outer\":{\"inner\":{\"list\":[{\"a\":{},\"b\":[]},[[]],\"x\"]}}}",
+    "sha256": "628a0706433b37f76708337f24b049acb6c9c12d48295494f3b958af9fb3be76"
+  }
+]

@@ -1,4 +1,12 @@
+# AI-buddy stack. Run from the repo root:
+#   docker compose -f deploy/docker-compose.yml --profile core up -d --build        (make up)
+#   KAFKA_BROKERS=kafka:9092 docker compose -f deploy/docker-compose.yml --profile full up -d --build   (make up-full)
+# Web: http://localhost:5173, core API: http://localhost:8080. Details: docs/backend/README.md
 name: aibuddy
+
+x-core-secrets: &secrets
+  JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
+  CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
 
 services:
   postgres:
@@ -29,59 +37,132 @@ services:
       timeout: 3s
       retries: 10
 
-  core:
-    build: ../services/core
+  mcp-mocks:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        CMD: mcp-mocks
     profiles: [core, full]
     env_file:
       - path: ../.env
         required: false
     environment:
+      <<: *secrets
+      MCP_MOCKS_PORT: "8100"
+      POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+      KB_DIR: /app/data/kb
+    volumes:
+      - ../data/kb:/app/data/kb:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/app", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ports:
+      - "127.0.0.1:8100:8100"   # debug and local agent development; the agent reaches it inside the compose network
+
+  core:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        CMD: core
+    profiles: [core, full]
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      <<: *secrets
       CORE_PORT: "8080"   # in-container port is fixed; change the host side with CORE_HOST_PORT
-      JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
-      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
       POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
       REDIS_URL: redis://redis:6379/0
+      AGENT_URL: ${AGENT_URL:-http://agent:8090}
+      MCP_BASE_URL: ${MCP_BASE_URL:-http://mcp-mocks:8100/mcp}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # Empty = Kafka off (events only go to core.analytics_events). Profile full: run with
+      # KAFKA_BROKERS=kafka:9092 (shell variable, see docs/backend/README.md).
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mcp-mocks:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/app/app", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
     ports:
       - "${CORE_HOST_PORT:-8080}:8080"
 
-  mcp-absence:
-    build: ../services/mcp-absence
+  agent:
+    # Owner A. AI agent: Flask + SSE, stub LLM by default (works without any key), MCP tools by role (ADR-001..008).
+    build:
+      context: ..
+      dockerfile: services/agent/Dockerfile
     profiles: [core, full]
     env_file:
       - path: ../.env
         required: false
     environment:
-      MCP_ABSENCE_PORT: "8101"
+      AGENT_PORT: "8090"
       JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
       CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
-      POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
+      REDIS_URL: redis://redis:6379/1
+      AGENT_USE_REDIS: "true"
+      # B's six MCP servers (one binary mcp-mocks). The agent's in-process mocks stay for `make agent-dev` and its tests.
+      MCP_BASE_URL: ${MCP_BASE_URL:-http://mcp-mocks:8100/mcp}
+      # LLM_* come from ../.env (see .env.example).
     depends_on:
-      postgres:
+      redis:
         condition: service_healthy
+      mcp-mocks:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     ports:
-      - "127.0.0.1:8101:8101"   # debug only; the agent reaches it inside the compose network
+      - "127.0.0.1:${AGENT_HOST_PORT:-8090}:8090"   # debug only; core reaches it at http://agent:8090
 
-  # TODO (owner A): agent service, port 8090, depends on core + mcp-*.
-  # agent:
-  #   build: ../services/agent
-  #   profiles: [core, full]
-  #   env_file:
-  #     - path: ../.env
-  #       required: false
-  #   ports:
-  #     - "8090:8090"
+  ollama:
+    # Optional local LLM for demos without an external key: docker compose --profile core --profile ollama up -d
+    # then: docker compose exec ollama ollama pull qwen2.5:7b-instruct
+    # and in .env: LLM_PROVIDER=openai_compat LLM_BASE_URL=http://ollama:11434/v1 LLM_MODEL=qwen2.5:7b-instruct
+    image: ollama/ollama:0.5.7
+    profiles: [ollama]
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
 
-  # TODO (owner C): web frontend, built from ../web.
-  # web:
-  #   build: ../web
-  #   profiles: [core, full]
-  #   ports:
-  #     - "5173:80"
+  web:
+    # Owner C. SPA served by nginx. VITE_API_BASE_URL is a BUILD-time value: the browser calls core directly, so it must
+    # match the host port of core, and the web origin must be in core's CORS_ORIGINS (default http://localhost:5173).
+    build:
+      context: ../web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    profiles: [core, full]
+    depends_on:
+      core:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "${WEB_HOST_PORT:-5173}:80"
 
   kafka:
     image: apache/kafka:3.9.0
@@ -112,8 +193,10 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ai-buddy.json
     volumes:
-      - ../deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,3 +205,4 @@ services:
 
 volumes:
   pgdata:
+  ollama:

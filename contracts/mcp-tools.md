@@ -13,9 +13,15 @@ Owner: **B**. Machine-readable definitions: `contracts/schemas/<server>.json` (o
   in chat (`.../proposals/{id}/confirm`, `idempotency_key = proposal_id`) or by pressing a decision button
   (`POST /api/approvals/{id}/decision`, `idempotency_key` = the request's `Idempotency-Key` header).
 - Token format: `base64url(json{"sub","key","args_hash","exp"}) + "." + base64url(HMAC-SHA256(CONFIRMATION_HMAC_SECRET, first part))`,
-  where `args_hash = sha256(canonical_json(args))` over the tool arguments WITHOUT `confirmation_token` and `idempotency_key`
-  (keys sorted, no whitespace, UTF-8). The server checks: signature, `exp` not passed, `sub` = JWT subject,
-  `key` = `idempotency_key`, `args_hash` = hash of the arguments it actually received.
+  where `args_hash = sha256(canonical_json(args))` over the tool arguments WITHOUT `confirmation_token` and `idempotency_key`.
+  The server checks: signature, `exp` not passed, `sub` = JWT subject, `key` = `idempotency_key`, `args_hash` = hash of the
+  arguments it actually received.
+- Exact encoding (reference: `services/internal/platform/confirm`, golden vectors in `platform/canonjson/testdata/vectors.json`):
+  base64url WITHOUT padding for both parts; payload JSON with keys in order `args_hash, exp, key, sub`, no whitespace;
+  `exp` = Unix seconds (integer); `args_hash` = lowercase hex; the MAC is computed over the ASCII text of the first part.
+- Canonical JSON = Python `json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")`:
+  keys sorted by code point, integers as is. Signed arguments must not contain floating-point numbers (Python and Go
+  print floats differently); no write tool has a number field.
 - A repeated call with the same `idempotency_key` returns the stored result with `"replayed": true` and writes nothing (R79).
 
 ## Errors

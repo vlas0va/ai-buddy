@@ -1,0 +1,21 @@
+# Build context of services/Dockerfile (Go: core, mcp-mocks) and services/agent/Dockerfile is the repo root; keep it small.
+# web/ has its own context and web/.dockerignore.
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example
+coverage
+docs
+e2e
+eval
+openspec
+presentation
+web
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+services/*/bin
+*.out

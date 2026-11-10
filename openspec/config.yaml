@@ -1,0 +1,30 @@
+schema: spec-driven
+
+context: |
+  AI-buddy: prototype AI mentor for interns (Avito Start case, Hack&Change 2026).
+  Stack: Go core + Go MCP servers (mock corporate services), agent service Python 3.12 + Flask (ADR-001),
+  React+TS+TanStack+Zustand+Zod, PostgreSQL, Redis, Kafka, Grafana, Docker Compose, GitHub Actions.
+  Hard rules: works without LLM key (stub default); rights enforced before LLM, per role tool list, and inside every MCP server;
+  the LLM is never offered write tools - writes run only via /v1/proposals/{id}/execute after user confirmation;
+  action = result returned + shown + saved; no sensitive personal data or finance;
+  KB docs are test instructions, never Avito regulations; line coverage > 80% per service.
+  Requirement IDs R01-R85 live in docs/context/requirements.md; scenario IDs S1-S4 in docs/context/product.md.
+  Every Scenario in a spec gets an ID like S3-05 that appears in the test name (test_S3_05_...).
+
+rules:
+  proposal:
+    - State requirement IDs (R-xx) and scenario IDs (S1-S4) covered
+    - State what is out of scope
+  specs:
+    - Use SHALL in every requirement and WHEN/THEN in every scenario
+    - Prefix every scenario title with an ID like S3-05, AG-02, RG-07
+  tasks:
+    - Each task names the test that proves it
+
+operations:
+  apply:
+    guidance:
+      - Run pytest -q with coverage and make eval before marking tasks done
+  archive:
+    guidance:
+      - Keep the archived change as evidence that AI features were developed spec-first (R75)

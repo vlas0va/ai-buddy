@@ -1,0 +1,9 @@
+# S1 in chat: stage, statuses, next step; equator summary; roles.
+- {id: s1-01, category: s1, user: intern.anna, turns: ["что мне делать дальше?"], expect: {intent: plan, events: [next_step], text_contains: ["Сейчас этап"]}}
+- {id: s1-02, category: s1, user: intern.anna, turns: ["что у меня просрочено?"], expect: {events: [next_step], text_contains: ["Просрочено"]}}
+- {id: s1-03, category: s1, user: intern.ivan, turns: ["покажи мой план адаптации"], expect: {events: [next_step], text_contains: ["1 неделя"]}}
+- {id: s1-04, category: s1, user: mentor.oleg, turns: ["мой план"], expect: {events: [next_step], text_contains: ["Твои стажёры"]}}
+- {id: s1-05, category: s1, user: alumni.petr, turns: ["что мне делать дальше?"], expect: {text_contains: ["нет плана адаптации"], not_events: [next_step]}}
+- {id: s1-06, category: s1, user: intern.anna, turns: ["подготовь сводку для экватора"], expect: {intent: summary, text_contains: ["Выполнено задач плана", "согласуй"]}}
+- {id: s1-07, category: s1, user: mentor.oleg, turns: ["подготовь сводку прогресса моего стажёра"], expect: {text_contains: ["обратную связь даёшь ты"]}}
+- {id: s1-08, category: s1, user: lead.maria, turns: ["что дальше по плану?"], expect: {text_contains: ["на согласовании"]}}

@@ -1,0 +1,63 @@
+:root {
+  color-scheme: light;
+
+  /* colors */
+  --color-bg: #f5f6f8;
+  --color-surface: #ffffff;
+  --color-text: #1a1a1a;
+  --color-text-muted: #5b6270;
+  --color-border: #e1e4ea;
+  --color-accent: #0a5fe0;
+  --color-accent-hover: #084cb5;
+  --color-accent-soft: #e6f0ff;
+  --color-success: #0b7a3b;
+  --color-success-soft: #e3f6ea;
+  --color-warning: #a14a00;
+  --color-warning-soft: #fff0dd;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdeceb;
+  --color-neutral: #4b5260;
+  --color-neutral-soft: #eceef2;
+
+  /* task statuses (fg on soft bg, AA) */
+  --status-not_started: var(--color-neutral);
+  --status-not_started-bg: var(--color-neutral-soft);
+  --status-in_progress: var(--color-accent);
+  --status-in_progress-bg: var(--color-accent-soft);
+  --status-waiting_approval: var(--color-warning);
+  --status-waiting_approval-bg: var(--color-warning-soft);
+  --status-done: var(--color-success);
+  --status-done-bg: var(--color-success-soft);
+  --status-overdue: var(--color-danger);
+  --status-overdue-bg: var(--color-danger-soft);
+
+  /* type */
+  --font-sans: system-ui, 'Inter', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* shadows */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.06);
+
+  --transition: 150ms ease;
+  --gradient-hero: linear-gradient(160deg, #e6f0ff 0%, #f3f7ff 55%, #ffffff 100%);
+
+  --focus-ring: 0 0 0 3px rgba(10, 95, 224, 0.45);
+}

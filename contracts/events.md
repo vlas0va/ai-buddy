@@ -19,7 +19,8 @@ publisher goroutine sends it to Kafka topics `buddy.domain` / `buddy.clickstream
 | `chat.message_sent` | `{"session_id"}` | Volume |
 | `chat.answered` | `{"session_id","message_id","source_count","latency_ms","provider":"stub"\|"openai_compat"}` | Share answered without escalation, latency |
 | `chat.refused` | `{"reason":"no_rights"\|"out_of_scope"}` | Correct refusals |
-| `chat.escalated` | `{"to_role"}` | Routine questions to mentor per intern per week |
+| `chat.escalated` | `{"to_role"}` | Share answered without escalation: the agent's `done.escalated` (buddy proposed an escalation) |
+| `escalation.sent` | `{"to_role"}` | Routine questions to mentor per intern per week: the user sent the drafted escalation (`POST /api/escalations`) |
 | `chat.feedback` | `{"message_id","useful"}` | Share «полезно» |
 | `escalation.answered` | `{"added_to_kb"}` | KB growth |
 | `action.proposed` | `{"kind","proposal_id"}` | Time from intent to request |

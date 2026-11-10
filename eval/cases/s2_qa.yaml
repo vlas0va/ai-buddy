@@ -1,0 +1,22 @@
+# S2 «Спроси buddy»: grounded answers with test-instruction sources, context, escalation.
+- {id: s2-01, category: s2, user: intern.anna, turns: ["Как у нас проходит код-ревью?"], expect: {intent: kb_question, sources_include: [delivery-code-review]}}
+- {id: s2-02, category: s2, user: intern.ivan, turns: ["Как у нас проходит код-ревью?"], expect: {sources_include: [search-code-review], sources_exclude: [delivery-code-review]}}
+- {id: s2-03, category: s2, user: intern.anna, turns: ["кто есть кто в команде?"], expect: {sources_include: [delivery-team-overview], text_contains: ["Олег Мартынов"]}}
+- {id: s2-04, category: s2, user: intern.ivan, turns: ["кто есть кто в команде?"], expect: {sources_include: [search-team-overview], text_contains: ["Сергей Орлов"]}}
+- {id: s2-05, category: s2, user: intern.anna, turns: ["когда у нас стендап?"], expect: {sources_include: [delivery-rituals], text_contains: ["11:00"]}}
+- {id: s2-06, category: s2, user: intern.anna, turns: ["какие документы команды нужно изучить?"], expect: {sources_include: [delivery-space-docs], text_contains: ["задаче твоего плана"]}}
+- {id: s2-07, category: s2, user: intern.anna, turns: ["что главное в защите персональных данных?"], expect: {sources_include: [common-data-protection], text_contains: ["официальный"]}}
+- {id: s2-08, category: s2, user: intern.anna, turns: ["как закрыть практику в вузе?"], expect: {sources_include: [common-practice-university]}}
+- {id: s2-09, category: s2, user: intern.anna, turns: ["как подготовиться к экваторной встрече?"], expect: {sources_include: [common-equator-prep]}}
+- {id: s2-10, category: s2, user: intern.anna, turns: ["какая структура презентации на экватор?"], expect: {sources_include: [common-equator-presentation]}}
+- {id: s2-11, category: s2, user: intern.anna, turns: ["что делает куратор стажировки?"], expect: {sources_include: [common-internship-curator]}}
+- {id: s2-12, category: s2, user: intern.anna, turns: ["стажёры ходят в дежурства?"], expect: {sources_include: [delivery-oncall]}}
+- {id: s2-13, category: s2, user: intern.anna, turns: ["где взять ноутбук в первый день?"], expect: {sources_include: [common-first-day]}}
+- {id: s2-14, category: s2, user: intern.anna, turns: ["что делать если заболел?"], expect: {sources_include: [common-sick-leave]}}
+- {id: s2-15, category: s2, user: intern.anna, turns: ["как работает квантовый компьютер в нашей команде?"], expect: {events: [escalation_draft], escalation_to: mentor}}
+- {id: s2-16, category: s2, user: intern.anna, turns: ["спроси у куратора про подпись договора о практике"], expect: {escalation_to: curator}}
+- {id: s2-17, category: s2, user: mentor.oleg, turns: ["где методичка наставника?"], expect: {sources_include: [mentor-handbook]}}
+- {id: s2-18, category: s2, user: alumni.petr, turns: ["как проходит код-ревью?"], expect: {sources_include: [delivery-code-review]}}
+- {id: s2-19, category: s2, user: intern.ivan, turns: ["какие инструменты использует команда?"], expect: {sources_include: [search-tools]}}
+- {id: s2-20, category: s2, user: intern.anna, turns: ["что можно публиковать о работе?"], expect: {sources_include: [common-disclosure-memo]}}
+- {id: s2-21, category: s2, user: intern.anna, turns: ["какая погода в москве?"], expect: {intent: offtopic, text_contains: ["помогаю с адаптацией"]}}
