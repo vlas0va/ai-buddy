@@ -269,12 +269,15 @@ paths:
     post:
       tags: [chat, actions]
       summary: User declines a proposal; nothing is written
+      description: Foreign or unknown session/proposal ids answer 403 (no existence leak); an executed proposal answers 409.
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/ProposalId"
       responses:
         "204": { description: Cancelled }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /api/actions:
     get:
