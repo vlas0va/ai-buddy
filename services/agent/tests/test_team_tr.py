@@ -21,8 +21,8 @@ def test_TR_02_lead_approves_in_chat_and_intern_sees_status(client, anna):
     p = first(lead.say(f"согласуй {r['external_id']}"), "action_proposal")
     assert p["kind"] == "approval_decision" and p["draft"]["args"]["decision"] == "approved"
     res = first(lead.confirm(p), "tool_result")
-    assert res["status"] == "approved" and res["status_label"] == "Согласовано"
-    assert "Согласовано" in text_of(anna.say("мои заявки"))
+    assert res["status"] == "approved" and res["status_label"] == "Согласовано руководителем"
+    assert "Ждёт HR-администратора" in text_of(anna.say("мои заявки"))
 
 
 def test_TR_03_lead_rejects_with_comment(client, anna):
@@ -72,7 +72,9 @@ def test_TR_08_lead_sees_mentees_of_team(client):
 
 def test_S1_16_mentor_prepares_one_on_one(client):
     oleg = client.login("mentor.oleg")
-    ev = oleg.say("Как выполнить задачу «На 1:1 обсуди со стажёром промежуточные итоги, дай обратную связь по его прогрессу»?")
+    ev = oleg.say(
+        "Как выполнить задачу «На 1:1 обсуди со стажёром промежуточные итоги, дай обратную связь по его прогрессу»?"
+    )
     t = text_of(ev)
     assert first(ev, "done")["intent"] in ("human_only", "one_on_one")
     assert "Повестка 1:1" in t and "Анна" in t and first(ev, "escalation_draft") is None

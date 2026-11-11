@@ -387,7 +387,7 @@ func typeProblems(kind string, start, end time.Time, docs int, now time.Time) []
 			return append(problems, "Дата окончания не может быть раньше даты начала")
 		}
 		if docs == 0 {
-			problems = append(problems, "Для декрета нужен документ — приложите справку (листок нетрудоспособности или заявление)")
+			problems = append(problems, "Для декрета нужен подтверждающий документ — приложите заявление")
 		}
 	}
 	return problems

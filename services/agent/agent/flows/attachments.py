@@ -13,6 +13,7 @@ from typing import Any
 
 from ..nlu.router import looks_like_log
 from ..sse import Event, status
+from . import absence
 from .coach import _doc_hit, _source_event, handle_code_review, handle_troubleshoot, mask_secrets
 from .common import Turn, say
 
@@ -67,6 +68,17 @@ def handle(
         if masked_total:
             yield from say(_secrets_warning(masked_total) + "\n\n")
         yield from handle_code_review(turn, text or "проверь мой код")
+        return
+    docs = by("document")
+    if docs:  # metadata only: an absence request carries them (checkpoint 11.11), nothing reads the file
+        turn.meta["documents"] = [
+            {"name": atts[i].get("name"), "mime": atts[i].get("mime"), "size": atts[i].get("size")} for i in docs
+        ]
+    st = turn.state().get("absence") or {}
+    for_absence = docs and (absence.detect_type(text) or (st.get("slots") and not text) or st.get("step") == "proposed")
+    allowed = turn.config.intent_allowed("absence", turn.user.role)
+    if for_absence and allowed and not by("image") and not by("text"):
+        yield from absence.handle(turn, text)
         return
     notes: list[str] = []
     if by("image"):

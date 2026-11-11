@@ -253,7 +253,7 @@ class Agent:
             same_person(person, m.get("display_name", "")) for m in turn.user.mentees
         ):
             return Route("mentee", 0.9, "rule")
-        if turn.user.role == "lead":
+        if turn.user.role in ("lead", "hr_admin"):
             try:
                 pending = items(turn.gateway.read("approvals.list_pending"))
             except ToolError:
@@ -382,6 +382,7 @@ class Agent:
             pass
         card = {
             "absence_request": absence.result_card,
+            "absence_reschedule": absence.reschedule_card,
             "access_request": access.result_card,
             "approval_decision": team.result_card,
             "trip_request": trips.result_card,

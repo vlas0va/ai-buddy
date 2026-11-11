@@ -81,7 +81,11 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
     if not pending:
         yield from say("Заявок, ожидающих твоего согласования, нет.")
         return
-    lines = [f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}" for p in pending]
+    stage = {"hr_admin": " (этап HR-администратора)"}
+    lines = [
+        f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}{stage.get(p.get('stage', ''), '')}"
+        for p in pending
+    ]
     yield from say(
         "Ожидают твоего согласования:\n"
         + "\n".join(lines)
@@ -136,13 +140,20 @@ def handle_mentee(turn: Turn, text: str) -> Iterator[Event]:
 
 def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
     label = "Согласовано" if r["status"] == "approved" else "Отклонено"
+    followup = "Стажёр увидит новый статус в AI-buddy."
+    to_hr = r.get("kind") == "absence_request" and r.get("stage", "lead") == "lead" and r["status"] == "approved"
+    if to_hr:  # the lead's approval passes the absence request to the HR admin (checkpoint 11.11)
+        label = "Согласовано руководителем"
+        followup = "Заявка передана HR-администратору на второй этап. Стажёр увидит новый статус в AI-buddy."
+    elif r.get("stage") == "hr_admin" and r["status"] == "approved":
+        followup = "Заявка согласована и оформлена, HR BP получил уведомление. Сотрудник увидит статус в AI-buddy."
     return {
         "external_id": r.get("ref_id") or r["id"],
         "status": r["status"],
         "status_label": label,
         "approver_display_name": "",
         "summary": f"Заявка {r.get('ref_id', r['id'])} ({r.get('requester_display_name', '')}): {label.lower()}",
-        "followup": "Стажёр увидит новый статус в AI-buddy.",
+        "followup": followup,
     }
 
 
