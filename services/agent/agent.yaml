@@ -19,6 +19,7 @@ llm:
   tool_calling: ${LLM_TOOL_CALLING:-false}  # let the LLM call READ tools of the user's role (never write tools)
   max_tool_iterations: 3
   fallback_to_stub: ${LLM_FALLBACK_TO_STUB:-true}
+  no_think: ${LLM_NO_THINK:-true}           # reasoning models (A-Vibe/Qwen3): no <think> in answers
 
 embeddings:                     # optional hybrid retrieval (BM25 + vectors, RRF)
   base_url: ${EMBEDDINGS_BASE_URL:-}

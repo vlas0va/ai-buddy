@@ -124,6 +124,8 @@ services:
       WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-curated}
       WEB_SEARCH_URL: ${WEB_SEARCH_URL:-}
       # LLM_* come from ../.env (see .env.example).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Ollama running on the laptop itself (A-Vibe on the laptop GPU)
     depends_on:
       redis:
         condition: service_healthy

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiRequest } from './client'
-import { proposalSchema, resultSchema } from '@/chat/events'
+import { escalationDraftSchema, nextStepSchema, proposalSchema, refusalSchema, resultSchema } from '@/chat/events'
 import { chatHistorySchema, chatMessageSchema, chatSessionSchema, escalationSchema } from './schemas'
 
 export function createSession() {
@@ -22,6 +22,11 @@ const historySchema = chatHistorySchema.extend({
       proposal: proposalSchema.optional(),
       proposal_state: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
       result: resultSchema.optional(),
+      // feedback 11.11: the draft to the mentor, a refusal and the next step survive leaving the chat
+      escalation: escalationDraftSchema.optional().catch(undefined),
+      escalation_sent: z.boolean().optional(),
+      refusal: refusalSchema.optional().catch(undefined),
+      next_step: nextStepSchema.optional().catch(undefined),
     }),
   ),
 })

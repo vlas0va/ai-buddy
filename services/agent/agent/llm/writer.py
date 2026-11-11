@@ -160,6 +160,7 @@ def make_writer(config: AgentConfig, api_key: str, client: Any = None) -> StubWr
         temperature=float(llm.get("temperature", 0.2)),
         max_tokens=int(llm.get("max_tokens", 700)),
         client=client,
+        no_think=str(llm.get("no_think", "true")).lower() in ("1", "true", "yes", "on"),
     )
     fallback = StubWriter() if str(llm.get("fallback_to_stub", "true")).lower() in ("1", "true", "yes", "on") else None
     return LLMWriter(config, oc, fallback)

@@ -585,7 +585,7 @@ func TestChat_S2_HistoryIsLastTenMessages(t *testing.T) {
 	sid := e.session(anna)
 	for i := 0; i < 12; i++ {
 		author := []string{"user", "assistant"}[i%2]
-		if err := insertMessage(context.Background(), e.pool, agenttest.NewID(), sid, author, "m"+itoa(i), nil); err != nil {
+		if err := insertMessage(context.Background(), e.pool, agenttest.NewID(), sid, author, "m"+itoa(i), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -771,5 +771,63 @@ func TestAgentError(t *testing.T) {
 	}
 	if e := agentError(&agentclient.UnavailableError{Status: 502, Code: "x"}); e.Code != "upstream_unavailable" || !e.Retryable {
 		t.Fatalf("%+v", e)
+	}
+}
+
+// Feedback 11.11: leaving the chat and coming back keeps the cards — the draft to the mentor, the draft of a request
+// with its state and the result with the current status of the action.
+func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	draft := map[string]any{"to_role": "mentor", "to_name": "Олег Смирнов", "text": "Олег, подскажи по задаче"}
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Подготовил сообщение."}},
+			{Name: "escalation_draft", Data: draft}, {Name: "next_step", Data: map[string]any{"title": "Шаг"}}, agenttest.Done()}
+	})
+	e.message(sid, anna, "помоги написать наставнику")
+	e.agent.OnMessage(nil)
+	pid := e.propose(sid, anna)
+
+	type msg struct {
+		Author         string         `json:"author"`
+		Escalation     map[string]any `json:"escalation"`
+		EscalationSent bool           `json:"escalation_sent"`
+		NextStep       map[string]any `json:"next_step"`
+		Proposal       map[string]any `json:"proposal"`
+		ProposalState  string         `json:"proposal_state"`
+		Result         map[string]any `json:"result"`
+	}
+	history := func() []msg {
+		var h struct {
+			Messages []msg `json:"messages"`
+		}
+		e.do(http.MethodGet, "/api/chat/sessions/"+sid, anna, nil).json(t, &h)
+		return h.Messages
+	}
+	m := history()
+	if m[1].Escalation["text"] != draft["text"] || m[1].NextStep["title"] != "Шаг" || m[0].Escalation != nil {
+		t.Fatalf("escalation card %+v", m)
+	}
+	if m[3].Proposal["proposal_id"] != pid || m[3].ProposalState != "pending" {
+		t.Fatalf("proposal card %+v", m[3])
+	}
+	ar := e.stream(e.confirmPath(sid, pid), anna, nil).find("action_result")
+	m = history()
+	if m[3].ProposalState != "confirmed" || m[4].Result["action_id"] != ar["action_id"] || m[4].Result["status"] != "pending_approval" {
+		t.Fatalf("after confirm %+v %+v", m[3], m[4])
+	}
+	if m[1].EscalationSent {
+		t.Fatal("not sent yet")
+	}
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text)
+		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'Олег, подскажи')`, sid); err != nil {
+		t.Fatal(err)
+	}
+	if !history()[1].EscalationSent {
+		t.Fatal("a sent draft must not offer «Отправить» again")
+	}
+	if proposalState("expired") != "cancelled" || proposalState("failed") != "pending" {
+		t.Fatal("proposalState")
 	}
 }

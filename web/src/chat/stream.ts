@@ -25,6 +25,8 @@ export interface ChatMessage {
   proposal: (Proposal & { state: ProposalState }) | null
   result: ActionResult | null
   escalation: EscalationDraftData | null
+  /** the draft was already sent (restored from the history) */
+  escalationSent?: boolean
   refusal: Refusal | null
   error: StreamError | null
   nextStep?: NextStep | null
@@ -56,8 +58,10 @@ export function fromHistory(history: ChatHistory): ChatState {
       attachments: m.attachments ?? [],
       proposal: m.proposal ? { ...m.proposal, state: proposalState } : null,
       result: m.result ?? null,
-      escalation: null,
-      refusal: null,
+      escalation: m.escalation ?? null,
+      escalationSent: m.escalation_sent ?? false,
+      refusal: m.refusal ?? null,
+      nextStep: m.next_step ?? null,
       error: null,
       serverId: m.author === 'assistant' ? m.id : undefined,
     }

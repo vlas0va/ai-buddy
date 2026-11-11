@@ -9,7 +9,7 @@ import pytest
 
 from agent.config import load_agent_config
 from agent.errors import LLMError, ToolDenied, ToolError, ToolValidationError
-from agent.llm.openai_compat import EmbeddingsClient, OpenAICompatClient
+from agent.llm.openai_compat import EmbeddingsClient, OpenAICompatClient, ThinkFilter, strip_think
 from agent.llm.writer import LLMWriter, StubWriter, make_writer
 from agent.orchestrator import build_agent
 from agent.tools.mcp_client import McpHttpServer
@@ -175,6 +175,29 @@ def test_LLM_01_stream_and_complete():
     assert c.complete([], tools=[{"type": "function"}]).content == "ok"
     with pytest.raises(ValueError):
         OpenAICompatClient("", "", "")
+
+
+def test_LLM_05_avibe_reasoning_is_never_shown():
+    """A-Vibe (Qwen3) may answer with <think>…</think>: the block is cut out, also when a tag is split between chunks;
+    with no_think the request asks the model not to reason."""
+    seen: list[dict] = []
+    chunks = ["<thi", "nk>план ответа", "</th", "ink>\n\nПри", "вет <", "b>"]
+    inner = llm_transport(chunks, [{"content": "<think>x</think>Ответ"}])
+
+    def spy(req: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(req.content))
+        return inner.handle_request(req)
+
+    c = OpenAICompatClient(
+        "http://llm/v1", "", "m", client=httpx.Client(transport=httpx.MockTransport(spy)), no_think=True
+    )
+    assert "".join(c.stream([{"role": "system", "content": "s"}, {"role": "user", "content": "x"}])) == "Привет <b>"
+    assert c.complete([{"role": "system", "content": "s"}]).content == "Ответ"
+    assert seen[0]["messages"][0]["content"].endswith("/no_think")
+    assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False}
+    unfinished = ThinkFilter()
+    assert unfinished.feed("<think>долго думаю") == "" and unfinished.flush() == ""
+    assert strip_think("<think>a</think> b") == "b"
 
 
 @pytest.mark.parametrize("status,retryable", [(429, True), (500, True), (400, False)])

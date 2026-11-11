@@ -192,6 +192,14 @@ type Message struct {
 	Sources     []json.RawMessage `json:"sources"`
 	Attachments []attachmentMeta  `json:"attachments"`
 	CreatedAt   string            `json:"created_at"`
+	// cards restored after leaving the chat (feedback 11.11); the proposal state and the result come from core's tables
+	Proposal       json.RawMessage `json:"proposal,omitempty"`
+	ProposalState  string          `json:"proposal_state,omitempty"`
+	Result         *actions.Result `json:"result,omitempty"`
+	Escalation     json.RawMessage `json:"escalation,omitempty"`
+	EscalationSent bool            `json:"escalation_sent,omitempty"` // a message to that role was sent after the draft
+	Refusal        json.RawMessage `json:"refusal,omitempty"`
+	NextStep       json.RawMessage `json:"next_step,omitempty"`
 }
 
 // attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
@@ -214,10 +222,13 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	rows, err := h.pool.Query(r.Context(), `SELECT id::text, author, text, sources, attachments,
-		to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+	rows, err := h.pool.Query(r.Context(), `SELECT m.id::text, m.author, m.text, m.sources, m.attachments,
+		to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), m.cards, coalesce(p.status, ''),
+		EXISTS (SELECT 1 FROM core.escalations e WHERE e.session_id = m.session_id AND e.created_at > m.created_at
+		        AND e.to_role = m.cards->'escalation'->>'to_role')
 		FROM (SELECT * FROM core.chat_messages WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2) m
-		ORDER BY created_at, id`, sid, messagesLimit)
+		LEFT JOIN core.proposals p ON p.session_id = m.session_id AND p.id::text = m.cards->'proposal'->>'proposal_id'
+		ORDER BY m.created_at, m.id`, sid, messagesLimit)
 	if err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("load messages: %w", err))
 		return
@@ -226,8 +237,10 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	out := []Message{}
 	for rows.Next() {
 		var m Message
-		var sources, atts []byte
-		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &atts, &m.CreatedAt); err != nil {
+		var sources, atts, rawCards []byte
+		var proposalStatus string
+		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &atts, &m.CreatedAt, &rawCards, &proposalStatus,
+			&m.EscalationSent); err != nil {
 			apierr.WriteJSON(w, fmt.Errorf("scan message: %w", err))
 			return
 		}
@@ -237,17 +250,51 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(atts, &m.Attachments); err != nil || m.Attachments == nil {
 			m.Attachments = []attachmentMeta{}
 		}
+		var cards map[string]json.RawMessage
+		_ = json.Unmarshal(rawCards, &cards)
+		m.Escalation, m.Refusal, m.NextStep = cards["escalation"], cards["refusal"], cards["next_step"]
+		if cards["proposal"] != nil && proposalStatus != "" {
+			m.Proposal, m.ProposalState = cards["proposal"], proposalState(proposalStatus)
+		}
 		out = append(out, m)
 	}
 	if err := rows.Err(); err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("read messages: %w", err))
 		return
 	}
+	// result cards with the current status of the action they announced (an approval made later is shown)
+	if list, err := h.actions.List(r.Context(), h.pool, c.Sub); err == nil {
+		byMessage := map[string]actions.Result{}
+		for _, a := range list {
+			if a.MessageID != "" {
+				byMessage[a.MessageID] = a.Result()
+			}
+		}
+		for i := range out {
+			if res, ok := byMessage[out[i].ID]; ok {
+				out[i].Result = &res
+			}
+		}
+	} else {
+		h.log.Warn("load actions for the history", "err", err)
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"session_id": sid, "messages": out})
 }
 
+// proposalState is what the chat card shows for a stored proposal.
+func proposalState(status string) string {
+	switch status {
+	case "executed", "confirmed":
+		return "confirmed"
+	case "cancelled", "expired":
+		return "cancelled"
+	}
+	return "pending" // pending or failed: the card can still be sent
+}
+
 // insertMessage stores a message with an explicit id (clock_timestamp keeps the order inside one request).
-func insertMessage(ctx context.Context, q actions.DBTX, id, sessionID, author, text string, sources []json.RawMessage) error {
+func insertMessage(ctx context.Context, q actions.DBTX, id, sessionID, author, text string, sources []json.RawMessage,
+	cards map[string]json.RawMessage) error {
 	if sources == nil {
 		sources = []json.RawMessage{}
 	}
@@ -255,8 +302,15 @@ func insertMessage(ctx context.Context, q actions.DBTX, id, sessionID, author, t
 	if err != nil {
 		return fmt.Errorf("encode sources: %w", err)
 	}
-	if _, err := q.Exec(ctx, `INSERT INTO core.chat_messages (id, session_id, author, text, sources, created_at)
-		VALUES ($1, $2, $3, $4, $5, clock_timestamp()) ON CONFLICT (id) DO NOTHING`, id, sessionID, author, text, raw); err != nil {
+	if cards == nil {
+		cards = map[string]json.RawMessage{}
+	}
+	rawCards, err := json.Marshal(cards)
+	if err != nil {
+		return fmt.Errorf("encode cards: %w", err)
+	}
+	if _, err := q.Exec(ctx, `INSERT INTO core.chat_messages (id, session_id, author, text, sources, created_at, cards)
+		VALUES ($1, $2, $3, $4, $5, clock_timestamp(), $6) ON CONFLICT (id) DO NOTHING`, id, sessionID, author, text, raw, rawCards); err != nil {
 		return fmt.Errorf("insert %s message: %w", author, err)
 	}
 	return nil

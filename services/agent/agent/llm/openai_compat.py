@@ -1,8 +1,14 @@
-"""OpenAI-compatible chat completions client (cloud provider, vLLM, Ollama `http://ollama:11434/v1`)."""
+"""OpenAI-compatible chat completions client (cloud provider, vLLM, Ollama `http://ollama:11434/v1`).
+
+A-Vibe is built on Qwen3, a reasoning model: with `no_think` the request asks for no reasoning (`/no_think` and
+`chat_template_kwargs.enable_thinking=false`, understood by vLLM and ignored elsewhere), and any `<think>…</think>`
+block that still comes back is cut out of the answer, also in a stream.
+"""
 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,6 +16,48 @@ from typing import Any
 import httpx
 
 from ..errors import LLMError
+
+THINK_BLOCK = re.compile(r"<think>.*?(?:</think>|$)\s*", re.DOTALL)
+
+
+def strip_think(text: str) -> str:
+    return THINK_BLOCK.sub("", text)
+
+
+class ThinkFilter:
+    """Drops `<think>…</think>` from streamed chunks; a tag may be split between chunks."""
+
+    def __init__(self) -> None:
+        self.buf = ""
+        self.inside = False
+
+    def feed(self, chunk: str) -> str:
+        self.buf += chunk
+        out = []
+        while self.buf:
+            if self.inside:
+                end = self.buf.find("</think>")
+                if end < 0:
+                    self.buf = self.buf[-len("</think>") :]  # keep a possible partial closing tag
+                    return "".join(out)
+                self.buf = self.buf[end + len("</think>") :].lstrip()
+                self.inside = False
+                continue
+            start = self.buf.find("<think>")
+            if start >= 0:
+                out.append(self.buf[:start])
+                self.buf = self.buf[start + len("<think>") :]
+                self.inside = True
+                continue
+            keep = next((n for n in range(len("<think>") - 1, 0, -1) if self.buf.endswith("<think>"[:n])), 0)
+            out.append(self.buf[: len(self.buf) - keep])
+            self.buf = self.buf[len(self.buf) - keep :]
+            break
+        return "".join(out)
+
+    def flush(self) -> str:
+        rest, self.buf = ("" if self.inside else self.buf), ""
+        return rest
 
 
 @dataclass
@@ -28,6 +76,7 @@ class OpenAICompatClient:
         temperature: float = 0.2,
         max_tokens: int = 700,
         client: httpx.Client | None = None,
+        no_think: bool = False,
     ) -> None:
         if not base_url or not model:
             raise ValueError("LLM_BASE_URL and LLM_MODEL are required for LLM_PROVIDER=openai_compat")
@@ -35,6 +84,7 @@ class OpenAICompatClient:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.no_think = no_think
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -42,6 +92,8 @@ class OpenAICompatClient:
         self.headers = headers
 
     def _body(self, messages: list[dict[str, Any]], stream: bool, tools: list[dict[str, Any]] | None) -> dict[str, Any]:
+        if self.no_think and messages and messages[0].get("role") == "system":
+            messages = [{**messages[0], "content": str(messages[0].get("content", "")) + "\n/no_think"}, *messages[1:]]
         body: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
@@ -52,6 +104,8 @@ class OpenAICompatClient:
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
+        if self.no_think:
+            body["chat_template_kwargs"] = {"enable_thinking": False}
         return body
 
     @staticmethod
@@ -69,7 +123,7 @@ class OpenAICompatClient:
             raise LLMError("Модель недоступна.") from exc
         self._raise_for(resp)
         msg = (resp.json().get("choices") or [{}])[0].get("message", {})
-        return Completion(content=msg.get("content") or "", tool_calls=msg.get("tool_calls") or [])
+        return Completion(content=strip_think(msg.get("content") or ""), tool_calls=msg.get("tool_calls") or [])
 
     def stream(self, messages: list[dict[str, Any]]) -> Iterator[str]:
         try:
@@ -79,6 +133,7 @@ class OpenAICompatClient:
                 if resp.status_code >= 400:
                     resp.read()
                     self._raise_for(resp)
+                think = ThinkFilter()
                 for line in resp.iter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -90,8 +145,10 @@ class OpenAICompatClient:
                     except json.JSONDecodeError:
                         continue
                     delta = (chunk.get("choices") or [{}])[0].get("delta", {})
-                    if delta.get("content"):
-                        yield delta["content"]
+                    if delta.get("content") and (text := think.feed(delta["content"])):
+                        yield text
+                if rest := think.flush():
+                    yield rest
         except httpx.TimeoutException as exc:
             raise LLMError("Модель не ответила вовремя.", code="llm_timeout") from exc
         except httpx.HTTPError as exc:
