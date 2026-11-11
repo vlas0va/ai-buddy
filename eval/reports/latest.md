@@ -1,6 +1,6 @@
 # Eval report
 
-Provider: `stub` · cases: 134 · passed: 134 (**100.0%**) · guard metrics (refusals, injection, rights): **100.0%** (target 100%) · latency p50 1.4 ms, p95 3.0 ms (agent only, stub)
+Provider: `stub` · cases: 134 · passed: 134 (**100.0%**) · guard metrics (refusals, injection, rights): **100.0%** (target 100%) · latency p50 1.2 ms, p95 3.4 ms (agent only, stub)
 
 | category | cases | passed |
 |---|---|---|

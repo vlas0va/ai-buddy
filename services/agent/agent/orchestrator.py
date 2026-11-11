@@ -72,6 +72,7 @@ QUIZ_BREAK_INTENTS = {
     "benefit",
 }
 SLOT_INTENTS_BLOCKING = {
+    "task_message",
     "absence_status",
     "trip_status",
     "consents",
@@ -287,6 +288,7 @@ class Agent:
             "channels": access.handle_channels,
             "plan": plan.handle,
             "summary": plan.handle_summary,
+            "task_message": plan.handle_task_message,
             "approvals": team.handle_approvals,
             "mentee": team.handle_mentee,
             "whois": qa.handle_whois,

@@ -114,3 +114,27 @@ def test_S1_14_mentee_without_context_points_to_ui(client):
     m = client.login("mentor.oleg")
     m.ctx = {k: v for k, v in m.ctx.items() if k != "mentees"}
     assert "Мои стажёры" in text_of(m.say("как дела у моего стажёра?"))
+
+
+def test_S1_15_plan_button_drafts_message_about_the_task(anna):
+    tasks = (anna.ctx.get("plan") or {}).get("tasks") or anna.ctx.get("open_tasks") or []
+    parent = next(t for t in tasks if not t.get("parent_task_id"))
+    ev = anna.say(f"Помоги написать наставнику про задачу «{parent['title']}»")
+    draft = first(ev, "escalation_draft")
+    assert first(ev, "done")["intent"] == "task_message"
+    assert draft["to_role"] == "mentor" and f"«{parent['title']}»" in draft["text"]
+    assert "Подскажи, пожалуйста: Помоги" not in draft["text"] and "Не нашёл ответа" not in text_of(ev)
+    assert first(ev, "sources") is None
+
+
+def test_S1_15b_task_with_open_subtasks_lists_them(anna):
+    anna.ctx["plan"] = {
+        "tasks": [
+            {"task_id": "t1", "title": "Работа с наставником", "status": "in_progress", "checklist_item_id": "CL-04"},
+            {"task_id": "t2", "title": "Обсуди встречи с наставником", "status": "not_started", "parent_task_id": "t1"},
+            {"task_id": "t3", "title": "Попроси добавить в каналы", "status": "done", "parent_task_id": "t1"},
+        ]
+    }
+    ev = anna.say("Помоги написать наставнику про задачу «Работа с наставником»")
+    text = first(ev, "escalation_draft")["text"]
+    assert "— Обсуди встречи с наставником" in text and "каналы" not in text

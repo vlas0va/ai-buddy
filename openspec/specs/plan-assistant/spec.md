@@ -69,3 +69,11 @@ The agent SHALL produce reminder texts for AI-cron and a progress summary for th
 #### Scenario: S1-13 Summary endpoint
 - **WHEN** core calls /v1/summary/progress
 - **THEN** bullets and text are returned
+
+### Requirement: Message to the mentor about a plan task
+The «Спросить buddy» button of a plan task SHALL produce a draft to the mentor about that task (its open subtasks listed), not a knowledge-base search.
+
+#### Scenario: S1-15 Draft about the task
+- **WHEN** the intern sends «Помоги написать наставнику про задачу «…»» from the plan
+- **THEN** the intent is task_message, a draft to the mentor names the task and lists its open subtasks, no sources and no «не нашёл ответа»
+
