@@ -76,7 +76,9 @@ class LLMWriter:
     ) -> list[dict[str, Any]]:
         open_tasks = [t.title for t in user.tasks if t.status != "done"]
         system = self.config.prompt_text("system").replace("{user_block}", user_block(user, open_tasks))
-        docs = "\n\n".join(f'<doc id="{h["doc_id"]}" title="{h["title"]}">\n{h["snippet"]}\n</doc>' for h in hits)
+        docs = "\n\n".join(
+            f'<doc title="{h["title"]}">\n{h.get("body") or h["snippet"]}\n</doc>' for h in hits
+        )  # no doc ids: the chat shows the sources as chips, the model must not print ids
         prompt = (
             self.config.prompt_text("answer")
             .replace("{question}", question)

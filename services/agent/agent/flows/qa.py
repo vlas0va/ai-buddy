@@ -97,7 +97,9 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
             # the local copy gives clean paragraphs (no ts_headline fragments or markdown) and lets the user's office
             # city pick the right section («Москва» / «Санкт-Петербург» / «Удалённо») when the question has none
             snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
-        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist})
+        # the LLM gets the whole readable document (not only the snippet), so A-Vibe answers with its details
+        body = sanitize_snippet(doc.body[:2500]) if doc is not None else ""
+        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist, "body": body})
     return sorted(out, key=lambda h: h["score"], reverse=True)
 
 
