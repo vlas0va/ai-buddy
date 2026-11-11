@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-type Variant = 'primary' | 'secondary' | 'ghost'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'success' | 'danger'
 type Size = 'sm' | 'md'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {

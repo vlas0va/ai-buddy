@@ -48,6 +48,20 @@ describe('S3 step 8: manager approvals page', () => {
     expect(state.extraTasks.get('intern.anna')![0]!.status).toBe('done')
   })
 
+  it('filter by request type and the hint about what happens after the decision', async () => {
+    seedRequest('intern.anna', 'хочу отгул в пятницу')
+    signInAs('lead.maria')
+    mountWithClient(<ApprovalsPage />)
+    const card = await screen.findByLabelText('Заявка: Анна Соколова')
+    expect(within(card).getByText(/HR-администратор оформит отгул/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Все · 1' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Командировки · 0' }))
+    expect(screen.getByText('Заявок этого типа нет.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Заявка: Анна Соколова')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Отсутствия · 1' }))
+    expect(screen.getByLabelText('Заявка: Анна Соколова')).toBeInTheDocument()
+  })
+
   it('S3_R66: reject updates the request to "rejected"', async () => {
     seedRequest('intern.anna', 'хочу отгул в пятницу')
     signInAs('lead.maria')

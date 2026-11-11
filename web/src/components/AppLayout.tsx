@@ -8,6 +8,7 @@ import { NotificationsBell } from './NotificationsBell'
 import { ROLE_LABELS } from './roles'
 import { Avatar } from './ui/Avatar'
 import { Button } from './ui/Button'
+import { ApproveIcon, ChatIcon, QuestionIcon, StepsIcon, TeamIcon } from './ui/icons'
 import { Logo } from './ui/Logo'
 import './layout.css'
 
@@ -43,25 +44,30 @@ export function AppLayout() {
         </div>
         <nav className="nav" aria-label="Основное меню">
           <Link to="/chat" className="nav-link">
+            <ChatIcon />
             Чат
           </Link>
           {user?.role !== 'lead' && user?.role !== 'hrbp' && user?.role !== 'alumni' && (
             <Link to="/plan" className="nav-link">
+              <StepsIcon />
               Мой план
             </Link>
           )}
           {(user?.role === 'mentor' || user?.role === 'lead') && (
             <Link to="/team" className="nav-link">
+              <TeamIcon />
               Мои стажёры
             </Link>
           )}
           {user && user.role !== 'alumni' && (
             <Link to="/questions" className="nav-link">
+              <QuestionIcon />
               {user.role === 'intern' ? 'Мои вопросы' : 'Вопросы стажёров'}
             </Link>
           )}
           {user?.role === 'lead' && (
             <Link to="/approvals" className="nav-link">
+              <ApproveIcon />
               Согласования
             </Link>
           )}

@@ -41,7 +41,7 @@ export function withoutApprover(summary: string): string {
 
 export interface Step {
   who: string
-  state: 'done' | 'waiting' | 'skipped'
+  state: 'done' | 'current' | 'waiting' | 'skipped'
   text: string
 }
 
@@ -65,7 +65,7 @@ export function absenceSteps(status: string): Step[] {
     ]
   }
   return [
-    { who: 'Руководитель', state: 'waiting', text: 'согласует' },
+    { who: 'Руководитель', state: 'current', text: 'согласует' },
     { who: 'HR-администратор', state: 'waiting', text: 'оформит после согласования' },
     { who: 'HR BP', state: 'waiting', text: 'получит уведомление' },
   ]
