@@ -81,7 +81,7 @@ func TestConfirm_S3_LeadDecisionReadBackFromMCP_R71(t *testing.T) {
 		if got := s.find("action_result"); got == nil || got["action_id"] != first["action_id"] {
 			t.Fatalf("%s %v", s.names(), got)
 		}
-		if e.actionStatus(first["action_id"]) != "approved" || e.actionStatus(second["action_id"]) != "pending_approval" {
+		if e.actionStatus(first["action_id"]) != "pending_hr" || e.actionStatus(second["action_id"]) != "pending_approval" {
 			t.Fatal("decision applied to the request the agent named")
 		}
 		if e.mcp.Calls("approvals.decide") != 1 {
@@ -269,6 +269,45 @@ func TestChat_TurnSizeBounds_R76(t *testing.T) {
 		s := e.stream(e.confirmPath(sid, pid), anna, nil)
 		if s.last()["message"] != msgTooLarge || e.proposalStatus(pid) != "failed" || e.count(`SELECT count(*) FROM core.actions`) != 0 {
 			t.Fatalf("%s %v", s.last(), e.proposalStatus(pid))
+		}
+	})
+}
+
+// Checkpoint 11.11: the intern moves a request until the HR admin approves; core signs absence.reschedule_request,
+// checks the result is the same request with the confirmed dates and updates the existing action.
+func TestConfirm_Checkpoint_RescheduleAbsence_R71(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	ar := e.stream(e.confirmPath(sid, e.propose(sid, anna)), anna, nil).find("action_result")
+	absID := ar["external_id"].(string)
+	move := func(id, date string) agenttest.Event {
+		return agenttest.Event{Name: "action_proposal", Data: map[string]any{"proposal_id": agenttest.NewID(), "kind": "absence_reschedule",
+			"summary": "Перенести заявку", "draft": map[string]any{"tool": "absence.reschedule_request",
+				"args": map[string]any{"id": id, "start_date": date, "end_date": date}}}}
+	}
+
+	pid := e.proposeWith(sid, anna, move(absID, "2026-11-20"))
+	got := e.stream(e.confirmPath(sid, pid), anna, nil).find("action_result")
+	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "pending_approval" || e.mcp.Calls("absence.reschedule_request") != 1 {
+		t.Fatalf("moved %v calls=%d", got, e.mcp.Calls("absence.reschedule_request"))
+	}
+	if !strings.Contains(e.str(`SELECT summary FROM core.actions WHERE id = $1`, ar["action_id"]), "20.11.2026") ||
+		e.count(`SELECT count(*) FROM core.actions WHERE external_id = $1`, absID) != 1 {
+		t.Fatal("action not moved")
+	}
+
+	t.Run("agent reports other dates", func(t *testing.T) {
+		pid := e.proposeWith(sid, anna, move(absID, "2026-11-27"))
+		e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
+			return []agenttest.Event{{Name: "tool_result", Data: map[string]any{"proposal_id": req.Turn.ProposalID, "kind": "absence_reschedule",
+				"tool": "absence.reschedule_request", "result": map[string]any{"id": absID, "type": "day_off", "status": "pending_approval",
+					"start_date": "2026-12-01", "end_date": "2026-12-01"}}}, agenttest.Done()}
+		})
+		defer e.agent.OnConfirm(nil)
+		s := e.stream(e.confirmPath(sid, pid), anna, nil)
+		if s.find("action_result") != nil || strings.Contains(e.str(`SELECT summary FROM core.actions WHERE id = $1`, ar["action_id"]), "01.12.2026") {
+			t.Fatalf("%s %v", s.names(), s.last())
 		}
 	})
 }

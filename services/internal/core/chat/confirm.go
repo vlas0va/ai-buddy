@@ -382,7 +382,7 @@ func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, me
 	var out *actions.Action
 	err = h.inProposalTx(ctx, at.p.id, func(ctx context.Context, tx pgx.Tx, sessionID string) (string, error) {
 		a, changed, err := h.actions.ApplyDecision(ctx, tx, decided.Kind, decided.RefID, decided.Status,
-			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub})
+			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub, Stage: decided.Stage})
 		switch {
 		case errors.Is(err, actions.ErrNotFound):
 		case err != nil:
@@ -565,6 +565,13 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 		}
 		if !strings.HasPrefix(id, "ACC-") || (status != actions.StatusPendingApproval && status != actions.StatusGranted) {
 			return fmt.Errorf("new access request %q has status %q", id, status)
+		}
+	case mcpclient.ToolReschedule:
+		if err := same("start_date", "end_date"); err != nil {
+			return err
+		}
+		if id != str(args, "id") || !strings.HasPrefix(id, "ABS-") || status != actions.StatusPendingApproval {
+			return fmt.Errorf("moved request %q/%q differs from the confirmed %q", id, status, str(args, "id"))
 		}
 	case mcpclient.ToolCreateTrip:
 		if err := same("city", "start_date", "end_date"); err != nil {

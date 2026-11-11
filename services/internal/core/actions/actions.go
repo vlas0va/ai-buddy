@@ -45,6 +45,8 @@ const (
 	KindAccess  = "access_request"
 	KindTrip    = "trip_request"
 	KindConsent = "consent"
+	// KindReschedule moves an absence request to other dates: it updates the existing absence action, never adds one.
+	KindReschedule = "absence_reschedule"
 )
 
 // Action statuses (openapi Action.status).
@@ -56,6 +58,7 @@ const (
 	StatusCreated         = "created"
 	StatusFailed          = "failed"
 	StatusSigned          = "signed"
+	StatusPendingHR       = "pending_hr" // absence: the lead approved, the HR admin decides next
 )
 
 // ErrNotFound is returned when no action matches (ApplyDecision for a request made outside the chat, ByProposal).
@@ -165,6 +168,9 @@ type description struct {
 // checklist item, otherwise a new task with source = action in the current period), sets linked_action_id and emits
 // action.created. Saving the same ProposalID again returns the stored action unchanged.
 func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error) {
+	if in.Kind == KindReschedule {
+		return s.reschedule(ctx, q, in)
+	}
 	d, err := s.describe(ctx, q, in)
 	if err != nil {
 		return Action{}, err
@@ -231,8 +237,9 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 		if r.EndDate != "" && r.EndDate != r.StartDate {
 			dates += "–" + ruDate(r.EndDate)
 		}
-		d := description{externalID: r.ID, status: absenceStatus(r.Status), summary: "Отгул " + dates,
-			taskTitle: "Отгул " + dates, approverName: name}
+		label := absenceLabel(r.Type)
+		d := description{externalID: r.ID, status: absenceStatus(r.Status), summary: label + " " + dates,
+			taskTitle: label + " " + dates, approverName: name}
 		if r.StartDate != "" {
 			d.dueAt = &r.StartDate
 		}
@@ -409,6 +416,9 @@ func (s *Service) List(ctx context.Context, q DBTX, userID string) ([]Action, er
 type Scope struct {
 	RequesterID string // owner of the action (approvals requester_id)
 	ApproverID  string // approver_id in the saved MCP result of the request (the deciding lead)
+	// Stage is the approval stage of an absence request: "" or "lead", then "hr_admin". At the HR admin stage the
+	// deciding person is not the request's approver: the approvals service already checked the item is theirs.
+	Stage string
 }
 
 // ApplyDecision applies the approver's decision ("approved" or "rejected", as returned by approvals.decide) to the
@@ -421,17 +431,25 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	if err != nil {
 		return Action{}, false, err
 	}
+	hrStage := kind == KindAbsence && scope.Stage == "hr_admin"
+	if kind == KindAbsence && !hrStage && status == StatusApproved {
+		status = StatusPendingHR // the lead's approval passes the request to the HR admin
+	}
 	if scope.RequesterID == "" || scope.ApproverID == "" {
 		return Action{}, false, ErrNotFound
 	}
+	approver := scope.ApproverID
+	if hrStage {
+		approver = "" // matched below by requester and request only
+	}
 	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
-		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 AND a.payload->'result'->>'approver_id' = $4
-		ORDER BY a.created_at LIMIT 1 FOR UPDATE`, kind, externalID, scope.RequesterID, scope.ApproverID))
+		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 AND ($4 = '' OR a.payload->'result'->>'approver_id' = $4)
+		ORDER BY a.created_at LIMIT 1 FOR UPDATE`, kind, externalID, scope.RequesterID, approver))
 	if err != nil {
 		return Action{}, false, err
 	}
-	if a.Status == status {
-		return a, false, nil
+	if a.Status == status || (status == StatusPendingHR && a.Status == StatusApproved) {
+		return a, false, nil // a replayed lead decision never undoes the HR admin's approval
 	}
 	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = $2, updated_at = now() WHERE id = $1`, a.ID, status); err != nil {
 		return Action{}, false, fmt.Errorf("update action status: %w", err)
@@ -445,7 +463,7 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	}
 	if s.notifier != nil {
 		if err := s.notifier.Create(ctx, q, notify.Notification{UserID: a.UserID, Kind: notify.KindStatusChange,
-			Title: decisionTitle(kind, status), Body: a.Summary, DedupeKey: "action:" + a.ID + ":" + status}); err != nil {
+			Title: decisionTitle(kind, status, a.Summary), Body: a.Summary, DedupeKey: "action:" + a.ID + ":" + status}); err != nil {
 			return Action{}, false, fmt.Errorf("notify owner: %w", err)
 		}
 		if kind == KindAbsence && status == StatusApproved {
@@ -482,12 +500,68 @@ func (s *Service) notifyHRBP(ctx context.Context, q DBTX, a Action) error {
 	}
 	for _, t := range targets {
 		if err := s.notifier.Create(ctx, q, notify.Notification{UserID: t.id, Kind: notify.KindStatusChange,
-			Title: "Отгул оформлен: " + t.owner, Body: withoutApprover(a.Summary) + ". Согласован руководителем, HR-администратор оформил в кадровой системе.",
+			Title: absenceLabel(labelType(a.Summary)) + " оформлен: " + t.owner, Body: withoutApprover(a.Summary) + ". Согласовано руководителем и HR-администратором, оформлено в кадровой системе.",
 			DedupeKey: "hrbp:" + a.ID}); err != nil {
 			return fmt.Errorf("notify hr bp: %w", err)
 		}
 	}
 	return nil
+}
+
+func isAbsenceLabel(l string) bool {
+	for _, v := range absenceLabels {
+		if v == l {
+			return true
+		}
+	}
+	return false
+}
+
+// labelType returns the absence type whose label starts summary (day_off when none does).
+func labelType(summary string) string {
+	first := strings.SplitN(summary, " ", 2)[0]
+	for k, v := range absenceLabels {
+		if v == first {
+			return k
+		}
+	}
+	return "day_off"
+}
+
+// reschedule applies a moved absence request (absence.reschedule_request) to the existing action of the caller: new
+// dates in the summary and the linked task, back to pending_approval, the new MCP result in the payload. A repeated
+// confirmation applies the same update again and returns the same action.
+func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action, error) {
+	var r mcpclient.AbsenceRequest
+	if err := json.Unmarshal(in.Result, &r); err != nil || r.ID == "" {
+		return Action{}, fmt.Errorf("reschedule result without id: %w", apierr.Internal())
+	}
+	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
+		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 ORDER BY a.created_at LIMIT 1 FOR UPDATE`,
+		KindAbsence, r.ID, in.Claims.Sub))
+	if err != nil {
+		return Action{}, err
+	}
+	d, err := s.describe(ctx, q, SaveInput{Claims: in.Claims, Kind: KindAbsence, Result: in.Result, ApproverName: in.ApproverName})
+	if err != nil {
+		return Action{}, err
+	}
+	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = $2, summary = $3,
+		payload = jsonb_set(payload, '{result}', $4::jsonb), updated_at = now() WHERE id = $1`,
+		a.ID, d.status, d.summary, string(in.Result)); err != nil {
+		return Action{}, fmt.Errorf("update moved action: %w", err)
+	}
+	if a.TaskID != nil {
+		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET title = $2, due_at = $3::date, status = $4, updated_at = now()
+			WHERE id = $1 AND linked_action_id = $5`, *a.TaskID, d.taskTitle, d.dueAt, taskStatus(d.status), a.ID); err != nil {
+			return Action{}, fmt.Errorf("update moved task: %w", err)
+		}
+	}
+	if err := s.emit(ctx, q, analytics.Event{Name: "action.rescheduled", UserID: in.Claims.Sub, Role: in.Claims.Role,
+		TeamID: in.Claims.TeamID, Props: map[string]any{"action_id": a.ID, "proposal_id": in.ProposalID}}); err != nil {
+		return Action{}, err
+	}
+	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
 }
 
 // withoutApprover drops the «, согласующий — …» tail of a summary.
@@ -520,12 +594,23 @@ func decisionStatus(kind, decision string) (string, error) {
 	return "", apierr.Validation().WithMessage("Неизвестное решение по заявке")
 }
 
-func decisionTitle(kind, status string) string {
+func decisionTitle(kind, status, summary string) string {
+	label := strings.SplitN(summary, " ", 2)[0]
+	if kind == KindAbsence && (label == "" || !isAbsenceLabel(label)) {
+		label = "Отгул"
+	}
+	neuter := label == "Отсутствие"
 	switch {
+	case kind == KindAbsence && status == StatusPendingHR:
+		return label + ": руководитель согласовал, ждёт HR-администратора"
+	case kind == KindAbsence && status == StatusApproved && neuter:
+		return label + " согласовано"
 	case kind == KindAbsence && status == StatusApproved:
-		return "Отгул согласован"
+		return label + " согласован"
+	case kind == KindAbsence && neuter:
+		return label + " отклонено"
 	case kind == KindAbsence:
-		return "Отгул отклонён"
+		return label + " отклонён"
 	case kind == KindTrip && status == StatusApproved:
 		return "Командировка согласована"
 	case kind == KindTrip:
@@ -537,9 +622,19 @@ func decisionTitle(kind, status string) string {
 	}
 }
 
+// absenceLabels name the absence types (checkpoint 11.11: vacation, day off, absence, parental leave).
+var absenceLabels = map[string]string{"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
+
+func absenceLabel(kind string) string {
+	if l, ok := absenceLabels[kind]; ok {
+		return l
+	}
+	return "Отгул"
+}
+
 func absenceStatus(s string) string {
 	switch s {
-	case StatusPendingApproval, StatusApproved, StatusRejected:
+	case StatusPendingApproval, StatusPendingHR, StatusApproved, StatusRejected:
 		return s
 	}
 	return StatusCreated
@@ -560,7 +655,7 @@ func taskStatus(actionStatus string) string {
 		return "done"
 	case StatusRejected, StatusFailed:
 		return "not_started"
-	case StatusPendingApproval:
+	case StatusPendingApproval, StatusPendingHR:
 		return "waiting_approval"
 	}
 	return "in_progress"

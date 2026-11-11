@@ -67,7 +67,7 @@ func TestDecide_S3_DecisionPropagatesToAbsence_R66(t *testing.T) {
 	tests := []struct {
 		decision, comment, wantRequest string
 	}{
-		{"approved", "Хорошего отдыха", "approved"},
+		{"approved", "Хорошего отдыха", "pending_hr"},
 		{"rejected", "", "rejected"},
 	}
 	for _, tt := range tests {
@@ -83,8 +83,8 @@ func TestDecide_S3_DecisionPropagatesToAbsence_R66(t *testing.T) {
 				got.Replayed == nil || *got.Replayed || got.RequesterDisplayName != "Анна Котова" {
 				t.Fatalf("got %+v", got)
 			}
-			if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = $2 AND decided_at IS NOT NULL`,
-				absID, tt.wantRequest); n != 1 {
+			if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = $2
+AND (decided_at IS NOT NULL OR lead_decided_at IS NOT NULL)`, absID, tt.wantRequest); n != 1 {
 				t.Fatalf("absence request not %s", tt.wantRequest)
 			}
 			if n := e.count(`SELECT count(*) FROM approvals.items WHERE id = $1 AND status = $2 AND decided_at IS NOT NULL
@@ -204,8 +204,8 @@ func TestDecide_S3_Idempotent_R79(t *testing.T) {
 	if again := e.str(`SELECT decided_at::text FROM approvals.items WHERE id = $1`, itemID); again != decidedAt {
 		t.Fatalf("replay wrote again: %s → %s", decidedAt, again)
 	}
-	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'approved'`, absID); n != 1 {
-		t.Fatal("request not approved")
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'pending_hr'`, absID); n != 1 {
+		t.Fatal("request not passed to the HR admin")
 	}
 }
 
@@ -451,7 +451,16 @@ func TestDecide_S3_ApprovedDayOffRegisteredByHRAdminAndHRBPNotified(t *testing.T
 	e := newEnv(t)
 	absID, itemID := e.seedAbsence("intern.anna", "lead.maria")
 	mustCall[itemOut](e, maria, "decide", confirmed(t, maria, newKey(t), decision(itemID, "approved")))
-	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND hr_admin_id = 'hradmin.olga'
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'pending_hr' AND registered_at IS NULL`, absID); n != 1 {
+		t.Fatal("after the lead the request must wait for the HR admin")
+	}
+	olga := caller("hradmin.olga", "hr_admin", "people")
+	pending := mustCall[listResult](e, olga, "list_pending", nil).Items
+	if len(pending) != 1 || pending[0].RefID != absID {
+		t.Fatalf("hr admin items %+v", pending)
+	}
+	mustCall[itemOut](e, olga, "decide", confirmed(t, olga, newKey(t), decision(pending[0].ID, "approved")))
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'approved' AND hr_admin_id = 'hradmin.olga'
 AND registered_at IS NOT NULL AND hrbp_id = 'hrbp.elena' AND hrbp_notified_at IS NOT NULL`, absID); n != 1 {
 		t.Fatal("approved day off not registered by the HR admin or HR BP not notified")
 	}
@@ -461,6 +470,14 @@ AND registered_at IS NOT NULL AND hrbp_id = 'hrbp.elena' AND hrbp_notified_at IS
 		other); n != 1 {
 		t.Fatal("a rejected day off must not reach HR")
 	}
+	third, thirdItem := e.seedAbsence("intern.anna", "lead.maria")
+	mustCall[itemOut](e, maria, "decide", confirmed(t, maria, newKey(t), decision(thirdItem, "approved")))
+	hrItem := e.str(`SELECT id FROM approvals.items WHERE ref_id = $1 AND stage = 'hr_admin'`, third)
+	mustCall[itemOut](e, olga, "decide", confirmed(t, olga, newKey(t), decision(hrItem, "rejected")))
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'rejected' AND registered_at IS NULL`, third); n != 1 {
+		t.Fatal("the HR admin rejection rejects the request")
+	}
+	e.wantCode(olga, "decide", confirmed(t, olga, newKey(t), decision(hrItem, "approved")), apierr.CodeConflict)
 }
 
 func TestDecide_TripPropagatesToTripRequest_R66(t *testing.T) {

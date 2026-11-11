@@ -1,4 +1,6 @@
-// Package absence implements the mock "absence" MCP server: day-off policy, validation and requests (S3).
+// Package absence implements the mock "absence" MCP server: policy, validation and requests for a day off, vacation,
+// absence and parental leave (S3; checkpoint 11.11). The lead approves first, then the HR admin; until the HR admin
+// approves, the request can be moved to other dates.
 // Data is synthetic (R68). Identity comes only from the verified JWT (R71); a request is visible only to its author.
 // create_request writes the request and its approval item in one transaction and is idempotent by key (R66, R79).
 package absence
@@ -19,8 +21,18 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// maxDays is the longest day off in consecutive calendar days.
-const maxDays = 3
+// Rules per type (test rules of the prototype): the longest request in calendar days and the minimum notice in days.
+const (
+	maxDays         = 3  // day off
+	maxVacationDays = 28 // vacation
+	vacationNotice  = 14 // vacation: submitted at least two weeks ahead
+	maxAbsenceDays  = 5  // absence for personal reasons
+	maxDocuments    = 3
+	maxDocumentName = 200
+)
+
+// typeLabels name each type in summaries and messages.
+var typeLabels = map[string]string{"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 
 // moscow is the business time zone for "tomorrow". Europe/Moscow is UTC+3 without DST since 2014; a fixed zone
 // avoids depending on tzdata in the container image.
@@ -45,6 +57,7 @@ func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error 
 	srv.Handle("validate_request", s.validateRequest)
 	srv.Handle("create_request", s.createRequest)
 	srv.Handle("get_request", s.getRequest)
+	srv.Handle("reschedule_request", s.rescheduleRequest)
 	return nil
 }
 
@@ -61,20 +74,29 @@ type querier interface {
 
 // request is one absence request as returned by the tools.
 type request struct {
-	ID                  string `json:"id"`
-	Type                string `json:"type"`
-	StartDate           string `json:"start_date"`
-	EndDate             string `json:"end_date"`
-	Comment             string `json:"comment,omitempty"`
-	Status              string `json:"status"`
-	ApproverID          string `json:"approver_id"`
-	ApproverDisplayName string `json:"approver_display_name,omitempty"`
-	CreatedAt           string `json:"created_at"`
-	Steps               []step `json:"steps"`
-	Replayed            *bool  `json:"replayed,omitempty"`
+	ID                  string     `json:"id"`
+	Type                string     `json:"type"`
+	StartDate           string     `json:"start_date"`
+	EndDate             string     `json:"end_date"`
+	Comment             string     `json:"comment,omitempty"`
+	Status              string     `json:"status"`
+	ApproverID          string     `json:"approver_id"`
+	ApproverDisplayName string     `json:"approver_display_name,omitempty"`
+	CreatedAt           string     `json:"created_at"`
+	Documents           []document `json:"documents"`
+	Steps               []step     `json:"steps"`
+	Replayed            *bool      `json:"replayed,omitempty"`
 
 	employeeID     string
 	idempotencyKey string
+	rescheduleKey  string
+}
+
+// document is the metadata of a file attached to a request; its content never reaches the service.
+type document struct {
+	Name string `json:"name"`
+	Mime string `json:"mime,omitempty"`
+	Size int64  `json:"size,omitempty"`
 }
 
 // step is one stage of a day off after it is created (organizers' Q&A 10.11): the lead approves, the HR admin registers
@@ -89,7 +111,8 @@ type step struct {
 const selectRequest = `
 SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
        coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
-       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at
+       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at,
+       r.documents, r.lead_decided_at, coalesce(r.reschedule_key::text, '')
 FROM absence.requests r
 LEFT JOIN directory.employees a ON a.id = r.approver_id
 LEFT JOIN directory.employees emp ON emp.id = r.employee_id
@@ -103,18 +126,25 @@ func scanRequest(row pgx.CollectableRow) (request, error) {
 		start, end                    time.Time
 		created                       time.Time
 		decided, registered, notified *time.Time
+		leadDecided                   *time.Time
 		hrAdmin, hrbp                 string
+		docs                          []byte
 	)
 	err := row.Scan(&r.ID, &r.Type, &start, &end, &r.Comment, &r.Status, &r.ApproverID, &r.ApproverDisplayName,
-		&created, &r.employeeID, &r.idempotencyKey, &decided, &hrAdmin, &registered, &hrbp, &notified)
+		&created, &r.employeeID, &r.idempotencyKey, &decided, &hrAdmin, &registered, &hrbp, &notified,
+		&docs, &leadDecided, &r.rescheduleKey)
 	r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
 	r.CreatedAt = created.UTC().Format(time.RFC3339)
-	r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, decided, registered, notified)
+	if json.Unmarshal(docs, &r.Documents) != nil || r.Documents == nil {
+		r.Documents = []document{}
+	}
+	r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, leadDecided, decided, registered, notified)
 	return r, err
 }
 
-// steps derives the stages of a request from its status and HR timestamps.
-func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *time.Time) []step {
+// steps derives the stages of a request from its status and timestamps: the lead decides (leadDecided), then the HR
+// admin decides (decided) and registers it, then the HR BP is notified.
+func steps(status, lead, hrAdmin, hrbp string, leadDecided, decided, registered, notified *time.Time) []step {
 	at := func(t *time.Time) string {
 		if t == nil {
 			return ""
@@ -123,10 +153,17 @@ func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *ti
 	}
 	out := []step{{Role: "lead", DisplayName: lead, Status: "waiting"}, {Role: "hr_admin", DisplayName: hrAdmin, Status: "waiting"},
 		{Role: "hrbp", DisplayName: hrbp, Status: "waiting"}}
-	switch status {
-	case "approved":
-		out[0].Status, out[0].At = "approved", at(decided)
-	case "rejected", "cancelled":
+	switch {
+	case status == "pending_hr", status == "approved":
+		out[0].Status, out[0].At = "approved", at(leadDecided)
+		if leadDecided == nil {
+			out[0].At = at(decided)
+		}
+	case (status == "rejected" || status == "cancelled") && leadDecided != nil:
+		out[0].Status, out[0].At = "approved", at(leadDecided)
+		out[1].Status, out[1].At = "rejected", at(decided)
+		out[2].Status = "skipped"
+	case status == "rejected", status == "cancelled":
 		out[0].Status, out[0].At = "rejected", at(decided)
 		out[1].Status, out[2].Status = "skipped", "skipped"
 	}
@@ -241,9 +278,11 @@ func (s *service) getRequest(ctx context.Context, c mcpx.Caller, args json.RawMe
 // --- validate_request ---
 
 type dates struct {
-	Type      string `json:"type"`
-	StartDate string `json:"start_date"`
-	EndDate   string `json:"end_date"`
+	Type      string     `json:"type"`
+	StartDate string     `json:"start_date"`
+	EndDate   string     `json:"end_date"`
+	Documents []document `json:"documents"`
+	ExcludeID string     `json:"exclude_id"`
 }
 
 type validateOut struct {
@@ -281,9 +320,20 @@ WHERE e.id = $1`, c.Sub).Scan(&leadID, &leadName)
 		return out, fmt.Errorf("load employee: %w", err)
 	}
 
-	out.Problems = append(out.Problems, dateProblems(start, end, s.now())...)
+	if _, ok := typeLabels[in.Type]; !ok {
+		return out, apierr.Validation().WithMessage("Вид заявки: отгул, отпуск, отсутствие или декрет")
+	}
+	if len(in.Documents) > maxDocuments {
+		return out, apierr.Validation().WithMessage(fmt.Sprintf("Можно приложить не больше %d документов", maxDocuments))
+	}
+	for _, d := range in.Documents {
+		if strings.TrimSpace(d.Name) == "" || len([]rune(d.Name)) > maxDocumentName {
+			return out, apierr.Validation().WithMessage("Имя документа: от 1 до 200 символов")
+		}
+	}
+	out.Problems = append(out.Problems, typeProblems(in.Type, start, end, len(in.Documents), s.now())...)
 	if !end.Before(start) {
-		overlaps, err := overlapProblems(ctx, q, c.Sub, in.StartDate, in.EndDate)
+		overlaps, err := overlapProblems(ctx, q, c.Sub, in.StartDate, in.EndDate, in.ExcludeID)
 		if err != nil {
 			return out, err
 		}
@@ -299,7 +349,51 @@ WHERE e.id = $1`, c.Sub).Scan(&leadID, &leadName)
 	return out, nil
 }
 
-// dateProblems applies the calendar rules: start not before tomorrow (Moscow date of now), end not before start,
+// typeProblems applies the rules of each type; a day off keeps its working-days rules (dateProblems).
+func typeProblems(kind string, start, end time.Time, docs int, now time.Time) []string {
+	y, m, d := now.In(moscow).Date()
+	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	days := int(end.Sub(start).Hours()/24) + 1
+	var problems []string
+	switch kind {
+	case "day_off":
+		return dateProblems(start, end, now)
+	case "vacation":
+		if earliest := today.AddDate(0, 0, vacationNotice); start.Before(earliest) {
+			problems = append(problems, fmt.Sprintf("Заявку на отпуск подают не позже чем за %d дней: начало не раньше %s",
+				vacationNotice, ru(earliest)))
+		}
+		if end.Before(start) {
+			return append(problems, "Дата окончания не может быть раньше даты начала")
+		}
+		if days > maxVacationDays {
+			problems = append(problems, fmt.Sprintf("Отпуск за один раз — не больше %d календарных дней, выбрано %d", maxVacationDays, days))
+		}
+	case "absence":
+		if start.Before(today.AddDate(0, 0, 1)) {
+			problems = append(problems, fmt.Sprintf("Дата начала должна быть не раньше завтрашнего дня (%s)", ru(today.AddDate(0, 0, 1))))
+		}
+		if end.Before(start) {
+			return append(problems, "Дата окончания не может быть раньше даты начала")
+		}
+		if days > maxAbsenceDays {
+			problems = append(problems, fmt.Sprintf("Отсутствие оформляется не больше чем на %d дней, выбрано %d", maxAbsenceDays, days))
+		}
+	case "parental_leave":
+		if start.Before(today) {
+			problems = append(problems, "Дата начала уже прошла")
+		}
+		if end.Before(start) {
+			return append(problems, "Дата окончания не может быть раньше даты начала")
+		}
+		if docs == 0 {
+			problems = append(problems, "Для декрета нужен документ — приложите справку (листок нетрудоспособности или заявление)")
+		}
+	}
+	return problems
+}
+
+// dateProblems applies the day-off rules: start not before tomorrow (Moscow date of now), end not before start,
 // working days only, at most maxDays consecutive days.
 func dateProblems(start, end, now time.Time) []string {
 	var problems []string
@@ -335,14 +429,15 @@ func dateProblems(start, end, now time.Time) []string {
 	return problems
 }
 
-// overlapProblems reports the caller's pending or approved requests that intersect [start, end].
-func overlapProblems(ctx context.Context, q querier, sub, start, end string) ([]string, error) {
+// overlapProblems reports the caller's pending or approved requests that intersect [start, end], except excludeID (the
+// request being moved).
+func overlapProblems(ctx context.Context, q querier, sub, start, end, excludeID string) ([]string, error) {
 	rows, err := q.Query(ctx, `
 SELECT id, start_date, end_date, status
 FROM absence.requests
-WHERE employee_id = $1 AND status IN ('pending_approval', 'approved')
+WHERE employee_id = $1 AND status IN ('pending_approval', 'pending_hr', 'approved') AND id <> $4
   AND start_date <= $3::date AND end_date >= $2::date
-ORDER BY start_date, id`, sub, start, end)
+ORDER BY start_date, id`, sub, start, end, excludeID)
 	if err != nil {
 		return nil, fmt.Errorf("query overlapping requests: %w", err)
 	}
@@ -353,7 +448,7 @@ ORDER BY start_date, id`, sub, start, end)
 		)
 		err := row.Scan(&id, &s, &e, &status)
 		label := "согласована"
-		if status == "pending_approval" {
+		if status != "approved" {
 			label = "на согласовании"
 		}
 		return fmt.Sprintf("Даты пересекаются с заявкой %s на %s (%s)", id, period(s, e), label), err
@@ -402,11 +497,15 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
 	if !check.Valid {
 		return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
 	}
+	if in.ExcludeID != "" {
+		return nil, apierr.Validation().WithMessage("exclude_id используется только при проверке переноса")
+	}
+	docs, _ := json.Marshal(nonNilDocs(in.Documents))
 	var id string
 	err = tx.QueryRow(ctx, `
-INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, approver_id, idempotency_key)
-VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid)
-RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey).Scan(&id)
+INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, approver_id, idempotency_key, documents)
+VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid, $8)
+RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey, docs).Scan(&id)
 	if isUniqueViolation(err) {
 		return nil, keyConflict() // the key belongs to another employee's request
 	}
@@ -417,7 +516,7 @@ RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.Appro
 	end, _ := time.Parse(time.DateOnly, in.EndDate)
 	if _, err := tx.Exec(ctx, `
 INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
-VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, "Отгул "+period(start, end)); err != nil {
+VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, typeLabels[in.Type]+" "+period(start, end)); err != nil {
 		return nil, fmt.Errorf("insert approval item: %w", err)
 	}
 	created, _, err := findRequest(ctx, tx, "r.id = $1", id)
@@ -434,12 +533,103 @@ VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, "От�
 // replay returns the stored request for a repeated key, or conflict when the key was used for other arguments.
 func replay(prev request, c mcpx.Caller, in createIn) (any, error) {
 	if prev.employeeID != c.Sub || prev.Type != in.Type || prev.StartDate != in.StartDate ||
-		prev.EndDate != in.EndDate || prev.Comment != in.Comment {
+		prev.EndDate != in.EndDate || prev.Comment != in.Comment || len(prev.Documents) != len(in.Documents) {
 		return nil, keyConflict()
 	}
 	replayed := true
 	prev.Replayed = &replayed
 	return prev, nil
+}
+
+func nonNilDocs(d []document) []document {
+	if d == nil {
+		return []document{}
+	}
+	return d
+}
+
+// --- reschedule_request ---
+
+type rescheduleIn struct {
+	ID             string `json:"id"`
+	StartDate      string `json:"start_date"`
+	EndDate        string `json:"end_date"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+// rescheduleRequest moves the caller's request to other dates while the HR admin has not approved it (checkpoint
+// 11.11). The approval starts again: open approval items are cancelled and the lead gets a new one. The same key
+// returns the moved request with replayed=true (R79).
+func (s *service) rescheduleRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
+	var in rescheduleIn
+	if err := mcpx.DecodeArgs(args, &in); err != nil {
+		return nil, err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil {
+		return nil, fmt.Errorf("lock employee: %w", err)
+	}
+	r, ok, err := findRequest(ctx, tx, "r.id = $1", in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || r.employeeID != c.Sub {
+		return nil, forbiddenRequest()
+	}
+	if r.rescheduleKey == in.IdempotencyKey {
+		if r.StartDate != in.StartDate || r.EndDate != in.EndDate {
+			return nil, keyConflict()
+		}
+		replayed := true
+		r.Replayed = &replayed
+		return r, nil
+	}
+	if r.Status != "pending_approval" && r.Status != "pending_hr" {
+		return nil, apierr.Conflict().WithMessage("Перенести можно только заявку, которую HR-администратор ещё не согласовал")
+	}
+	check, err := s.validate(ctx, tx, c, dates{Type: r.Type, StartDate: in.StartDate, EndDate: in.EndDate,
+		Documents: r.Documents, ExcludeID: r.ID})
+	if err != nil {
+		return nil, err
+	}
+	if !check.Valid {
+		return nil, apierr.Validation().WithMessage("Перенести нельзя: " + strings.Join(check.Problems, "; "))
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE absence.requests SET start_date = $2::date, end_date = $3::date, status = 'pending_approval',
+    approver_id = $4, lead_decided_at = NULL, decided_at = NULL, reschedule_key = $5::uuid
+WHERE id = $1`, r.ID, in.StartDate, in.EndDate, check.ApproverID, in.IdempotencyKey)
+	if isUniqueViolation(err) {
+		return nil, keyConflict()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("move absence request: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE approvals.items SET status = 'cancelled', decided_at = now()
+WHERE kind = 'absence_request' AND ref_id = $1 AND status = 'pending'`, r.ID); err != nil {
+		return nil, fmt.Errorf("cancel approval items: %w", err)
+	}
+	start, _ := time.Parse(time.DateOnly, in.StartDate)
+	end, _ := time.Parse(time.DateOnly, in.EndDate)
+	if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('absence_request', $1, $2, $3, $4)`, r.ID, c.Sub, check.ApproverID,
+		typeLabels[r.Type]+" "+period(start, end)+" (перенос)"); err != nil {
+		return nil, fmt.Errorf("insert approval item: %w", err)
+	}
+	moved, _, err := findRequest(ctx, tx, "r.id = $1", r.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	moved.Replayed = new(bool)
+	return moved, nil
 }
 
 func keyConflict() *apierr.Error {

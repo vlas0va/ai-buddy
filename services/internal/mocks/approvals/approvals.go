@@ -46,6 +46,7 @@ type item struct {
 	Summary              string `json:"summary"`
 	Status               string `json:"status"`
 	Comment              string `json:"comment,omitempty"`
+	Stage                string `json:"stage"`
 	CreatedAt            string `json:"created_at"`
 	Replayed             *bool  `json:"replayed,omitempty"`
 
@@ -55,7 +56,7 @@ type item struct {
 
 const selectItem = `
 SELECT i.id, i.kind, i.ref_id, i.requester_id, coalesce(e.display_name, ''), i.summary, i.status,
-       coalesce(i.comment, ''), i.created_at, i.approver_id, coalesce(i.idempotency_key::text, '')
+       coalesce(i.comment, ''), i.created_at, i.approver_id, coalesce(i.idempotency_key::text, ''), i.stage
 FROM approvals.items i
 LEFT JOIN directory.employees e ON e.id = i.requester_id`
 
@@ -65,7 +66,7 @@ func scanItem(row pgx.CollectableRow) (item, error) {
 		created time.Time
 	)
 	err := row.Scan(&it.ID, &it.Kind, &it.RefID, &it.RequesterID, &it.RequesterDisplayName, &it.Summary, &it.Status,
-		&it.Comment, &created, &it.approverID, &it.idempotencyKey)
+		&it.Comment, &created, &it.approverID, &it.idempotencyKey, &it.Stage)
 	it.CreatedAt = created.UTC().Format(time.RFC3339)
 	return it, err
 }
@@ -155,28 +156,20 @@ WHERE id = $1`, it.ID, in.Decision, in.Comment, in.IdempotencyKey)
 	if err != nil {
 		return nil, fmt.Errorf("update approval item: %w", err)
 	}
-	// kind is limited by a CHECK constraint to the keys of underlying; the table name never comes from input.
-	target := underlying[it.Kind]
-	tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
+	if it.Kind == "absence_request" {
+		if err := decideAbsence(ctx, tx, it, in.Decision, c.Sub); err != nil {
+			return nil, err
+		}
+	} else {
+		// kind is limited by a CHECK constraint to the keys of underlying; the table name never comes from input.
+		target := underlying[it.Kind]
+		tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
 WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Decision])
-	if err != nil {
-		return nil, fmt.Errorf("update %s: %w", target.table, err)
-	}
-	if tag.RowsAffected() != 1 {
-		return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
-	}
-	if it.Kind == "absence_request" && in.Decision == "approved" {
-		// The HR admin registers the approved day off in the HR system and the HR BP of the employee is notified
-		// (organizers' Q&A 10.11: a day off involves the lead, the HR admin and the HR BP). In this imitation both
-		// happen at once; a real HR system would report them asynchronously.
-		if _, err := tx.Exec(ctx, `
-UPDATE absence.requests r SET
-    hr_admin_id = (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1),
-    registered_at = now(),
-    hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
-    hrbp_notified_at = now()
-WHERE r.id = $1`, it.RefID); err != nil {
-			return nil, fmt.Errorf("register absence: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("update %s: %w", target.table, err)
+		}
+		if tag.RowsAffected() != 1 {
+			return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -184,6 +177,57 @@ WHERE r.id = $1`, it.RefID); err != nil {
 	}
 	it.Status, it.Comment, it.Replayed = in.Decision, in.Comment, new(bool)
 	return it, nil
+}
+
+// decideAbsence applies a decision to an absence request in two stages (checkpoint 11.11): the lead approves → the
+// request waits for the HR admin (pending_hr) and the HR admin gets an approval item; the HR admin approves → the
+// request is approved, registered in the HR system and the HR BP of the employee is notified. A rejection at either
+// stage rejects the request.
+func decideAbsence(ctx context.Context, tx pgx.Tx, it item, decision, approver string) error {
+	var (
+		sql  string
+		args []any
+	)
+	switch {
+	case it.Stage == "lead" && decision == "approved":
+		sql = `UPDATE absence.requests SET status = 'pending_hr', lead_decided_at = now()
+WHERE id = $1 AND status = 'pending_approval'`
+		args = []any{it.RefID}
+	case it.Stage == "lead":
+		sql = `UPDATE absence.requests SET status = 'rejected', decided_at = now()
+WHERE id = $1 AND status = 'pending_approval'`
+		args = []any{it.RefID}
+	case decision == "approved":
+		sql = `UPDATE absence.requests r SET status = 'approved', decided_at = now(), hr_admin_id = $2,
+    registered_at = now(), hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
+    hrbp_notified_at = now()
+WHERE r.id = $1 AND r.status = 'pending_hr'`
+		args = []any{it.RefID, approver}
+	default:
+		sql = `UPDATE absence.requests SET status = 'rejected', decided_at = now(), hr_admin_id = $2
+WHERE id = $1 AND status = 'pending_hr'`
+		args = []any{it.RefID, approver}
+	}
+	tag, err := tx.Exec(ctx, sql, args...)
+	if err != nil {
+		return fmt.Errorf("update absence request: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
+	}
+	if it.Stage == "lead" && decision == "approved" {
+		tag, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary, stage)
+SELECT 'absence_request', $1::text, $2::text, x.id, $3::text, 'hr_admin'
+FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1`, it.RefID, it.RequesterID, it.Summary)
+		if err != nil {
+			return fmt.Errorf("insert hr admin approval item: %w", err)
+		}
+		if tag.RowsAffected() != 1 {
+			return apierr.Conflict().WithMessage("В справочнике нет HR-администратора")
+		}
+	}
+	return nil
 }
 
 func keyConflict() *apierr.Error {

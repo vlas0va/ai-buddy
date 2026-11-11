@@ -131,6 +131,10 @@ func newAbsence(t *testing.T, log *slog.Logger, writes *recorder) *Server {
 		writes.add(args)
 		return absenceRequest("ABS-000001"), nil
 	})
+	s.Handle("reschedule_request", func(_ context.Context, _ Caller, args json.RawMessage) (any, error) {
+		writes.add(args)
+		return absenceRequest("ABS-000001"), nil
+	})
 	s.Handle("get_request", func(ctx context.Context, c Caller, args json.RawMessage) (any, error) {
 		var in struct {
 			ID string `json:"id"`

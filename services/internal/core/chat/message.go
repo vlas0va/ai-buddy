@@ -30,6 +30,7 @@ var allowedTools = map[string]string{
 	"access_request":     mcpclient.ToolRequestAccess,
 	"trip_request":       mcpclient.ToolCreateTrip,
 	"consent":            mcpclient.ToolSignConsent,
+	"absence_reschedule": mcpclient.ToolReschedule,
 	kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
 }
 

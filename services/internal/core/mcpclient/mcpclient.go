@@ -43,6 +43,7 @@ const (
 	ToolAddFAQ         = "kb.add_faq"
 	ToolCreateTrip     = "trips.create_request"
 	ToolSignConsent    = "consents.sign"
+	ToolReschedule     = "absence.reschedule_request"
 )
 
 // Config configures a Client.
@@ -183,6 +184,7 @@ type Approval struct {
 	Summary              string `json:"summary"`
 	Status               string `json:"status"`
 	Comment              string `json:"comment,omitempty"`
+	Stage                string `json:"stage,omitempty"` // absence: lead, then hr_admin
 	CreatedAt            string `json:"created_at"`
 	Replayed             bool   `json:"replayed,omitempty"`
 }

@@ -125,7 +125,7 @@ func TestValidateRequest_S3_Rules(t *testing.T) {
 	})
 	t.Run("bad arguments are rejected by the schema", func(t *testing.T) {
 		e.wantCode(anna, "validate_request", dayOff("10.11.2026", "2026-11-10"), apierr.CodeValidation)
-		e.wantCode(anna, "validate_request", map[string]any{"type": "vacation", "start_date": "2026-11-10", "end_date": "2026-11-10"},
+		e.wantCode(anna, "validate_request", map[string]any{"type": "sick_leave", "start_date": "2026-11-10", "end_date": "2026-11-10"},
 			apierr.CodeValidation)
 	})
 	t.Run("validate itself rejects unparsable dates", func(t *testing.T) {
@@ -544,5 +544,130 @@ WHERE id = $1`, own.ID)
 	got = read()
 	if got[0].Status != "rejected" || got[1].Status != "skipped" || got[2].Status != "skipped" {
 		t.Fatalf("rejected steps %+v", got)
+	}
+}
+
+func absenceArgs(kind, start, end string, docs ...string) map[string]any {
+	m := map[string]any{"type": kind, "start_date": start, "end_date": end}
+	if len(docs) > 0 {
+		list := []map[string]any{}
+		for _, d := range docs {
+			list = append(list, map[string]any{"name": d, "mime": "application/pdf", "size": 1000})
+		}
+		m["documents"] = list
+	}
+	return m
+}
+
+func TestValidateRequest_Checkpoint_TypesAndDocuments(t *testing.T) {
+	e := newEnv(t) // today is Monday 09.11.2026 in Moscow
+	for _, tc := range []struct {
+		name, kind, start, end string
+		docs                   []string
+		problem                string
+	}{
+		{"vacation two weeks ahead", "vacation", "2026-11-23", "2026-12-06", nil, ""},
+		{"vacation too soon", "vacation", "2026-11-16", "2026-11-20", nil, "за 14 дней"},
+		{"vacation too long", "vacation", "2026-11-23", "2026-12-31", nil, "не больше 28"},
+		{"vacation end before start", "vacation", "2026-11-30", "2026-11-23", nil, "раньше даты начала"},
+		{"absence ok", "absence", "2026-11-12", "2026-11-13", nil, ""},
+		{"absence today", "absence", "2026-11-09", "2026-11-09", nil, "не раньше завтрашнего"},
+		{"absence too long", "absence", "2026-11-12", "2026-11-20", nil, "не больше чем на 5"},
+		{"absence end before start", "absence", "2026-11-13", "2026-11-12", nil, "раньше даты начала"},
+		{"parental leave needs a document", "parental_leave", "2026-11-10", "2027-03-29", nil, "нужен документ"},
+		{"parental leave with a document", "parental_leave", "2026-11-10", "2027-03-29", []string{"справка.pdf"}, ""},
+		{"parental leave in the past", "parental_leave", "2026-11-01", "2027-03-29", []string{"справка.pdf"}, "уже прошла"},
+		{"parental leave end before start", "parental_leave", "2026-11-20", "2026-11-10", []string{"справка.pdf"}, "раньше даты начала"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := mustCall[validateResult](e, anna, "validate_request", absenceArgs(tc.kind, tc.start, tc.end, tc.docs...))
+			if (tc.problem == "") != got.Valid || (tc.problem != "" && !strings.Contains(strings.Join(got.Problems, " "), tc.problem)) {
+				t.Fatalf("got %+v", got)
+			}
+		})
+	}
+	e.wantCode(anna, "validate_request", absenceArgs("vacation", "2026-11-23", "2026-11-24", "a", "b", "c", "d"), apierr.CodeValidation)
+	s := &service{pool: e.pool, now: e.clock.Now}
+	for _, in := range []dates{
+		{Type: "sick", StartDate: "2026-11-23", EndDate: "2026-11-23"},
+		{Type: "vacation", StartDate: "2026-11-23", EndDate: "2026-11-23", Documents: []document{{Name: " "}}},
+		{Type: "vacation", StartDate: "2026-11-23", EndDate: "2026-11-23", Documents: []document{{Name: "a", Mime: "x"}, {Name: "b"}, {Name: "c"}, {Name: "d"}}},
+	} {
+		if _, err := s.validate(context.Background(), e.pool, anna, in); !apierr.HasCode(err, apierr.CodeValidation) {
+			t.Fatalf("%+v: %v", in, err)
+		}
+	}
+}
+
+func TestCreateRequest_Checkpoint_VacationWithDocumentsAndApprovalSummary(t *testing.T) {
+	e := newEnv(t)
+	got := mustCall[requestOut](e, anna, "create_request",
+		confirmed(t, anna, newKey(t), absenceArgs("vacation", "2026-11-23", "2026-12-06", "заявление.pdf")))
+	if got.Status != "pending_approval" || got.Type != "vacation" {
+		t.Fatalf("got %+v", got)
+	}
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary = 'Отпуск 23.11.2026–06.12.2026' AND stage = 'lead'`, got.ID); n != 1 {
+		t.Fatal("approval summary must name the type")
+	}
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND documents->0->>'name' = 'заявление.pdf'`, got.ID); n != 1 {
+		t.Fatal("documents not stored")
+	}
+	raw, terr := e.call(anna, "get_request", map[string]any{"id": got.ID})
+	if terr != nil || !strings.Contains(string(raw), `"documents":[{"name":"заявление.pdf"`) {
+		t.Fatalf("%v %s", terr, raw)
+	}
+}
+
+func TestRescheduleRequest_Checkpoint_MoveUntilHRApproves(t *testing.T) {
+	e := newEnv(t)
+	own := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("vacation", "2026-11-23", "2026-11-27")))
+	move := map[string]any{"id": own.ID, "start_date": "2026-11-30", "end_date": "2026-12-04"}
+	key := newKey(t)
+	moved := mustCall[requestOut](e, anna, "reschedule_request", confirmed(t, anna, key, move))
+	if moved.StartDate != "2026-11-30" || moved.EndDate != "2026-12-04" || moved.Status != "pending_approval" ||
+		moved.Replayed == nil || *moved.Replayed {
+		t.Fatalf("moved %+v", moved)
+	}
+	again := mustCall[requestOut](e, anna, "reschedule_request", confirmed(t, anna, key, move))
+	if again.Replayed == nil || !*again.Replayed {
+		t.Fatal("same key must replay")
+	}
+	other := map[string]any{"id": own.ID, "start_date": "2026-12-07", "end_date": "2026-12-08"}
+	e.wantCode(anna, "reschedule_request", confirmed(t, anna, key, other), apierr.CodeConflict)
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND status = 'cancelled'`, own.ID); n != 1 {
+		t.Fatal("the old item must be cancelled")
+	}
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND status = 'pending' AND summary LIKE '%(перенос)'`, own.ID); n != 1 {
+		t.Fatal("the lead must get a new item")
+	}
+	// waiting for the HR admin: still movable, approval restarts from the lead
+	e.exec(`UPDATE absence.requests SET status = 'pending_hr', lead_decided_at = now() WHERE id = $1`, own.ID)
+	moved = mustCall[requestOut](e, anna, "reschedule_request", confirmed(t, anna, newKey(t), other))
+	if moved.Status != "pending_approval" || moved.StartDate != "2026-12-07" {
+		t.Fatalf("moved from pending_hr %+v", moved)
+	}
+	// invalid dates and approved requests are refused; other people's requests are invisible
+	e.wantCode(anna, "reschedule_request", confirmed(t, anna, newKey(t),
+		map[string]any{"id": own.ID, "start_date": "2026-11-10", "end_date": "2026-11-11"}), apierr.CodeValidation)
+	e.exec(`UPDATE absence.requests SET status = 'approved' WHERE id = $1`, own.ID)
+	e.wantCode(anna, "reschedule_request", confirmed(t, anna, newKey(t), move), apierr.CodeConflict)
+	e.wantCode(ivan, "reschedule_request", confirmed(t, ivan, newKey(t), move), apierr.CodeForbidden)
+	e.wantCode(anna, "reschedule_request", map[string]any{"id": own.ID, "start_date": "2026-11-30", "end_date": "2026-12-04"},
+		apierr.CodeInvalidConfirmation)
+}
+
+func TestGetRequest_Checkpoint_StepsWithHRAdminStage(t *testing.T) {
+	at := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	got := steps("pending_hr", "Мария", "Ольга", "Елена", &at, nil, nil, nil)
+	if got[0].Status != "approved" || got[1].Status != "waiting" || got[0].At == "" {
+		t.Fatalf("pending_hr %+v", got)
+	}
+	got = steps("rejected", "Мария", "Ольга", "Елена", &at, &at, nil, nil)
+	if got[0].Status != "approved" || got[1].Status != "rejected" || got[2].Status != "skipped" {
+		t.Fatalf("hr rejected %+v", got)
+	}
+	got = steps("approved", "Мария", "Ольга", "Елена", nil, &at, nil, nil)
+	if got[0].At == "" {
+		t.Fatalf("approved without lead time %+v", got)
 	}
 }

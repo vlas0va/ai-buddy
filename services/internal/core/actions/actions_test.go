@@ -20,6 +20,7 @@ import (
 )
 
 var byMaria = Scope{RequesterID: "intern.anna", ApproverID: "lead.maria"}
+var byOlga = Scope{RequesterID: "intern.anna", ApproverID: "hradmin.olga", Stage: "hr_admin"}
 
 var (
 	anna  = authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}
@@ -245,7 +246,17 @@ func TestApplyDecision_S3_AbsenceRejectedAndApproved(t *testing.T) {
 	if task := loadTask(t, pool, *a.TaskID); task.status != "not_started" {
 		t.Fatalf("task %+v", task)
 	}
-	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byMaria); err != nil {
+	lead, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byMaria)
+	if err != nil || lead.Status != StatusPendingHR {
+		t.Fatalf("%+v %v", lead, err)
+	}
+	if task := loadTask(t, pool, *a.TaskID); task.status != "waiting_approval" {
+		t.Fatalf("task %+v", task)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title = 'Отгул: руководитель согласовал, ждёт HR-администратора'`); n != 1 {
+		t.Fatalf("lead stage notifications = %d", n)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byOlga); err != nil {
 		t.Fatal(err)
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.status != "done" {
@@ -549,6 +560,12 @@ func TestApplyDecision_S3_ApprovedDayOffNotifiesHRBP(t *testing.T) {
 	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000221", "approved", byMaria); err != nil {
 		t.Fatal(err)
 	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications n JOIN core.users u ON u.id = n.user_id WHERE u.role = 'hrbp'`); n != 0 {
+		t.Fatalf("HR BP notified before the HR admin: %d", n)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000221", "approved", byOlga); err != nil {
+		t.Fatal(err)
+	}
 	var title, body string
 	if err := pool.QueryRow(ctx, `SELECT title, body FROM core.notifications n JOIN core.users u ON u.id = n.user_id
 		WHERE u.role = 'hrbp' ORDER BY n.created_at DESC LIMIT 1`).Scan(&title, &body); err != nil {
@@ -559,5 +576,49 @@ func TestApplyDecision_S3_ApprovedDayOffNotifiesHRBP(t *testing.T) {
 	}
 	if withoutApprover("abc") != "abc" {
 		t.Fatal("withoutApprover")
+	}
+}
+
+// Checkpoint 11.11: until the HR admin approves, the intern moves the request; the same action and plan task follow
+// the new dates and the request goes back to the lead.
+func TestSave_Checkpoint_RescheduleMovesActionAndTask(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	a, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000301", Kind: KindAbsence,
+		Result: absenceResult("ABS-000301", "2026-11-20", "2026-11-20", "Мария Лебедева")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000301", "approved", byMaria); err != nil {
+		t.Fatal(err)
+	}
+	moved, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000302", Kind: KindReschedule,
+		Result: absenceResult("ABS-000301", "2026-11-27", "2026-11-27", "Мария Лебедева")})
+	if err != nil || moved.ID != a.ID || moved.Status != StatusPendingApproval || !strings.Contains(moved.Summary, "27.11.2026") {
+		t.Fatalf("%+v %v", moved, err)
+	}
+	if task := loadTask(t, pool, *a.TaskID); task.status != "waiting_approval" || task.due == nil || !strings.HasPrefix(*task.due, "2026-11-27") {
+		t.Fatalf("task %+v", task)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.actions WHERE external_id = 'ABS-000301'`); n != 1 {
+		t.Fatalf("actions = %d", n)
+	}
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000303", Kind: KindReschedule,
+		Result: absenceResult("ABS-999998", "2026-11-27", "2026-11-27", "")}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown request: %v", err)
+	}
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000304", Kind: KindReschedule,
+		Result: json.RawMessage(`{}`)}); err == nil {
+		t.Fatal("result without id")
+	}
+	// A replayed lead decision after the HR admin approved never undoes the approval.
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000301", "approved", byMaria); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000301", "approved", byOlga); err != nil {
+		t.Fatal(err)
+	}
+	if got, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000301", "approved", byMaria); err != nil || changed || got.Status != StatusApproved {
+		t.Fatalf("replay %+v %v %v", got, changed, err)
 	}
 }
