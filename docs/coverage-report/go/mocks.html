@@ -55,21 +55,25 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">aibuddy/services/internal/mocks/absence/absence.go (90.1%)</option>
+				<option value="file0">aibuddy/services/internal/mocks/absence/absence.go (90.9%)</option>
 				
 				<option value="file1">aibuddy/services/internal/mocks/access/access.go (87.2%)</option>
 				
 				<option value="file2">aibuddy/services/internal/mocks/app/app.go (90.9%)</option>
 				
-				<option value="file3">aibuddy/services/internal/mocks/approvals/approvals.go (90.5%)</option>
+				<option value="file3">aibuddy/services/internal/mocks/approvals/approvals.go (89.4%)</option>
 				
 				<option value="file4">aibuddy/services/internal/mocks/checklist/checklist.go (86.7%)</option>
 				
-				<option value="file5">aibuddy/services/internal/mocks/directory/directory.go (94.6%)</option>
+				<option value="file5">aibuddy/services/internal/mocks/consents/consents.go (82.1%)</option>
 				
-				<option value="file6">aibuddy/services/internal/mocks/kb/kb.go (86.5%)</option>
+				<option value="file6">aibuddy/services/internal/mocks/directory/directory.go (94.6%)</option>
 				
-				<option value="file7">aibuddy/services/internal/mocks/kb/loader.go (95.7%)</option>
+				<option value="file7">aibuddy/services/internal/mocks/kb/kb.go (86.5%)</option>
+				
+				<option value="file8">aibuddy/services/internal/mocks/kb/loader.go (95.7%)</option>
+				
+				<option value="file9">aibuddy/services/internal/mocks/trips/trips.go (84.1%)</option>
 				
 				</select>
 			</div>
@@ -155,30 +159,74 @@ type request struct {
         ApproverID          string `json:"approver_id"`
         ApproverDisplayName string `json:"approver_display_name,omitempty"`
         CreatedAt           string `json:"created_at"`
+        Steps               []step `json:"steps"`
         Replayed            *bool  `json:"replayed,omitempty"`
 
         employeeID     string
         idempotencyKey string
 }
 
+// step is one stage of a day off after it is created (organizers' Q&amp;A 10.11): the lead approves, the HR admin registers
+// the approved day off in the HR system, the HR BP is notified.
+type step struct {
+        Role        string `json:"role"`
+        DisplayName string `json:"display_name,omitempty"`
+        Status      string `json:"status"`
+        At          string `json:"at,omitempty"`
+}
+
 const selectRequest = `
 SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
-       coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text
+       coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
+       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at
 FROM absence.requests r
-LEFT JOIN directory.employees a ON a.id = r.approver_id`
+LEFT JOIN directory.employees a ON a.id = r.approver_id
+LEFT JOIN directory.employees emp ON emp.id = r.employee_id
+LEFT JOIN directory.employees ha ON ha.id = coalesce(r.hr_admin_id,
+    (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1))
+LEFT JOIN directory.employees hb ON hb.id = coalesce(r.hrbp_id, emp.hrbp_id)`
 
 func scanRequest(row pgx.CollectableRow) (request, error) <span class="cov8" title="1">{
         var (
-                r          request
-                start, end time.Time
-                created    time.Time
+                r                             request
+                start, end                    time.Time
+                created                       time.Time
+                decided, registered, notified *time.Time
+                hrAdmin, hrbp                 string
         )
         err := row.Scan(&amp;r.ID, &amp;r.Type, &amp;start, &amp;end, &amp;r.Comment, &amp;r.Status, &amp;r.ApproverID, &amp;r.ApproverDisplayName,
-                &amp;created, &amp;r.employeeID, &amp;r.idempotencyKey)
+                &amp;created, &amp;r.employeeID, &amp;r.idempotencyKey, &amp;decided, &amp;hrAdmin, &amp;registered, &amp;hrbp, &amp;notified)
         r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
         r.CreatedAt = created.UTC().Format(time.RFC3339)
+        r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, decided, registered, notified)
         return r, err
 }</span>
+
+// steps derives the stages of a request from its status and HR timestamps.
+func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *time.Time) []step <span class="cov8" title="1">{
+        at := func(t *time.Time) string </span><span class="cov8" title="1">{
+                if t == nil </span><span class="cov8" title="1">{
+                        return ""
+                }</span>
+                <span class="cov8" title="1">return t.UTC().Format(time.RFC3339)</span>
+        }
+        <span class="cov8" title="1">out := []step{{Role: "lead", DisplayName: lead, Status: "waiting"}, {Role: "hr_admin", DisplayName: hrAdmin, Status: "waiting"},
+                {Role: "hrbp", DisplayName: hrbp, Status: "waiting"}}
+        switch status </span>{
+        case "approved":<span class="cov8" title="1">
+                out[0].Status, out[0].At = "approved", at(decided)</span>
+        case "rejected", "cancelled":<span class="cov8" title="1">
+                out[0].Status, out[0].At = "rejected", at(decided)
+                out[1].Status, out[2].Status = "skipped", "skipped"</span>
+        }
+        <span class="cov8" title="1">if registered != nil </span><span class="cov8" title="1">{
+                out[1].Status, out[1].At = "registered", at(registered)
+        }</span>
+        <span class="cov8" title="1">if notified != nil </span><span class="cov8" title="1">{
+                out[2].Status, out[2].At = "notified", at(notified)
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
 
 // findRequest returns the request matching where (a condition on alias r with parameter $1), or ok=false.
 func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) <span class="cov8" title="1">{
@@ -824,8 +872,8 @@ func isUniqueViolation(err error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file2" style="display: none">// Package app wires mcp-mocks: six independent mock Avito MCP servers served by one binary at /mcp/&lt;server&gt;
-// (absence, approvals, access, directory, checklist, kb). Each server owns its DB schema and tool set, so it can be
+		<pre class="file" id="file2" style="display: none">// Package app wires mcp-mocks: eight independent mock Avito MCP servers served by one binary at /mcp/&lt;server&gt;
+// (absence, approvals, access, directory, checklist, kb, trips, consents). Each server owns its DB schema and tool set, so it can be
 // moved to its own process or replaced by a real Avito API by changing a URL in the agent config (R23, R56).
 package app
 
@@ -843,8 +891,10 @@ import (
         "aibuddy/services/internal/mocks/access"
         "aibuddy/services/internal/mocks/approvals"
         "aibuddy/services/internal/mocks/checklist"
+        "aibuddy/services/internal/mocks/consents"
         "aibuddy/services/internal/mocks/directory"
         "aibuddy/services/internal/mocks/kb"
+        "aibuddy/services/internal/mocks/trips"
         "aibuddy/services/internal/platform/config"
         "aibuddy/services/internal/platform/httpx"
         "aibuddy/services/internal/platform/mcpx"
@@ -898,9 +948,11 @@ var registrars = []struct {
         {"directory", directory.Register},
         {"checklist", checklist.Register},
         {"kb", kb.Register},
+        {"trips", trips.Register},
+        {"consents", consents.Register},
 }
 
-// NewHandler builds the HTTP handler: /healthz plus /mcp/&lt;server&gt; for all six servers.
+// NewHandler builds the HTTP handler: /healthz plus /mcp/&lt;server&gt; for all eight servers.
 func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler, error) <span class="cov8" title="1">{
         if err := cfg.Validate(); err != nil </span><span class="cov8" title="1">{
                 return nil, err
@@ -1097,6 +1149,7 @@ var underlying = map[string]struct {
 }{
         "absence_request": {"absence.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
         "access_request":  {"access.requests", map[string]string{"approved": "granted", "rejected": "rejected"}},
+        "trip_request":    {"trips.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
 }
 
 // decide approves or rejects one of the caller's pending items and propagates the decision to the request.
@@ -1154,6 +1207,20 @@ WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Dec
         <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov8" title="1">{
                 return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
         }</span>
+        <span class="cov8" title="1">if it.Kind == "absence_request" &amp;&amp; in.Decision == "approved" </span><span class="cov8" title="1">{
+                // The HR admin registers the approved day off in the HR system and the HR BP of the employee is notified
+                // (organizers' Q&amp;A 10.11: a day off involves the lead, the HR admin and the HR BP). In this imitation both
+                // happen at once; a real HR system would report them asynchronously.
+                if _, err := tx.Exec(ctx, `
+UPDATE absence.requests r SET
+    hr_admin_id = (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1),
+    registered_at = now(),
+    hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
+    hrbp_notified_at = now()
+WHERE r.id = $1`, it.RefID); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("register absence: %w", err)
+                }</span>
+        }
         <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("commit: %w", err)
         }</span>
@@ -1254,7 +1321,206 @@ func template(ctx context.Context, pool *pgxpool.Pool, role string) (any, error)
 }
 </pre>
 		
-		<pre class="file" id="file5" style="display: none">// Package directory implements the mock "directory" MCP server: who the caller is and whom to ask (S2, CL-02, CL-03).
+		<pre class="file" id="file5" style="display: none">// Package consents implements the mock "consents" MCP server: an employee's consents with their statuses (case
+// «Пространство решений»: согласия). Data is synthetic (R68). Consents signed in the HR portal at hire (personal data,
+// NDA) are only shown; voluntary ones (photo and video, surveys) can be signed by the employee from the JWT after
+// explicit confirmation (R71). Signing is idempotent by key (R79).
+package consents
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Register binds every tool of the consents contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("consents: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "consents" </span><span class="cov8" title="1">{
+                return fmt.Errorf("consents: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool}
+        srv.Handle("list", s.list)
+        srv.Handle("sign", s.sign)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+}
+
+type consent struct {
+        ConsentID   string `json:"consent_id"`
+        Title       string `json:"title"`
+        Description string `json:"description,omitempty"`
+        Signable    bool   `json:"signable"`
+        Required    bool   `json:"required"`
+        Status      string `json:"status"`
+        SignedVia   string `json:"signed_via,omitempty"`
+        SignedAt    string `json:"signed_at,omitempty"`
+}
+
+type listOut struct {
+        Items []consent `json:"items"`
+}
+
+// list returns every consent type with the caller's status.
+func (s *service) list(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, `
+SELECT t.id, t.title, t.description, t.signable, t.required, g.via, g.signed_at
+FROM consents.types t
+LEFT JOIN consents.signatures g ON g.consent_id = t.id AND g.employee_id = $1
+ORDER BY t.position, t.id`, c.Sub)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list consents: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (consent, error) </span><span class="cov8" title="1">{
+                var (
+                        it  consent
+                        via *string
+                        at  *time.Time
+                )
+                err := row.Scan(&amp;it.ConsentID, &amp;it.Title, &amp;it.Description, &amp;it.Signable, &amp;it.Required, &amp;via, &amp;at)
+                it.Status = "not_signed"
+                if at != nil </span><span class="cov8" title="1">{
+                        it.Status, it.SignedVia, it.SignedAt = "signed", *via, at.UTC().Format(time.RFC3339)
+                }</span>
+                <span class="cov8" title="1">return it, err</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan consents: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []consent{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+type signIn struct {
+        ConsentID      string `json:"consent_id"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+type signature struct {
+        ID        string `json:"id"`
+        ConsentID string `json:"consent_id"`
+        Title     string `json:"title"`
+        Status    string `json:"status"`
+        SignedAt  string `json:"signed_at"`
+        Replayed  *bool  `json:"replayed,omitempty"`
+
+        employeeID string
+        key        string
+}
+
+func findSignature(ctx context.Context, q pgx.Tx, where string, args ...any) (signature, bool, error) <span class="cov8" title="1">{
+        var (
+                g  signature
+                at time.Time
+        )
+        err := q.QueryRow(ctx, `
+SELECT g.id, g.consent_id, t.title, g.signed_at, g.employee_id, coalesce(g.idempotency_key::text, '')
+FROM consents.signatures g JOIN consents.types t ON t.id = g.consent_id
+WHERE `+where, args...).Scan(&amp;g.ID, &amp;g.ConsentID, &amp;g.Title, &amp;at, &amp;g.employeeID, &amp;g.key)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return signature{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return signature{}, false, fmt.Errorf("query signature: %w", err)
+        }</span>
+        <span class="cov8" title="1">g.Status, g.SignedAt = "signed", at.UTC().Format(time.RFC3339)
+        return g, true, nil</span>
+}
+
+// sign records the caller's voluntary consent. Consents signed only in the HR portal are refused; a consent signed
+// before is a conflict; the same key returns the stored signature with replayed=true.
+func (s *service) sign(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in signIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "consents:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findSignature(ctx, tx, "g.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.ConsentID != in.ConsentID </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                prev.Replayed = &amp;replayed
+                return prev, nil</span>
+        }
+        <span class="cov8" title="1">var (
+                title    string
+                signable bool
+        )
+        err = tx.QueryRow(ctx, `SELECT title, signable FROM consents.types WHERE id = $1`, in.ConsentID).Scan(&amp;title, &amp;signable)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.NotFound().WithMessage("Такого согласия нет")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("load consent: %w", err)
+        }</span>
+        <span class="cov8" title="1">if !signable </span><span class="cov8" title="1">{
+                return nil, apierr.Forbidden().WithMessage("«" + title + "» подписывается только в кадровом портале при оформлении")
+        }</span>
+        <span class="cov8" title="1">if done, ok, err := findSignature(ctx, tx, "g.employee_id = $1 AND g.consent_id = $2", c.Sub, in.ConsentID); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span> else<span class="cov8" title="1"> if ok </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Согласие «" + title + "» уже подписано (" + done.ID + ")")
+        }</span>
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO consents.signatures (employee_id, consent_id, via, idempotency_key)
+VALUES ($1, $2, 'buddy', $3::uuid) RETURNING id`, c.Sub, in.ConsentID, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert signature: %w", err)
+        }</span>
+        <span class="cov8" title="1">out, _, err := findSignature(ctx, tx, "g.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">out.Replayed = new(bool)
+        return out, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">// Package directory implements the mock "directory" MCP server: who the caller is and whom to ask (S2, CL-02, CL-03).
 // Data is synthetic (R68). Identity comes only from the verified JWT (R71).
 package directory
 
@@ -1378,7 +1644,7 @@ func contacts(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller) (any, erro
 }
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">// Package kb implements the mock "kb" MCP server: the synthetic knowledge base with ACL applied before anything
+		<pre class="file" id="file7" style="display: none">// Package kb implements the mock "kb" MCP server: the synthetic knowledge base with ACL applied before anything
 // reaches the LLM (R71). Every document is a test instruction of the prototype (R69).
 package kb
 
@@ -1526,7 +1792,7 @@ func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body,
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">package kb
+		<pre class="file" id="file8" style="display: none">package kb
 
 import (
         "bytes"
@@ -1688,6 +1954,342 @@ func parseDoc(raw []byte) (document, error) <span class="cov8" title="1">{
                 }</span>
         }
         <span class="cov8" title="1">return d, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">// Package trips implements the mock "trips" MCP server: business trips between Avito offices (case «Пространство
+// решений»: командировки). Data is synthetic (R68). Identity comes only from the verified JWT (R71): a caller sees and
+// creates only own requests; the approver is the caller's lead, who decides through approvals.decide. Requests are
+// idempotent by key (R79).
+package trips
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "slices"
+        "strings"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Offices where a trip can go (test data of the prototype).
+var Offices = []string{"Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"}
+
+const (
+        minNoticeDays = 5  // a trip is requested at least this many days ahead
+        maxDays       = 14 // the longest trip in calendar days
+)
+
+// moscow is the business time zone (UTC+3, no DST), as in the absence mock.
+var moscow = time.FixedZone("MSK", 3*60*60)
+
+// Register binds every tool of the trips contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        return register(srv, pool, time.Now)
+}</span>
+
+func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil || now == nil </span><span class="cov8" title="1">{
+                return errors.New("trips: server, pool and clock are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "trips" </span><span class="cov8" title="1">{
+                return fmt.Errorf("trips: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool, now: now}
+        srv.Handle("get_policy", s.getPolicy)
+        srv.Handle("list_my_requests", s.listMyRequests)
+        srv.Handle("validate_request", s.validateRequest)
+        srv.Handle("create_request", s.createRequest)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+        now  func() time.Time
+}
+
+type querier interface {
+        Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+        QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type request struct {
+        ID                  string `json:"id"`
+        City                string `json:"city"`
+        StartDate           string `json:"start_date"`
+        EndDate             string `json:"end_date"`
+        Purpose             string `json:"purpose"`
+        Status              string `json:"status"`
+        ApproverID          string `json:"approver_id"`
+        ApproverDisplayName string `json:"approver_display_name,omitempty"`
+        CreatedAt           string `json:"created_at"`
+        Replayed            *bool  `json:"replayed,omitempty"`
+
+        employeeID string
+}
+
+const selectRequest = `
+SELECT r.id, r.city, r.start_date, r.end_date, r.purpose, r.status, r.approver_id, coalesce(a.display_name, ''),
+       r.created_at, r.employee_id
+FROM trips.requests r
+LEFT JOIN directory.employees a ON a.id = r.approver_id`
+
+func scanRequest(row pgx.CollectableRow) (request, error) <span class="cov8" title="1">{
+        var (
+                r          request
+                start, end time.Time
+                created    time.Time
+        )
+        err := row.Scan(&amp;r.ID, &amp;r.City, &amp;start, &amp;end, &amp;r.Purpose, &amp;r.Status, &amp;r.ApproverID, &amp;r.ApproverDisplayName,
+                &amp;created, &amp;r.employeeID)
+        r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
+        r.CreatedAt = created.UTC().Format(time.RFC3339)
+        return r, err
+}</span>
+
+func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) <span class="cov8" title="1">{
+        rows, err := q.Query(ctx, selectRequest+" WHERE "+where, arg)
+        if err != nil </span><span class="cov0" title="0">{
+                return request{}, false, fmt.Errorf("query trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">r, err := pgx.CollectOneRow(rows, scanRequest)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return request{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return request{}, false, fmt.Errorf("scan trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">return r, true, nil</span>
+}
+
+// --- get_policy ---
+
+type policy struct {
+        Offices       []string `json:"offices"`
+        MinNoticeDays int      `json:"min_notice_days"`
+        MaxDays       int      `json:"max_days"`
+        Text          string   `json:"text"`
+}
+
+func (s *service) getPolicy(context.Context, mcpx.Caller, json.RawMessage) (any, error) <span class="cov8" title="1">{
+        return policy{Offices: Offices, MinNoticeDays: minNoticeDays, MaxDays: maxDays, Text: fmt.Sprintf(
+                "Командировка в другой офис Авито согласуется руководителем. Подать заявку нужно не позже чем за %d дней, "+
+                        "длительность — до %d дней. Билеты и гостиницу после согласования бронирует служба командировок "+
+                        "(тестовые правила прототипа).", minNoticeDays, maxDays)}, nil
+}</span>
+
+// --- list_my_requests ---
+
+type listOut struct {
+        Items []request `json:"items"`
+}
+
+func (s *service) listMyRequests(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, selectRequest+`
+WHERE r.employee_id = $1
+ORDER BY r.start_date DESC, r.id DESC
+LIMIT 100`, c.Sub)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list trip requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, scanRequest)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan trip requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []request{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+// --- validate_request ---
+
+type tripIn struct {
+        City      string `json:"city"`
+        StartDate string `json:"start_date"`
+        EndDate   string `json:"end_date"`
+        Purpose   string `json:"purpose"`
+}
+
+type validateOut struct {
+        Valid               bool     `json:"valid"`
+        Problems            []string `json:"problems"`
+        ApproverID          string   `json:"approver_id,omitempty"`
+        ApproverDisplayName string   `json:"approver_display_name,omitempty"`
+}
+
+func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in tripIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return s.validate(ctx, s.pool, c, in)</span>
+}
+
+// validate checks a new trip of c: a known office other than the employee's own city, dates, notice, length, no
+// overlap with another trip; the approver is the employee's lead.
+func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in tripIn) (validateOut, error) <span class="cov8" title="1">{
+        out := validateOut{Problems: []string{}}
+        start, errStart := time.Parse(time.DateOnly, in.StartDate)
+        end, errEnd := time.Parse(time.DateOnly, in.EndDate)
+        if errStart != nil || errEnd != nil </span><span class="cov0" title="0">{
+                return out, apierr.Validation().WithMessage("Даты должны быть в формате ГГГГ-ММ-ДД")
+        }</span>
+        <span class="cov8" title="1">var leadID, leadName, home *string
+        err := q.QueryRow(ctx, `
+SELECT e.lead_id, l.display_name, e.location
+FROM directory.employees e LEFT JOIN directory.employees l ON l.id = e.lead_id
+WHERE e.id = $1`, c.Sub).Scan(&amp;leadID, &amp;leadName, &amp;home)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                return out, apierr.Forbidden().WithMessage("Сотрудник не найден в справочнике")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return out, fmt.Errorf("load employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">city := strings.TrimSpace(in.City)
+        switch </span>{
+        case !slices.Contains(Offices, city):<span class="cov8" title="1">
+                out.Problems = append(out.Problems, "Офиса в этом городе нет. Доступно: "+strings.Join(Offices, ", "))</span>
+        case home != nil &amp;&amp; *home == city:<span class="cov8" title="1">
+                out.Problems = append(out.Problems, "Это ваш город: командировка оформляется только в другой офис")</span>
+        }
+        <span class="cov8" title="1">y, m, d := s.now().In(moscow).Date()
+        earliest := time.Date(y, m, d+minNoticeDays, 0, 0, 0, 0, time.UTC)
+        if start.Before(earliest) </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, fmt.Sprintf("Заявку подают не позже чем за %d дней: начало не раньше %s",
+                        minNoticeDays, earliest.Format("02.01.2006")))
+        }</span>
+        <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Дата окончания не может быть раньше даты начала")
+        }</span> else<span class="cov8" title="1"> {
+                if days := int(end.Sub(start).Hours()/24) + 1; days &gt; maxDays </span><span class="cov8" title="1">{
+                        out.Problems = append(out.Problems, fmt.Sprintf("Командировка длится не больше %d дней, у вас %d", maxDays, days))
+                }</span>
+                <span class="cov8" title="1">var other string
+                err := q.QueryRow(ctx, `
+SELECT id FROM trips.requests
+WHERE employee_id = $1 AND status IN ('pending_approval', 'approved') AND start_date &lt;= $3::date AND end_date &gt;= $2::date
+ORDER BY start_date LIMIT 1`, c.Sub, in.StartDate, in.EndDate).Scan(&amp;other)
+                if err == nil </span><span class="cov8" title="1">{
+                        out.Problems = append(out.Problems, "Даты пересекаются с другой командировкой ("+other+")")
+                }</span> else<span class="cov8" title="1"> if !errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                        return out, fmt.Errorf("check overlap: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">if strings.TrimSpace(in.Purpose) == "" </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Укажите цель командировки")
+        }</span>
+        <span class="cov8" title="1">if leadID == nil </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Не удалось определить согласующего: в справочнике не указан руководитель")
+        }</span> else<span class="cov8" title="1"> {
+                out.ApproverID, out.ApproverDisplayName = *leadID, deref(leadName)
+        }</span>
+        <span class="cov8" title="1">out.Valid = len(out.Problems) == 0
+        return out, nil</span>
+}
+
+// --- create_request ---
+
+type createIn struct {
+        tripIn
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead) and its
+// approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in createIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "trips:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findRequest(ctx, tx, "r.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.City != strings.TrimSpace(in.City) || prev.StartDate != in.StartDate ||
+                        prev.EndDate != in.EndDate || prev.Purpose != strings.TrimSpace(in.Purpose) </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                prev.Replayed = &amp;replayed
+                return prev, nil</span>
+        }
+        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, in.tripIn)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !check.Valid </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
+        }</span>
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO trips.requests (employee_id, city, start_date, end_date, purpose, approver_id, idempotency_key)
+VALUES ($1, $2, $3::date, $4::date, $5, $6, $7::uuid)
+RETURNING id`, c.Sub, strings.TrimSpace(in.City), in.StartDate, in.EndDate, strings.TrimSpace(in.Purpose),
+                check.ApproverID, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">start, _ := time.Parse(time.DateOnly, in.StartDate)
+        end, _ := time.Parse(time.DateOnly, in.EndDate)
+        summary := fmt.Sprintf("Командировка: %s, %s", strings.TrimSpace(in.City), period(start, end))
+        if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('trip_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, summary); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">created, _, err := findRequest(ctx, tx, "r.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">created.Replayed = new(bool)
+        return created, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другой заявки, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+
+func period(start, end time.Time) string <span class="cov8" title="1">{
+        if start.Equal(end) </span><span class="cov8" title="1">{
+                return start.Format("02.01.2006")
+        }</span>
+        <span class="cov8" title="1">return start.Format("02.01.2006") + "–" + end.Format("02.01.2006")</span>
+}
+
+func deref(s *string) string <span class="cov8" title="1">{
+        if s == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov8" title="1">return *s</span>
 }
 </pre>
 		

@@ -36,28 +36,28 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>4/4</span>
+                <span class='fraction'>9/9</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>5/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>3/3</span>
+                <span class='fraction'>6/6</span>
             </div>
         
             
@@ -91,16 +91,52 @@
 <a name='L15'></a><a href='#L15'>15</a>
 <a name='L16'></a><a href='#L16'>16</a>
 <a name='L17'></a><a href='#L17'>17</a>
-<a name='L18'></a><a href='#L18'>18</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">151x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">152x</span>
+<span class="cline-any cline-yes">67x</span>
+<span class="cline-any cline-yes">67x</span>
+<span class="cline-any cline-yes">66x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">65x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">65x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -110,19 +146,37 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Badge } from '@/components/ui/Badge'
 import type { Source } from '../stream'
+import { safeUrl } from '../attachments'
 &nbsp;
-// R69: every KB answer shows that the source is a test instruction of the prototype.
+// R69: every KB answer shows that the source is a test instruction of the prototype. Web search results for general
+// technical questions are public pages: they open in a new tab and carry «Внешний источник», never the KB badge.
 export function SourceChips({ sources }: { sources: Source[] }) {
   if (sources.length === 0) return null
+  const kb = sources.filter((s) =&gt; s.source_type === 'test')
+  const web = sources.filter((s) =&gt; s.source_type === 'external')
   return (
-    &lt;div className="chat-sources" aria-label="Источники"&gt;
-      {sources.map((s) =&gt; (
-        &lt;span key={s.doc_id} className="chat-chip"&gt;
-          {s.title}
-        &lt;/span&gt;
-      ))}
-      &lt;Badge variant="test" /&gt;
-    &lt;/div&gt;
+    &lt;&gt;
+      {kb.length &gt; 0 &amp;&amp; (
+        &lt;div className="chat-sources" aria-label="Источники"&gt;
+          {kb.map((s) =&gt; (
+            &lt;span key={s.doc_id} className="chat-chip"&gt;
+              {s.title}
+            &lt;/span&gt;
+          ))}
+          &lt;Badge variant="test" /&gt;
+        &lt;/div&gt;
+      )}
+      {web.length &gt; 0 &amp;&amp; (
+        &lt;div className="chat-sources" aria-label="Внешние источники"&gt;
+          {web.map((s) =&gt; (
+            &lt;a key={s.doc_id} className="chat-chip chat-chip-link" href={safeUrl(s.url)} target="_blank" rel="noopener noreferrer"&gt;
+              {s.title}
+            &lt;/a&gt;
+          ))}
+          &lt;Badge variant="external" /&gt;
+        &lt;/div&gt;
+      )}
+    &lt;/&gt;
   )
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -132,7 +186,7 @@ export function SourceChips({ sources }: { sources: Source[] }) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-10T18:38:33.784Z
+                at 2026-11-11T09:44:58.208Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

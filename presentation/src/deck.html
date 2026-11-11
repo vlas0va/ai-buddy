@@ -219,6 +219,31 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
 </section>
 
 <section class="s">
+  <div class="kicker">Ответы организаторов 10.11 · Пространство решений</div>
+  <h2>Командировки, согласия и шаги HR в отгуле</h2>
+  <div class="grid2" style="grid-template-columns:1.25fr 1fr">
+    <div class="shotwrap"><img class="shot" src="img/ex-trip.png"></div>
+    <div><ul class="clean">
+      <li>Командировка в другой офис: город, даты и цель одним сообщением → проверка в trips MCP → черновик → TRP-… → согласует руководитель</li>
+      <li>Билеты и гостиницу buddy не бронирует и не оплачивает — это служба командировок</li>
+      <li>Согласия: статусы обязательных (подписаны в кадровом портале) и подпись добровольных после «Отправить»; отзыв — через HR BP</li>
+      <li>Отгул: руководитель согласует → HR-администратор оформляет → HR BP получает уведомление; шаги видны в заявке</li>
+    </ul></div>
+  </div>
+  <div class="foot"><span>MCP-серверы trips и consents, те же права и токен подтверждения, что у отгула</span><span>12</span></div>
+</section>
+
+<section class="s">
+  <div class="kicker">Инженерный онбординг</div>
+  <h2>Файлы в чате и поиск по открытым источникам</h2>
+  <div class="grid2">
+    <div class="shotwrap"><img class="shot" src="img/ex-file.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/ex-web.png"></div>
+  </div>
+  <div class="foot"><span>Лог и конфиг — секреты скрыты до обработки; скриншоты и документы не читаются; общий техвопрос — «Внешний источник», не правила Авито</span><span>13</span></div>
+</section>
+
+<section class="s">
   <div class="kicker">Безопасность и данные</div>
   <h2>Пять рубежей: ошибка модели не превращается в утечку</h2>
   <div class="grid2" style="grid-template-columns:1.1fr 1fr">
@@ -231,7 +256,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
     </div>
     <div class="shotwrap"><img class="shot" src="img/guard.png"></div>
   </div>
-  <div class="foot"><span>Guard-метрики eval — 100%; синтетические данные, без ПДн и денежных операций</span><span>12</span></div>
+  <div class="foot"><span>Guard-метрики eval — 100%; синтетические данные, без ПДн и денежных операций</span><span>14</span></div>
 </section>
 
 <section class="s">
@@ -246,7 +271,7 @@ core (Go): REST, SSE-прокси, план, журнал действий,
 agent (Python): роутер, сценарии, RAG с ACL, LLM
    │  MCP · streamable HTTP · JWT пользователя
    ▼
-absence · access · directory · kb · approvals · calendar</pre>
+absence · access · directory · kb · approvals · checklist · trips · consents</pre>
     <div><ul class="clean">
       <li><b>Один конфиг</b> <code>agent.yaml</code>: промпт, модель, MCP-серверы, инструменты по ролям. Новая система = MCP-сервер + строка</li>
       <li><b>Свои мощности</b>: A-Vibe (<code>AvitoTech/avibe</code>) через vLLM, Ollama на ноутбуке или любой OpenAI-совместимый API — одной переменной</li>
@@ -255,7 +280,7 @@ absence · access · directory · kb · approvals · calendar</pre>
       <li><b>Одна команда</b> запуска, healthchecks, CI поднимает стек и гоняет e2e</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Confluence, Jira, Bitbucket — как в Авито; моки заменяются реальными MCP без изменения агента</span><span>13</span></div>
+  <div class="foot"><span>Confluence, Jira, Bitbucket — как в Авито; моки заменяются реальными MCP без изменения агента</span><span>15</span></div>
 </section>
 
 <section class="s">
@@ -263,17 +288,17 @@ absence · access · directory · kb · approvals · calendar</pre>
   <h2>Проверено автотестами, а не только на демо</h2>
   <div class="grid4" style="margin-bottom:22px">
     <div class="card"><div class="big">97%</div><p>покрытие строк агента и web; Go-сервисы ≥ 80%, CI падает ниже</p></div>
-    <div class="card"><div class="big">118</div><p>кейсов eval качества ответов, 100%; guard-метрики 100%</p></div>
-    <div class="card"><div class="big">21</div><p>e2e-тест Playwright на запущенном стеке — по спеке на сценарий</p></div>
-    <div class="card"><div class="big">157/157</div><p>сценариев OpenSpec трассируются в тесты (spec-first)</p></div>
+    <div class="card"><div class="big">134</div><p>кейса eval качества ответов, 100%; guard-метрики 100%</p></div>
+    <div class="card"><div class="big">27</div><p>e2e-тестов Playwright на запущенном стеке — по спеке на сценарий</p></div>
+    <div class="card"><div class="big">180/180</div><p>сценариев OpenSpec трассируются в тесты (spec-first)</p></div>
   </div>
   <table class="t">
     <tr><th>Что</th><th>Как</th></tr>
-    <tr><td>Юнит и интеграция</td><td>34 Go-пакета на одноразовом Postgres · 190 тестов агента · 150+ тестов web (vitest)</td></tr>
+    <tr><td>Юнит и интеграция</td><td>36 Go-пакетов на одноразовом Postgres · 215 тестов агента · 159 тестов web (vitest)</td></tr>
     <tr><td>Роутер намерений</td><td>обученная логистическая регрессия, 95% на отложенном наборе; обучается за секунды</td></tr>
     <tr><td>Отзывчивость</td><td>локальные действия &lt; 1 с (оптимистичные обновления); LLM и сервисы — SSE, статус ожидания, «Повторить» при сбое</td></tr>
   </table>
-  <div class="foot"><span>make test · make coverage · make eval · make e2e · make smoke</span><span>14</span></div>
+  <div class="foot"><span>make test · make coverage · make eval · make e2e · make smoke</span><span>16</span></div>
 </section>
 
 <section class="s">
@@ -296,7 +321,7 @@ absence · access · directory · kb · approvals · calendar</pre>
       <li>Стоп-критерий: любой сбой guard-метрик — флаг выключается для всех</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Подробно: docs/product/metrics.md</span><span>15</span></div>
+  <div class="foot"><span>Подробно: docs/product/metrics.md</span><span>17</span></div>
 </section>
 
 <section class="s">
@@ -308,6 +333,6 @@ absence · access · directory · kb · approvals · calendar</pre>
     <div class="card"><h3>Масштабирование</h3><p style="font-size:17px">Чек-листы всех направлений (backend, frontend, аналитика, ML) · точка входа для выпускников и новых сотрудников · раскатка по когортам по результатам пилота</p></div>
   </div>
   <div class="card" style="margin-top:20px"><h3>Проверить самим</h3><p style="font-size:17px"><code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> → http://localhost:5173 · учётки <code>intern.anna</code>, <code>mentor.oleg</code>, <code>lead.maria</code>, пароль <code>demo</code> · порядок проверки — в README</p></div>
-  <div class="foot"><span>github.com/Eliz-Kory/AI-Buddy</span><span>16</span></div>
+  <div class="foot"><span>github.com/Eliz-Kory/AI-Buddy</span><span>18</span></div>
 </section>
 </body></html>

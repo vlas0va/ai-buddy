@@ -55,7 +55,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">aibuddy/services/internal/core/actions/actions.go (90.0%)</option>
+				<option value="file0">aibuddy/services/internal/core/actions/actions.go (89.0%)</option>
 				
 				<option value="file1">aibuddy/services/internal/core/actions/http.go (84.6%)</option>
 				
@@ -75,29 +75,31 @@
 				
 				<option value="file9">aibuddy/services/internal/core/authapi/authapi.go (84.5%)</option>
 				
-				<option value="file10">aibuddy/services/internal/core/chat/chat.go (92.9%)</option>
+				<option value="file10">aibuddy/services/internal/core/chat/attachments.go (92.6%)</option>
 				
-				<option value="file11">aibuddy/services/internal/core/chat/confirm.go (83.0%)</option>
+				<option value="file11">aibuddy/services/internal/core/chat/chat.go (92.0%)</option>
 				
-				<option value="file12">aibuddy/services/internal/core/chat/context.go (87.2%)</option>
+				<option value="file12">aibuddy/services/internal/core/chat/confirm.go (83.4%)</option>
 				
-				<option value="file13">aibuddy/services/internal/core/chat/message.go (92.4%)</option>
+				<option value="file13">aibuddy/services/internal/core/chat/context.go (87.2%)</option>
 				
-				<option value="file14">aibuddy/services/internal/core/cron/cron.go (87.8%)</option>
+				<option value="file14">aibuddy/services/internal/core/chat/message.go (91.7%)</option>
 				
-				<option value="file15">aibuddy/services/internal/core/escalations/escalations.go (83.5%)</option>
+				<option value="file15">aibuddy/services/internal/core/cron/cron.go (85.6%)</option>
 				
-				<option value="file16">aibuddy/services/internal/core/flags/flags.go (90.0%)</option>
+				<option value="file16">aibuddy/services/internal/core/escalations/escalations.go (83.5%)</option>
 				
-				<option value="file17">aibuddy/services/internal/core/mcpclient/mcpclient.go (94.6%)</option>
+				<option value="file17">aibuddy/services/internal/core/flags/flags.go (90.0%)</option>
 				
-				<option value="file18">aibuddy/services/internal/core/mcpclient/mcptest/mcptest.go (95.5%)</option>
+				<option value="file18">aibuddy/services/internal/core/mcpclient/mcpclient.go (94.6%)</option>
 				
-				<option value="file19">aibuddy/services/internal/core/notify/notify.go (84.3%)</option>
+				<option value="file19">aibuddy/services/internal/core/mcpclient/mcptest/mcptest.go (95.5%)</option>
 				
-				<option value="file20">aibuddy/services/internal/core/plan/plan.go (89.0%)</option>
+				<option value="file20">aibuddy/services/internal/core/notify/notify.go (84.3%)</option>
 				
-				<option value="file21">aibuddy/services/internal/core/ratelimit/ratelimit.go (100.0%)</option>
+				<option value="file21">aibuddy/services/internal/core/plan/plan.go (89.0%)</option>
+				
+				<option value="file22">aibuddy/services/internal/core/ratelimit/ratelimit.go (100.0%)</option>
 				
 				</select>
 			</div>
@@ -121,6 +123,7 @@ import (
         "errors"
         "fmt"
         "log/slog"
+        "strings"
         "time"
 
         "github.com/jackc/pgx/v5"
@@ -155,6 +158,8 @@ type Notifier interface {
 const (
         KindAbsence = "absence_request"
         KindAccess  = "access_request"
+        KindTrip    = "trip_request"
+        KindConsent = "consent"
 )
 
 // Action statuses (openapi Action.status).
@@ -165,6 +170,7 @@ const (
         StatusGranted         = "granted"
         StatusCreated         = "created"
         StatusFailed          = "failed"
+        StatusSigned          = "signed"
 )
 
 // ErrNotFound is returned when no action matches (ApplyDecision for a request made outside the chat, ByProposal).
@@ -265,7 +271,8 @@ type description struct {
         approverName  string
         taskTitle     string
         checklistItem string  // access: link the checklist task with this item
-        dueAt         *string // absence: the first day off
+        dueAt         *string // absence, trip: the first day
+        noTask        bool    // consent: a signature is not a step of the onboarding plan
 }
 
 // Save records a successful write in q (run it in the transaction that marks the proposal executed): inserts
@@ -298,10 +305,13 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
         <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return Action{}, fmt.Errorf("insert action: %w", err)
         }</span>
-        <span class="cov8" title="1">taskID, err := s.linkTask(ctx, q, in.Claims.Sub, id, d)
-        if err != nil </span><span class="cov0" title="0">{
-                return Action{}, err
-        }</span>
+        <span class="cov8" title="1">var taskID *string
+        if !d.noTask </span><span class="cov8" title="1">{
+                taskID, err = s.linkTask(ctx, q, in.Claims.Sub, id, d)
+                if err != nil </span><span class="cov0" title="0">{
+                        return Action{}, err
+                }</span>
+        }
         <span class="cov8" title="1">if taskID != nil </span><span class="cov8" title="1">{
                 if _, err := q.Exec(ctx, `UPDATE core.actions SET task_id = $2 WHERE id = $1`, id, *taskID); err != nil </span><span class="cov0" title="0">{
                         return Action{}, fmt.Errorf("link action task: %w", err)
@@ -375,6 +385,36 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
                         d.summary = "Доступ: " + resource + " — на согласовании"</span>
                 }
                 <span class="cov8" title="1">return d, nil</span>
+        case KindTrip:<span class="cov8" title="1">
+                var r mcpclient.TripRequest
+                if err := json.Unmarshal(in.Result, &amp;r); err != nil || r.ID == "" </span><span class="cov8" title="1">{
+                        return description{}, fmt.Errorf("trip result without id: %w", apierr.Internal())
+                }</span>
+                <span class="cov8" title="1">name, err := s.displayName(ctx, q, firstNonEmpty(r.ApproverDisplayName, in.ApproverName), &amp;r.ApproverID)
+                if err != nil </span><span class="cov0" title="0">{
+                        return description{}, err
+                }</span>
+                <span class="cov8" title="1">dates := ruDate(r.StartDate)
+                if r.EndDate != "" &amp;&amp; r.EndDate != r.StartDate </span><span class="cov8" title="1">{
+                        dates += "–" + ruDate(r.EndDate)
+                }</span>
+                <span class="cov8" title="1">d := description{externalID: r.ID, status: absenceStatus(r.Status), summary: "Командировка: " + r.City + ", " + dates,
+                        taskTitle: "Командировка: " + r.City, approverName: name}
+                if r.StartDate != "" </span><span class="cov8" title="1">{
+                        d.dueAt = &amp;r.StartDate
+                }</span>
+                <span class="cov8" title="1">if name != "" </span><span class="cov8" title="1">{
+                        d.summary += ", согласующий — " + name
+                }</span>
+                <span class="cov8" title="1">return d, nil</span>
+        case KindConsent:<span class="cov8" title="1">
+                var r mcpclient.ConsentSignature
+                if err := json.Unmarshal(in.Result, &amp;r); err != nil || r.ID == "" </span><span class="cov8" title="1">{
+                        return description{}, fmt.Errorf("consent result without id: %w", apierr.Internal())
+                }</span>
+                <span class="cov8" title="1">title := firstNonEmpty(r.Title, r.ConsentID)
+                return description{externalID: r.ID, status: StatusSigned, summary: "Согласие: " + title + " — подписано",
+                        noTask: true}, nil</span>
         default:<span class="cov8" title="1">
                 return description{}, apierr.Validation().WithMessage("Неизвестный тип действия")</span>
         }
@@ -523,9 +563,54 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
                         Title: decisionTitle(kind, status), Body: a.Summary, DedupeKey: "action:" + a.ID + ":" + status}); err != nil </span><span class="cov8" title="1">{
                         return Action{}, false, fmt.Errorf("notify owner: %w", err)
                 }</span>
+                <span class="cov8" title="1">if kind == KindAbsence &amp;&amp; status == StatusApproved </span><span class="cov8" title="1">{
+                        if err := s.notifyHRBP(ctx, q, a); err != nil </span><span class="cov0" title="0">{
+                                return Action{}, false, err
+                        }</span>
+                }
         }
         <span class="cov8" title="1">a, err = scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
         return a, err == nil, err</span>
+}
+
+// notifyHRBP tells the HR BPs that an approved day off was registered by the HR admin (organizers' Q&amp;A 10.11: a day off
+// involves the lead, the HR admin and the HR BP). The HR BP gets the summary only: no comment, no reason.
+func (s *Service) notifyHRBP(ctx context.Context, q DBTX, a Action) error <span class="cov8" title="1">{
+        rows, err := q.Query(ctx, `SELECT u.id, owner.display_name FROM core.users u, core.users owner
+                WHERE u.role = 'hrbp' AND owner.id = $1 ORDER BY u.id`, a.UserID)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("load hr bp: %w", err)
+        }</span>
+        <span class="cov8" title="1">type target struct{ id, owner string }
+        var targets []target
+        for rows.Next() </span><span class="cov8" title="1">{
+                var t target
+                if err := rows.Scan(&amp;t.id, &amp;t.owner); err != nil </span><span class="cov0" title="0">{
+                        rows.Close()
+                        return fmt.Errorf("scan hr bp: %w", err)
+                }</span>
+                <span class="cov8" title="1">targets = append(targets, t)</span>
+        }
+        <span class="cov8" title="1">rows.Close()
+        if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("load hr bp: %w", err)
+        }</span>
+        <span class="cov8" title="1">for _, t := range targets </span><span class="cov8" title="1">{
+                if err := s.notifier.Create(ctx, q, notify.Notification{UserID: t.id, Kind: notify.KindStatusChange,
+                        Title: "Отгул оформлен: " + t.owner, Body: withoutApprover(a.Summary) + ". Согласован руководителем, HR-администратор оформил в кадровой системе.",
+                        DedupeKey: "hrbp:" + a.ID}); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("notify hr bp: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+// withoutApprover drops the «, согласующий — …» tail of a summary.
+func withoutApprover(s string) string <span class="cov8" title="1">{
+        if i := strings.Index(s, ", согласующий"); i &gt;= 0 </span><span class="cov8" title="1">{
+                return s[:i]
+        }</span>
+        <span class="cov8" title="1">return s</span>
 }
 
 func (s *Service) emit(ctx context.Context, q DBTX, ev analytics.Event) error <span class="cov8" title="1">{
@@ -540,9 +625,9 @@ func (s *Service) emit(ctx context.Context, q DBTX, ev analytics.Event) error <s
 
 func decisionStatus(kind, decision string) (string, error) <span class="cov8" title="1">{
         switch </span>{
-        case decision == "rejected" &amp;&amp; (kind == KindAbsence || kind == KindAccess):<span class="cov8" title="1">
+        case decision == "rejected" &amp;&amp; (kind == KindAbsence || kind == KindAccess || kind == KindTrip):<span class="cov8" title="1">
                 return StatusRejected, nil</span>
-        case decision == "approved" &amp;&amp; kind == KindAbsence:<span class="cov8" title="1">
+        case decision == "approved" &amp;&amp; (kind == KindAbsence || kind == KindTrip):<span class="cov8" title="1">
                 return StatusApproved, nil</span>
         case (decision == "approved" || decision == "granted") &amp;&amp; kind == KindAccess:<span class="cov8" title="1">
                 return StatusGranted, nil</span>
@@ -556,6 +641,10 @@ func decisionTitle(kind, status string) string <span class="cov8" title="1">{
                 return "Отгул согласован"</span>
         case kind == KindAbsence:<span class="cov8" title="1">
                 return "Отгул отклонён"</span>
+        case kind == KindTrip &amp;&amp; status == StatusApproved:<span class="cov8" title="1">
+                return "Командировка согласована"</span>
+        case kind == KindTrip:<span class="cov8" title="1">
+                return "Командировка отклонена"</span>
         case status == StatusGranted:<span class="cov8" title="1">
                 return "Доступ выдан"</span>
         default:<span class="cov0" title="0">
@@ -744,6 +833,17 @@ type Turn struct {
         ProposalID        string          `json:"proposal_id,omitempty"`
         Draft             json.RawMessage `json:"draft,omitempty"`
         ConfirmationToken string          `json:"confirmation_token,omitempty"`
+        Attachments       []Attachment    `json:"attachments,omitempty"`
+}
+
+// Attachment is a file attached to a user message (contracts/agent-stream.md): text files carry their text, images
+// and documents only their metadata.
+type Attachment struct {
+        Name string `json:"name"`
+        Kind string `json:"kind"` // text | image | document
+        Mime string `json:"mime,omitempty"`
+        Size int64  `json:"size"`
+        Text string `json:"text,omitempty"`
 }
 
 // UserContext is what the agent knows about the caller; it is built from verified JWT claims and core's DB (R71).
@@ -2357,7 +2457,80 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) <span class="cov8" 
 }
 </pre>
 		
-		<pre class="file" id="file10" style="display: none">// Package chat serves the chat API (S2, S3, S4): sessions, messages streamed from the agent as SSE, and the
+		<pre class="file" id="file10" style="display: none">package chat
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "strings"
+        "unicode/utf8"
+
+        "aibuddy/services/internal/core/actions"
+        "aibuddy/services/internal/core/agentclient"
+        "aibuddy/services/internal/platform/apierr"
+)
+
+// Attachment bounds (contracts/openapi.yaml MessageAttachment). The browser reads text files (logs, configs, code)
+// and sends their text; for screenshots and documents it sends metadata only, so their content never reaches core,
+// the agent or the LLM.
+const (
+        maxAttachments      = 3
+        maxAttachmentText   = 32 &lt;&lt; 10 // bytes of text of one text attachment
+        maxAttachmentName   = 200      // runes
+        maxAttachmentSize   = 20 &lt;&lt; 20 // declared file size, bytes
+        maxMessageBodyBytes = 256 &lt;&lt; 10
+)
+
+var attachmentKinds = map[string]bool{"text": true, "image": true, "document": true}
+
+// validateAttachments checks and normalizes the attachments of a user message. Text is kept only for kind text.
+func validateAttachments(in []agentclient.Attachment) ([]agentclient.Attachment, error) <span class="cov8" title="1">{
+        if len(in) &gt; maxAttachments </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage(fmt.Sprintf("Можно прикрепить не больше %d файлов", maxAttachments))
+        }</span>
+        <span class="cov8" title="1">out := make([]agentclient.Attachment, 0, len(in))
+        for _, a := range in </span><span class="cov8" title="1">{
+                a.Name = strings.TrimSpace(a.Name)
+                if a.Name == "" || utf8.RuneCountInString(a.Name) &gt; maxAttachmentName </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Имя файла: от 1 до 200 символов")
+                }</span>
+                <span class="cov8" title="1">if !attachmentKinds[a.Kind] </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Тип вложения: text, image или document")
+                }</span>
+                <span class="cov8" title="1">if a.Size &lt; 0 || a.Size &gt; maxAttachmentSize </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Файл больше 20 МБ")
+                }</span>
+                <span class="cov8" title="1">if len(a.Mime) &gt; 100 </span><span class="cov8" title="1">{
+                        a.Mime = a.Mime[:100]
+                }</span>
+                <span class="cov8" title="1">if a.Kind != "text" </span><span class="cov8" title="1">{
+                        a.Text = ""
+                }</span> else<span class="cov8" title="1"> if len(a.Text) &gt; maxAttachmentText </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Текст файла: до 32 КБ, пришлите нужный фрагмент")
+                }</span>
+                <span class="cov8" title="1">out = append(out, a)</span>
+        }
+        <span class="cov8" title="1">return out, nil</span>
+}
+
+// saveAttachments stores the attachments of a user message.
+func saveAttachments(ctx context.Context, q actions.DBTX, messageID string, atts []agentclient.Attachment) error <span class="cov8" title="1">{
+        if len(atts) == 0 </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">raw, err := json.Marshal(atts)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("encode attachments: %w", err)
+        }</span>
+        <span class="cov8" title="1">if _, err := q.Exec(ctx, `UPDATE core.chat_messages SET attachments = $2 WHERE id = $1`, messageID, raw); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("save attachments: %w", err)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">// Package chat serves the chat API (S2, S3, S4): sessions, messages streamed from the agent as SSE, and the
 // confirmation of write proposals (contracts/agent-stream.md, contracts/openapi.yaml).
 //
 // Message turn: core saves the user message, builds user_context from verified JWT claims and its own DB (R71),
@@ -2545,11 +2718,20 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) <span cl
 
 // Message is the openapi ChatMessage.
 type Message struct {
-        ID        string            `json:"id"`
-        Author    string            `json:"author"`
-        Text      string            `json:"text"`
-        Sources   []json.RawMessage `json:"sources"`
-        CreatedAt string            `json:"created_at"`
+        ID          string            `json:"id"`
+        Author      string            `json:"author"`
+        Text        string            `json:"text"`
+        Sources     []json.RawMessage `json:"sources"`
+        Attachments []attachmentMeta  `json:"attachments"`
+        CreatedAt   string            `json:"created_at"`
+}
+
+// attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
+type attachmentMeta struct {
+        Name string `json:"name"`
+        Kind string `json:"kind"`
+        Mime string `json:"mime,omitempty"`
+        Size int64  `json:"size"`
 }
 
 const messagesLimit = 200
@@ -2564,7 +2746,7 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) <span class
                 apierr.WriteJSON(w, err)
                 return
         }</span>
-        <span class="cov8" title="1">rows, err := h.pool.Query(r.Context(), `SELECT id::text, author, text, sources,
+        <span class="cov8" title="1">rows, err := h.pool.Query(r.Context(), `SELECT id::text, author, text, sources, attachments,
                 to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
                 FROM (SELECT * FROM core.chat_messages WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2) m
                 ORDER BY created_at, id`, sid, messagesLimit)
@@ -2576,13 +2758,16 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) <span class
         out := []Message{}
         for rows.Next() </span><span class="cov8" title="1">{
                 var m Message
-                var sources []byte
-                if err := rows.Scan(&amp;m.ID, &amp;m.Author, &amp;m.Text, &amp;sources, &amp;m.CreatedAt); err != nil </span><span class="cov0" title="0">{
+                var sources, atts []byte
+                if err := rows.Scan(&amp;m.ID, &amp;m.Author, &amp;m.Text, &amp;sources, &amp;atts, &amp;m.CreatedAt); err != nil </span><span class="cov0" title="0">{
                         apierr.WriteJSON(w, fmt.Errorf("scan message: %w", err))
                         return
                 }</span>
                 <span class="cov8" title="1">if err := json.Unmarshal(sources, &amp;m.Sources); err != nil || m.Sources == nil </span><span class="cov0" title="0">{
                         m.Sources = []json.RawMessage{}
+                }</span>
+                <span class="cov8" title="1">if err := json.Unmarshal(atts, &amp;m.Attachments); err != nil || m.Attachments == nil </span><span class="cov0" title="0">{
+                        m.Attachments = []attachmentMeta{}
                 }</span>
                 <span class="cov8" title="1">out = append(out, m)</span>
         }
@@ -2687,7 +2872,7 @@ func str(m map[string]json.RawMessage, key string) string <span class="cov8" tit
 }</span>
 </pre>
 		
-		<pre class="file" id="file11" style="display: none">package chat
+		<pre class="file" id="file12" style="display: none">package chat
 
 import (
         "context"
@@ -3255,6 +3440,20 @@ func checkResult(d draft, result map[string]json.RawMessage) error <span class="
                 <span class="cov8" title="1">if !strings.HasPrefix(id, "ACC-") || (status != actions.StatusPendingApproval &amp;&amp; status != actions.StatusGranted) </span><span class="cov8" title="1">{
                         return fmt.Errorf("new access request %q has status %q", id, status)
                 }</span>
+        case mcpclient.ToolCreateTrip:<span class="cov8" title="1">
+                if err := same("city", "start_date", "end_date"); err != nil </span><span class="cov8" title="1">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">if !strings.HasPrefix(id, "TRP-") || status != actions.StatusPendingApproval </span><span class="cov8" title="1">{
+                        return fmt.Errorf("new trip request %q has status %q", id, status)
+                }</span>
+        case mcpclient.ToolSignConsent:<span class="cov8" title="1">
+                if err := same("consent_id"); err != nil </span><span class="cov8" title="1">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">if !strings.HasPrefix(id, "CNS-") || status != actions.StatusSigned </span><span class="cov8" title="1">{
+                        return fmt.Errorf("new consent signature %q has status %q", id, status)
+                }</span>
         case mcpclient.ToolDecideApproval:<span class="cov8" title="1">
                 if id == "" || id != str(args, "approval_id") || status != str(args, "decision") || (status != "approved" &amp;&amp; status != "rejected") </span><span class="cov8" title="1">{
                         return fmt.Errorf("decision %q/%q differs from the confirmed %q/%q", id, status, str(args, "approval_id"), str(args, "decision"))
@@ -3266,7 +3465,7 @@ func checkResult(d draft, result map[string]json.RawMessage) error <span class="
 }
 </pre>
 		
-		<pre class="file" id="file12" style="display: none">package chat
+		<pre class="file" id="file13" style="display: none">package chat
 
 import (
         "context"
@@ -3438,7 +3637,7 @@ func (h *Handler) history(ctx context.Context, sessionID, exceptID string) ([]ag
 }
 </pre>
 		
-		<pre class="file" id="file13" style="display: none">package chat
+		<pre class="file" id="file14" style="display: none">package chat
 
 import (
         "bytes"
@@ -3468,6 +3667,8 @@ const kindApprovalDecision = "approval_decision"
 var allowedTools = map[string]string{
         "absence_request":    mcpclient.ToolCreateAbsence,
         "access_request":     mcpclient.ToolRequestAccess,
+        "trip_request":       mcpclient.ToolCreateTrip,
+        "consent":            mcpclient.ToolSignConsent,
         kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
 }
 
@@ -3574,14 +3775,20 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) <span clas
                 return
         }</span>
         <span class="cov8" title="1">var body struct {
-                Text string `json:"text"`
+                Text        string                   `json:"text"`
+                Attachments []agentclient.Attachment `json:"attachments"`
         }
-        if err := httpx.ReadJSONLimit(w, r, &amp;body, 64&lt;&lt;10); err != nil </span><span class="cov8" title="1">{
+        if err := httpx.ReadJSONLimit(w, r, &amp;body, maxMessageBodyBytes); err != nil </span><span class="cov8" title="1">{
+                apierr.WriteJSON(w, err)
+                return
+        }</span>
+        <span class="cov8" title="1">atts, err := validateAttachments(body.Attachments)
+        if err != nil </span><span class="cov8" title="1">{
                 apierr.WriteJSON(w, err)
                 return
         }</span>
         <span class="cov8" title="1">text := strings.TrimSpace(body.Text)
-        if text == "" || utf8.RuneCountInString(text) &gt; maxTextRunes </span><span class="cov8" title="1">{
+        if (text == "" &amp;&amp; len(atts) == 0) || utf8.RuneCountInString(text) &gt; maxTextRunes </span><span class="cov8" title="1">{
                 apierr.WriteJSON(w, apierr.Validation().WithMessage("Сообщение: от 1 до 4000 символов"))
                 return
         }</span>
@@ -3600,7 +3807,11 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) <span clas
                 apierr.WriteJSON(w, err)
                 return
         }</span>
-        <span class="cov8" title="1">h.emit(ctx, c, "chat.message_sent", map[string]any{"session_id": sid})
+        <span class="cov8" title="1">if err := saveAttachments(ctx, h.pool, userMsgID, atts); err != nil </span><span class="cov0" title="0">{
+                apierr.WriteJSON(w, err)
+                return
+        }</span>
+        <span class="cov8" title="1">h.emit(ctx, c, "chat.message_sent", map[string]any{"session_id": sid, "attachments": len(atts)})
         uc, flags, err := h.userContext(ctx, c)
         if err != nil </span><span class="cov8" title="1">{
                 apierr.WriteJSON(w, err)
@@ -3620,7 +3831,7 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) <span clas
         started := h.Now()
         assistantID := newUUID()
         stream, err := h.agent.Turn(ctx, token, agentclient.TurnRequest{SessionID: sid, MessageID: assistantID,
-                Turn: agentclient.Turn{Kind: agentclient.KindMessage, Text: text}, UserContext: uc, History: hist, Flags: flags})
+                Turn: agentclient.Turn{Kind: agentclient.KindMessage, Text: text, Attachments: atts}, UserContext: uc, History: hist, Flags: flags})
         if err != nil </span><span class="cov8" title="1">{
                 h.log.Warn("agent turn failed", "session", sid, "err", err)
                 _ = sse.Send(agentclient.EventError, agentError(err))
@@ -3803,7 +4014,7 @@ func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID s
 }
 </pre>
 		
-		<pre class="file" id="file14" style="display: none">// Package cron is the AI-cron: a periodic job that marks overdue plan tasks and sends reminders to interns and
+		<pre class="file" id="file15" style="display: none">// Package cron is the AI-cron: a periodic job that marks overdue plan tasks and sends reminders to interns and
 // mentors (R54). Texts are fixed Russian templates, no LLM is involved.
 //
 // Per plan the job (1) stores status 'overdue' on open tasks whose due date has passed, (2) creates one notification
@@ -3911,11 +4122,11 @@ func (r *Runner) RunOnce(ctx context.Context) (Result, error) <span class="cov8"
                 <span class="cov8" title="1">plans = append(plans, p)</span>
         }
         <span class="cov8" title="1">rows.Close()
-        if err := rows.Err(); err != nil </span><span class="cov8" title="1">{
+        if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
                 return res, fmt.Errorf("read plans: %w", err)
         }</span>
         <span class="cov8" title="1">for _, p := range plans </span><span class="cov8" title="1">{
-                if err := r.runPlan(ctx, p, &amp;res); err != nil </span><span class="cov8" title="1">{
+                if err := r.runPlan(ctx, p, &amp;res); err != nil </span><span class="cov0" title="0">{
                         return res, fmt.Errorf("plan %s: %w", p.id, err)
                 }</span>
                 <span class="cov8" title="1">res.Plans++</span>
@@ -3927,7 +4138,7 @@ func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error <spa
         now := r.Now().UTC()
         today := now.Format("2006-01-02")
         tx, err := r.pool.Begin(ctx)
-        if err != nil </span><span class="cov8" title="1">{
+        if err != nil </span><span class="cov0" title="0">{
                 return fmt.Errorf("begin: %w", err)
         }</span>
         <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(ctx) }</span>()
@@ -4118,7 +4329,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) <span class="cov8"
 }
 </pre>
 		
-		<pre class="file" id="file15" style="display: none">// Package escalations lets an intern send a question drafted by buddy to a person (mentor, lead, HR BP, curator),
+		<pre class="file" id="file16" style="display: none">// Package escalations lets an intern send a question drafted by buddy to a person (mentor, lead, HR BP, curator),
 // lets the addressee answer it and optionally publishes the answer to the team knowledge base (S2, R10).
 //
 // Rights (R71): an escalation is visible only to its sender and its addressee; only the addressee can answer.
@@ -4455,7 +4666,7 @@ func faqTitle(question string) string <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file16" style="display: none">// Package flags serves runtime feature flags (R55) from core.feature_flags with a Redis cache (30 s TTL, fail-open
+		<pre class="file" id="file17" style="display: none">// Package flags serves runtime feature flags (R55) from core.feature_flags with a Redis cache (30 s TTL, fail-open
 // to the database) and per-team targeting. GET /api/flags is open to every user; PUT /api/flags/{key} exists only in
 // demo builds (buildflags.Demo) and only for the lead role.
 package flags
@@ -4717,7 +4928,7 @@ func (h *Handler) put(w http.ResponseWriter, r *http.Request) <span class="cov8"
 }
 </pre>
 		
-		<pre class="file" id="file17" style="display: none">// Package mcpclient is core's typed adapter over mcpx.Client for the mock MCP servers (contracts/mcp-tools.md).
+		<pre class="file" id="file18" style="display: none">// Package mcpclient is core's typed adapter over mcpx.Client for the mock MCP servers (contracts/mcp-tools.md).
 //
 // Core calls MCP itself only where a button press is the confirmation: the lead's decision buttons
 // (approvals.list_pending, approvals.decide) and a mentor's answer published to the KB (kb.add_faq). Confirmed chat
@@ -4760,6 +4971,8 @@ const (
         ToolListApprovals  = "approvals.list_pending"
         ToolDecideApproval = "approvals.decide"
         ToolAddFAQ         = "kb.add_faq"
+        ToolCreateTrip     = "trips.create_request"
+        ToolSignConsent    = "consents.sign"
 )
 
 // Config configures a Client.
@@ -4857,6 +5070,27 @@ type AbsenceRequest struct {
         Replayed            bool   `json:"replayed,omitempty"`
 }
 
+// TripRequest is the result of trips.create_request (contracts/schemas/trips.json).
+type TripRequest struct {
+        ID                  string `json:"id"`
+        City                string `json:"city"`
+        StartDate           string `json:"start_date"`
+        EndDate             string `json:"end_date"`
+        Purpose             string `json:"purpose"`
+        Status              string `json:"status"`
+        ApproverID          string `json:"approver_id"`
+        ApproverDisplayName string `json:"approver_display_name,omitempty"`
+}
+
+// ConsentSignature is the result of consents.sign (contracts/schemas/consents.json).
+type ConsentSignature struct {
+        ID        string `json:"id"`
+        ConsentID string `json:"consent_id"`
+        Title     string `json:"title"`
+        Status    string `json:"status"`
+        SignedAt  string `json:"signed_at"`
+}
+
 // AccessRequest is the result of access.request_access (contracts/schemas/access.json).
 type AccessRequest struct {
         ID              string  `json:"id"`
@@ -4946,7 +5180,7 @@ func (c *Client) AddFAQ(ctx context.Context, mentorToken, title, body, idempoten
 }</span>
 </pre>
 		
-		<pre class="file" id="file18" style="display: none">// Package mcptest runs in-memory fakes of the absence, access, approvals and kb MCP servers for core tests.
+		<pre class="file" id="file19" style="display: none">// Package mcptest runs in-memory fakes of the absence, access, approvals and kb MCP servers for core tests.
 //
 // The fakes are real mcpx servers built from contracts/schemas, so a test goes through the real mcpx.Client, JWT
 // check, role allow-list, input/output schemas and confirmation-token verification; only the storage is a map.
@@ -5394,7 +5628,7 @@ func (s *Server) addFAQ(_ context.Context, c mcpx.Caller, args json.RawMessage) 
 }
 </pre>
 		
-		<pre class="file" id="file19" style="display: none">// Package notify stores per-user notifications (AI-cron reminders, status changes, escalation answers; R54) and serves
+		<pre class="file" id="file20" style="display: none">// Package notify stores per-user notifications (AI-cron reminders, status changes, escalation answers; R54) and serves
 // GET /api/notifications and POST /api/notifications/{id}/read.
 //
 // Other packages create notifications with Store.Create, passing either a pool or a pgx.Tx (anything with
@@ -5565,7 +5799,7 @@ func (h *Handler) markRead(w http.ResponseWriter, r *http.Request) <span class="
 }
 </pre>
 		
-		<pre class="file" id="file20" style="display: none">// Package plan serves the onboarding plan built from the Avito checklist (S1, R18-R20): GET /api/plan,
+		<pre class="file" id="file21" style="display: none">// Package plan serves the onboarding plan built from the Avito checklist (S1, R18-R20): GET /api/plan,
 // PATCH /api/plan/tasks/{task_id}, PUT /api/plan/goals and GET /api/team/interns.
 //
 // Rights (R71): an intern sees only the own plan; a mentor sees the own mentor plans and the intern plans of their
@@ -6305,7 +6539,7 @@ func TeamInterns(ctx context.Context, q Querier, c authn.Claims, now time.Time) 
 }
 </pre>
 		
-		<pre class="file" id="file21" style="display: none">// Package ratelimit is a Redis fixed-window rate limiter (used for chat messages per user, R76-R79).
+		<pre class="file" id="file22" style="display: none">// Package ratelimit is a Redis fixed-window rate limiter (used for chat messages per user, R76-R79).
 // It fails open: when Redis is unreachable the request is allowed and the error is returned for logging.
 package ratelimit
 

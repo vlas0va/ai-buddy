@@ -34,30 +34,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">99.11% </span>
+                <span class="strong">86.36% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>112/113</span>
+                <span class='fraction'>114/132</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.1% </span>
+                <span class="strong">77.27% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>82/91</span>
+                <span class='fraction'>85/110</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">86.11% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>31/31</span>
+                <span class='fraction'>31/36</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">98.87% </span>
+                <span class="strong">90.9% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>88/89</span>
+                <span class='fraction'>90/99</span>
             </div>
         
             
@@ -384,7 +384,29 @@
 <a name='L308'></a><a href='#L308'>308</a>
 <a name='L309'></a><a href='#L309'>309</a>
 <a name='L310'></a><a href='#L310'>310</a>
-<a name='L311'></a><a href='#L311'>311</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L311'></a><a href='#L311'>311</a>
+<a name='L312'></a><a href='#L312'>312</a>
+<a name='L313'></a><a href='#L313'>313</a>
+<a name='L314'></a><a href='#L314'>314</a>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a>
+<a name='L318'></a><a href='#L318'>318</a>
+<a name='L319'></a><a href='#L319'>319</a>
+<a name='L320'></a><a href='#L320'>320</a>
+<a name='L321'></a><a href='#L321'>321</a>
+<a name='L322'></a><a href='#L322'>322</a>
+<a name='L323'></a><a href='#L323'>323</a>
+<a name='L324'></a><a href='#L324'>324</a>
+<a name='L325'></a><a href='#L325'>325</a>
+<a name='L326'></a><a href='#L326'>326</a>
+<a name='L327'></a><a href='#L327'>327</a>
+<a name='L328'></a><a href='#L328'>328</a>
+<a name='L329'></a><a href='#L329'>329</a>
+<a name='L330'></a><a href='#L330'>330</a>
+<a name='L331'></a><a href='#L331'>331</a>
+<a name='L332'></a><a href='#L332'>332</a>
+<a name='L333'></a><a href='#L333'>333</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -606,6 +628,28 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">39x</span>
 <span class="cline-any cline-yes">39x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">39x</span>
@@ -915,8 +959,30 @@ function genericEvents(): MockEvent[] {
   ]
 }
 &nbsp;
-export function messageEvents(sessionId: string, user: User, text: string): MockEvent[] {
+export interface MockAttachment {
+  name: string
+  kind: 'text' | 'image' | 'document'
+  size: number
+  text?: string
+}
+&nbsp;
+const SECRET = /\b(\w*?(?:password|secret|token|api[_-]?key)\w*)([ \t]*[=:][ \t]*)\S+/gi
+&nbsp;
+/** Attachments as the real agent answers them (openspec attachments-websearch): logs masked, screenshots and docs not read. */
+function <span class="fstat-no" title="function not covered" >attachmentEvents(f</span>iles: MockAttachment[]): MockEvent[] {
+  const text = <span class="cstat-no" title="statement not covered" >files.<span class="fstat-no" title="function not covered" >filter((f</span>) =&gt; <span class="cstat-no" title="statement not covered" >f.kind === 'text')</span>.<span class="fstat-no" title="function not covered" >map((f</span>) =&gt; <span class="cstat-no" title="statement not covered" >f.text ?? '')</span>.join('\n')</span>
+  const <span class="cstat-no" title="statement not covered" >masked = (text.match(SECRET) ?? []).length</span>
+  const parts: string[] = <span class="cstat-no" title="statement not covered" >[]</span>
+<span class="cstat-no" title="statement not covered" >  if (masked) <span class="cstat-no" title="statement not covered" >parts.push(`В файле были секреты (${masked}) — я их скрыл.`)</span></span>
+<span class="cstat-no" title="statement not covered" >  if (text) <span class="cstat-no" title="statement not covered" >parts.push(`Главная строка: «${text.replace(SECRET, '$1$2***').split('\n')[0]?.slice(0, 120) ?? ''}».`)</span></span>
+<span class="cstat-no" title="statement not covered" >  if (files.<span class="fstat-no" title="function not covered" >some((f</span>) =&gt; <span class="cstat-no" title="statement not covered" >f.kind === 'image')</span>) <span class="cstat-no" title="statement not covered" >parts.push('Скриншот я в прототипе не распознаю — скопируйте текст ошибки.')</span></span>
+<span class="cstat-no" title="statement not covered" >  if (files.<span class="fstat-no" title="function not covered" >some((f</span>) =&gt; <span class="cstat-no" title="statement not covered" >f.kind === 'document')</span>) <span class="cstat-no" title="statement not covered" >parts.push('Документы я не открываю: кадровые документы загружаются в кадровый портал.')</span></span>
+<span class="cstat-no" title="statement not covered" >  return [thinking(), ...words(parts.join(' ')), done()]</span>
+}
+&nbsp;
+export function messageEvents(sessionId: string, user: User, text: string, files: MockAttachment[] = []): MockEvent[] {
   const lower = text.toLowerCase()
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (files.length &gt; 0 &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >!text.trim()) <span class="cstat-no" title="statement not covered" >r</span>eturn attachmentEvents(files)</span>
 &nbsp;
   if (lower.includes('ошибк') &amp;&amp; !state.failedOnce.has(lower)) {
     state.failedOnce.add(lower)
@@ -1011,7 +1077,7 @@ export function confirmEvents(proposal: MockProposal): MockEvent[] {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-10T18:38:33.784Z
+                at 2026-11-11T09:44:58.208Z
             </div>
         <script src="../../prettify.js"></script>
         <script>
