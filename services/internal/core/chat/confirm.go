@@ -537,6 +537,13 @@ func parseToolResult(data json.RawMessage, p proposal, d draft) (toolResult, err
 	return tr, nil
 }
 
+func orRead(level string) string {
+	if level == "" {
+		return "read"
+	}
+	return level
+}
+
 // checkResult verifies that an MCP result is the result of the confirmed draft: the same dates or resource, the
 // approval and decision that were signed, and a status a new request can have.
 func checkResult(d draft, result map[string]json.RawMessage) error {
@@ -562,6 +569,11 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 	case mcpclient.ToolRequestAccess:
 		if err := same("resource_id"); err != nil {
 			return err
+		}
+		// the environment and the level that were signed (checkpoint 11.11); a draft without them means read, no environment
+		if str(result, "environment") != str(args, "environment") || orRead(str(result, "level")) != orRead(str(args, "level")) {
+			return fmt.Errorf("access scope %q/%q differs from the confirmed %q/%q", str(result, "environment"), str(result, "level"),
+				str(args, "environment"), str(args, "level"))
 		}
 		if !strings.HasPrefix(id, "ACC-") || (status != actions.StatusPendingApproval && status != actions.StatusGranted) {
 			return fmt.Errorf("new access request %q has status %q", id, status)

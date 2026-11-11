@@ -39,3 +39,19 @@ test('S4: a clone question is engineering help, not an access request', async ({
   await expect(lastTurn(page).getByLabel('Источники')).toBeVisible()
   await expect(lastTurn(page).getByLabel('Черновик заявки')).toHaveCount(0)
 })
+
+// checkpoint 11.11: the accesses are a table; a request names the resource, the environment and the rights
+test('S4: accesses table and a database request on stage for reading', async ({ page }) => {
+  await login(page, 'mentor.oleg')
+  await newDialog(page)
+  await ask(page, 'какие доступы мне нужны?')
+  await waitAnswer(page)
+  await expect(lastTurn(page).locator('table')).toContainText('Jira: проект DLV')
+  await expect(lastTurn(page).locator('table')).toContainText('dev, stage, prod')
+  await ask(page, 'дай доступ к БД на stage на чтение')
+  await waitAnswer(page)
+  const draft = page.getByLabel('Черновик заявки').last()
+  await expect(draft).toContainText('БД delivery_orders')
+  await expect(draft).toContainText('stage')
+  await expect(draft).toContainText('чтение')
+})

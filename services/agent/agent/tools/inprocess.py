@@ -45,6 +45,7 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
 }
 ABSENCE_TYPES = {"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 MAX_VACATION_DAYS, VACATION_NOTICE_DAYS, MAX_ABSENCE_DAYS, MAX_DOCUMENTS = 28, 14, 5, 3  # = B's mocks/absence
+LEVEL_LABELS = {"read": "чтение", "write": "запись", "admin": "администрирование"}
 TRIP_OFFICES = ["Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"]  # = B's mocks/trips.Offices
 TRIP_MIN_NOTICE_DAYS = 5
 TRIP_MAX_DAYS = 14
@@ -63,7 +64,7 @@ ALLOWED_ARGS = {
     "absence.reschedule_request": {"id", "start_date", "end_date", "idempotency_key", "confirmation_token"},
     "absence.get_request": {"id"},
     "approvals.decide": {"approval_id", "decision", "comment", "idempotency_key", "confirmation_token"},
-    "access.request_access": {"resource_id", "reason", "idempotency_key", "confirmation_token"},
+    "access.request_access": {"resource_id", "reason", "environment", "level", "idempotency_key", "confirmation_token"},
     "checklist.get_plan_template": {"role"},
     "kb.search": {"query", "k"},
     "trips.validate_request": {"city", "start_date", "end_date", "purpose"},
@@ -530,25 +531,36 @@ class MockServices:
 
     # ------------------------------------------------------------------ access
     def _required_ids(self, team_id: str) -> list[str]:
-        return [
+        order = ["tool", "project", "repo", "space", "database"]  # = B's list_required order
+        rids = [
             rid
             for rid, r in self.fixtures["access_resources"].items()
             if r["team_id"] in (None, team_id) and r["kind"] != "channel"
         ]
+        return sorted(rids, key=lambda rid: order.index(self.fixtures["access_resources"][rid]["kind"]))
 
     def _access_item(self, user_id: str, rid: str) -> dict[str, Any]:
         r = self.fixtures["access_resources"][rid]
         req = next(
             (x for x in reversed(self.accesses) if x["employee_id"] == user_id and x["resource_id"] == rid), None
         )
-        return {
+        out = {
             "resource_id": rid,
             "name": r["name"],
             "kind": r["kind"],
             "elevated": bool(r["elevated"]),
             "status": req["status"] if req else "not_requested",
-            "checklist_item_id": r.get("checklist_item_id", ""),
+            "checklist_item_id": r.get("checklist_item_id") or "",
+            "environments": list(r.get("environments") or []),
+            "levels": list(r.get("levels") or ["read"]),
+            "optional": bool(r.get("optional")),
+            "approver_label": r.get("approver_label") or "руководитель команды",
         }
+        if req:
+            out |= {"level": req.get("level", "read")} | (
+                {"environment": req["environment"]} if req.get("environment") else {}
+            )
+        return out
 
     def t_access__list_required(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         return {"items": [self._access_item(c["sub"], rid) for rid in self._required_ids(c.get("team_id", ""))]}
@@ -576,22 +588,47 @@ class MockServices:
         res = self.fixtures["access_resources"].get(rid)
         if res is None or res["team_id"] not in (None, c.get("team_id")):
             raise ToolDenied("Операция недоступна.")  # other team's resource: same answer as a missing one
-        current = self._access_item(c["sub"], rid)["status"]
-        if current in ("granted", "pending_approval"):
+        env, level = a.get("environment") or "", a.get("level") or "read"
+        envs, levels = list(res.get("environments") or []), list(res.get("levels") or ["read"])
+        if envs and env not in envs:
+            raise ToolValidationError(f"Для ресурса «{res['name']}» укажите окружение: {', '.join(envs)}.")
+        if not envs and env:
+            raise ToolValidationError(f"У ресурса «{res['name']}» нет окружений.")
+        if level not in levels:
+            raise ToolValidationError(
+                f"Права «{LEVEL_LABELS.get(level, level)}» недоступны для ресурса «{res['name']}»."
+            )
+        last = next(
+            (
+                x
+                for x in reversed(self.accesses)
+                if x["employee_id"] == c["sub"] and x["resource_id"] == rid and (x.get("environment") or "") == env
+            ),
+            None,
+        )
+        if last and (
+            last["status"] == "pending_approval" or (last["status"] == "granted" and last.get("level", "read") == level)
+        ):
             raise ToolValidationError("Доступ уже выдан или ждёт согласования.", code="conflict")
-        approver = self.employees.get(c["sub"], {}).get("lead_id") if res["elevated"] else None
+        elevated = bool(res["elevated"]) or level != "read" or env == "prod"  # checkpoint 11.11
+        approver = self.employees.get(c["sub"], {}).get("lead_id") if elevated else None
         rec = {
             "id": self._next_id("ACC"),
             "employee_id": c["sub"],
             "resource_id": rid,
             "reason": a.get("reason", ""),
-            "status": "pending_approval" if res["elevated"] else "granted",
+            "status": "pending_approval" if elevated else "granted",
             "approver_id": approver,
+            "environment": env or None,
+            "level": level,
             "created_at": _now_iso(),
         }
         self.accesses.append(rec)
-        if res["elevated"] and approver:
-            self._open_approval("access_request", rec["id"], c["sub"], approver, f"Доступ: {res['name']}")
+        if elevated and approver:
+            scope = (
+                f" ({env}, {LEVEL_LABELS[level]})" if env else (f" ({LEVEL_LABELS[level]})" if level != "read" else "")
+            )
+            self._open_approval("access_request", rec["id"], c["sub"], approver, f"Доступ: {res['name']}{scope}")
         result = {
             "id": rec["id"],
             "resource_id": rid,
@@ -599,6 +636,8 @@ class MockServices:
             "status": rec["status"],
             "approver_id": approver,
             "checklist_item_id": res.get("checklist_item_id"),
+            "environment": env or None,
+            "level": level,
             "created_at": rec["created_at"],
             "replayed": False,
         }

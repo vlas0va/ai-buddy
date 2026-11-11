@@ -55,6 +55,12 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | consents (`/mcp/consents`) | `list` | intern, mentor, lead, hrbp, alumni | no | согласия и их статусы |
 | consents | `sign` | intern, mentor, lead, hrbp, alumni | **yes** | добровольные согласия (фото, опросы) |
 
+Access request (checkpoint 11.11): a concrete resource — a Jira project (`jira-dlv`), a Bitbucket repository
+(`bb-delivery-api`), a database (`db-delivery-orders`, environments dev/stage/prod) — with `environment` (only for
+resources that have environments) and `level` (read, write, admin; default read). Reading dev/stage is granted at once;
+write, admin and prod go to the lead via `approvals` (summary «Доступ: … (stage, запись)»). `list_required` returns
+`environments`, `levels`, `optional` (requested on demand) and `approver_label` for the table in the chat.
+
 Absence request (checkpoint 11.11): one request with dates, a type (`day_off`, `vacation` ≥ 14 days ahead and ≤ 28 days,
 `absence` ≤ 5 days, `parental_leave` with a document) and up to 3 documents (metadata). `approvals.decide` by the lead
 moves it to `pending_hr` and opens an item with `stage: hr_admin`; the HR admin's approval makes it `approved`, registers

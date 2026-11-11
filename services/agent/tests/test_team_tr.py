@@ -52,7 +52,9 @@ def test_TR_06_lead_approves_elevated_access(client, anna):
     pending = client.agent.mocks.t_approvals__list_pending({"sub": "lead.maria"}, {})["items"]
     p = first(lead.say(f"одобри {pending[0]['ref_id']}"), "action_proposal")
     lead.confirm(p)
-    assert "Закрытое пространство инцидентов «Доставки» — есть" in text_of(anna.say("какие доступы мне нужны"))
+    assert "| Закрытое пространство инцидентов «Доставки» | — | чтение | есть |" in text_of(
+        anna.say("какие доступы мне нужны")
+    )
 
 
 def test_TR_07_decision_twice_is_conflict(client, anna):

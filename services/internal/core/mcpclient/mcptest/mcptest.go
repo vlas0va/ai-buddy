@@ -43,6 +43,7 @@ var resources = map[string]resource{
 	"space-delivery":           {"Пространство кластера «Доставка»", "space", "delivery", "CL-05", false},
 	"space-delivery-incidents": {"Закрытое пространство инцидентов «Доставки»", "space", "delivery", "CL-05", true},
 	"space-search":             {"Пространство кластера «Поиск»", "space", "search", "CL-05", false},
+	"db-delivery-orders":       {"БД delivery_orders (PostgreSQL)", "database", "delivery", "", false},
 }
 
 type absenceRec struct {
@@ -366,11 +367,16 @@ func (s *Server) listTeamChannels(_ context.Context, c mcpx.Caller, _ json.RawMe
 
 func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in struct {
-		ResourceID string `json:"resource_id"`
-		Key        string `json:"idempotency_key"`
+		ResourceID  string `json:"resource_id"`
+		Environment string `json:"environment"`
+		Level       string `json:"level"`
+		Key         string `json:"idempotency_key"`
 	}
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
 		return nil, err
+	}
+	if in.Level == "" {
+		in.Level = "read"
 	}
 	r, ok := resources[in.ResourceID]
 	if !ok || (r.team != "" && r.team != c.TeamID) {
@@ -386,8 +392,12 @@ func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMe
 	s.seqACC++
 	item := r.item
 	res := mcpclient.AccessRequest{ID: fmt.Sprintf("ACC-%06d", s.seqACC), ResourceID: in.ResourceID, ResourceName: r.name,
-		Status: "granted", ChecklistItemID: &item, CreatedAt: now()}
-	if r.elevated {
+		Status: "granted", ChecklistItemID: &item, Level: in.Level, CreatedAt: now()}
+	if in.Environment != "" {
+		env := in.Environment
+		res.Environment = &env
+	}
+	if r.elevated || in.Level != "read" || in.Environment == "prod" { // checkpoint 11.11: write, admin and prod are approved
 		approver, _ := approverOf(c.Sub)
 		res.Status, res.ApproverID = "pending_approval", &approver
 		s.addApproval("access_request", res.ID, c.Sub, approver, "Доступ: "+r.name)

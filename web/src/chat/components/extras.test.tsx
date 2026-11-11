@@ -243,3 +243,22 @@ describe('Checkpoint 11.11: absence types, HR admin stage, reschedule', () => {
     expect(screen.getByText('с 8 по 17 декабря')).toBeInTheDocument()
   })
 })
+
+describe('Checkpoint 11.11: access to a concrete resource', () => {
+  it('shows the environment, the rights and who approves', () => {
+    const p = {
+      proposal_id: 'a1',
+      kind: 'access_request',
+      state: 'pending',
+      draft: {
+        tool: 'access.request_access',
+        args: { resource_id: 'db-delivery-orders', environment: 'prod', level: 'read' },
+        display: { resource_name: 'БД delivery_orders (PostgreSQL)', elevated: true, approver_label: 'руководитель команды, права выдаёт DevOps' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('prod')).toBeInTheDocument()
+    expect(screen.getByText('чтение')).toBeInTheDocument()
+    expect(screen.getByText('руководитель команды, права выдаёт DevOps')).toBeInTheDocument()
+  })
+})

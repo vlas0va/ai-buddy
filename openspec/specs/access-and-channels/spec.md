@@ -64,3 +64,31 @@ The agent SHALL list team channels and prepare a draft asking the mentor to add 
 #### Scenario: S4-11 Mentor view
 - **WHEN** the mentor asks what Anna requested
 - **THEN** the mentor sees Anna's access statuses from user_context.mentees
+
+### Requirement: Concrete resource, environment and rights (checkpoint 11.11)
+An access request names a concrete resource (a Jira project, a Bitbucket repository, a database), the environment
+(dev, stage, prod — only for resources that have environments) and the rights (чтение, запись, администрирование).
+Reading dev/stage is granted at once; write, admin and anything on prod are approved by the lead; the resource says who
+approves. The list of accesses is a table.
+
+#### Scenario: S4-13 Jira project and repository
+- **WHEN** the intern asks for the Jira project DLV, then for write rights to the repository delivery-api
+- **THEN** the project is requested on read and granted; the repository draft has level write, requires approval and
+  names the repository owner as approver
+
+#### Scenario: S4-14 Database with environment and rights
+- **WHEN** the intern asks for the database on stage on read, then on prod
+- **THEN** stage read is granted at once and shown as «(stage, чтение)»; prod requires approval (DevOps gives the rights)
+
+#### Scenario: S4-15 Database without environment
+- **WHEN** the environment is not named for a database
+- **THEN** the draft takes dev and says how to ask for another environment
+
+#### Scenario: S4-16 Unavailable rights
+- **WHEN** the rights are not offered by the resource (admin in Confluence)
+- **THEN** no proposal, the available rights are listed
+
+#### Scenario: S4-17 Environment for a resource without environments
+- **WHEN** an environment is named for a Jira project
+- **THEN** the draft has no environment and buddy says the resource has none
+

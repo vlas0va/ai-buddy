@@ -574,7 +574,7 @@ func TestValidateRequest_Checkpoint_TypesAndDocuments(t *testing.T) {
 		{"absence today", "absence", "2026-11-09", "2026-11-09", nil, "не раньше завтрашнего"},
 		{"absence too long", "absence", "2026-11-12", "2026-11-20", nil, "не больше чем на 5"},
 		{"absence end before start", "absence", "2026-11-13", "2026-11-12", nil, "раньше даты начала"},
-		{"parental leave needs a document", "parental_leave", "2026-11-10", "2027-03-29", nil, "нужен документ"},
+		{"parental leave needs a document", "parental_leave", "2026-11-10", "2027-03-29", nil, "нужен подтверждающий документ"},
 		{"parental leave with a document", "parental_leave", "2026-11-10", "2027-03-29", []string{"справка.pdf"}, ""},
 		{"parental leave in the past", "parental_leave", "2026-11-01", "2027-03-29", []string{"справка.pdf"}, "уже прошла"},
 		{"parental leave end before start", "parental_leave", "2026-11-20", "2026-11-10", []string{"справка.pdf"}, "раньше даты начала"},

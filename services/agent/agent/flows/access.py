@@ -1,5 +1,6 @@
 """S4 «Доступы и каналы»: required accesses with statuses, request via access MCP (elevated → manager approval),
-team channels + draft request to the mentor. Spec: openspec/specs/access-and-channels/spec.md (S4-01 … S4-09).
+team channels with advice. A request names a concrete resource (a Jira project, a Bitbucket repository, a database), the
+environment and the rights (checkpoint 11.11). Spec: openspec/specs/access-and-channels/spec.md (S4-01 … S4-17).
 Tool shapes: contracts/schemas/access.json."""
 
 from __future__ import annotations
@@ -19,9 +20,33 @@ TEAM_NAMES = {"delivery": re.compile(r"доставк"), "search": re.compile(r"
 SYNONYMS = {
     "confluence": ["confluence", "конфлюенс", "вики", "wiki", "базе знаний", "база знаний"],
     "jira": ["jira", "джир", "жир", "трекер"],
-    "bitbucket": ["bitbucket", "битбакет", "репозитор", "git", "гит", "код"],
+    "bitbucket": ["bitbucket", "битбакет", "git", "гит"],
 }
-KIND_SYNONYMS = {"space": ["пространств"], "channel": ["канал"]}
+KIND_SYNONYMS = {
+    "space": ["пространств"],
+    "channel": ["канал"],
+    "project": ["проект"],
+    "repo": ["репозитор", "репо ", "код"],
+    "database": ["бд", "базе данных", "база данных", "базу данных", "database", "postgres", "постгрес"],
+}
+LEVELS = [  # order matters: «редактирование» is write, «полные права» is admin
+    ("admin", re.compile(r"админ|admin|полн\w*\s+(права|доступ)|владел")),
+    ("write", re.compile(r"запис|write|редакт|измен|пуш|push|мерж|merge|коммит")),
+    ("read", re.compile(r"чтени|read|просмотр|смотреть|только\s+чита")),
+]
+ENVS = [
+    ("prod", re.compile(r"\bprod\w*|\bпрод\w*|production|боев")),
+    ("stage", re.compile(r"\bstag\w*|\bстейдж\w*|\bстэйдж\w*|\bпредпрод|\bтестов\w+\s+стенд")),
+    ("dev", re.compile(r"\bdev\b|\bдев\w*|разработ\w*\s+стенд|dev-стенд")),
+]
+LEVEL_LABEL = {"read": "чтение", "write": "запись", "admin": "администрирование"}
+KIND_LABEL = {
+    "tool": "сервис",
+    "project": "проект Jira",
+    "repo": "репозиторий",
+    "space": "пространство",
+    "database": "база данных",
+}
 STATUS_LABEL = {
     "granted": "есть",
     "pending_approval": "ждёт согласования руководителя",
@@ -31,8 +56,26 @@ STATUS_LABEL = {
 RESULT_LABEL = {"granted": "Доступ выдан", "pending_approval": "На согласовании", "rejected": "Отклонено"}
 
 
+def parse_level(text: str) -> str | None:
+    t = normalize(text)
+    return next((lvl for lvl, rx in LEVELS if rx.search(t)), None)
+
+
+def parse_env(text: str) -> str | None:
+    t = normalize(text)
+    return next((env for env, rx in ENVS if rx.search(t)), None)
+
+
+def scope_label(env: str, level: str) -> str:
+    if env:
+        return f" ({env}, {LEVEL_LABEL[level]})"
+    return f" ({LEVEL_LABEL[level]})" if level != "read" else ""
+
+
 def _aliases(r: dict[str, Any]) -> list[str]:
-    out = [r["name"].lower(), r["resource_id"].lower(), *SYNONYMS.get(r["resource_id"], [])]
+    tail = r["name"].lower().split(":")[-1].strip()  # «проект dlv», «репозиторий delivery-api»
+    out = [r["name"].lower(), r["resource_id"].lower(), tail, *SYNONYMS.get(r["resource_id"], [])]
+    out += [w for w in re.findall(r"[a-z][a-z0-9_-]{2,}", tail) if w not in ("postgresql",)]
     out += KIND_SYNONYMS.get(r.get("kind", ""), [])
     if "инцидент" in r["name"].lower():
         out.append("инцидент")
@@ -60,24 +103,37 @@ def _mentions_other_team(text: str, own_team: str) -> bool:
     return any(rx.search(t) for team, rx in TEAM_NAMES.items() if team != own_team) and not (own and own.search(t))
 
 
-def _proposal(turn: Turn, r: dict[str, Any]) -> dict[str, Any]:
+def needs_approval(r: dict[str, Any], env: str, level: str) -> bool:
+    """= the access service: elevated resources, write/admin rights and prod go to the lead (checkpoint 11.11)."""
+    return bool(r["elevated"]) or level != "read" or env == "prod"
+
+
+def _proposal(turn: Turn, r: dict[str, Any], env: str = "", level: str = "read") -> dict[str, Any]:
     lead = turn.contact("lead") or {}
     reason = "Онбординг стажёра: доступы первой недели (чек-лист)" if turn.user.role == "intern" else "Работа в команде"
+    approval = needs_approval(r, env, level)
     display = {
         "resource_name": r["name"],
-        "elevated": r["elevated"],
+        "elevated": approval,
         "kind": r.get("kind", ""),
-        "approver_display_name": lead.get("name", "") if r["elevated"] else "",
+        "environment": env,
+        "level": level,
+        "level_label": LEVEL_LABEL[level],
+        "approver_label": r.get("approver_label", "") if approval else "",
+        "approver_display_name": lead.get("name", "") if approval else "",
     }
-    title = "Заявка на доступ с согласованием" if r["elevated"] else "Заявка на доступ"
+    args: dict[str, Any] = {"resource_id": r["resource_id"], "reason": reason, "level": level}
+    if env:
+        args["environment"] = env
+    title = "Заявка на доступ с согласованием" if approval else "Заявка на доступ"
     return turn.make_proposal(
         "access_request",
         "access.request_access",
-        {"resource_id": r["resource_id"], "reason": reason},
+        args,
         title,
-        f"Доступ: {r['name']}",
+        f"Доступ: {r['name']}{scope_label(env, level)}",
         display,
-        requires_approval=r["elevated"],
+        requires_approval=approval,
         checklist_item_id=r.get("checklist_item_id") or None,
     )
 
@@ -112,16 +168,35 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         return
 
     if target is not None:
-        if target["status"] in ("granted", "pending_approval"):
+        envs, levels = target.get("environments") or [], target.get("levels") or ["read"]
+        level = parse_level(text) or "read"
+        env = parse_env(text) or ""
+        note = ""
+        if envs and not env:
+            env, note = envs[0], f" Окружение не указано — взял {envs[0]}; для другого напиши, например, «… на stage»."
+        if env and not envs:
+            env, note = "", " У этого ресурса нет окружений — окружение не указываю."
+        if level not in levels:
+            yield from say(
+                f"Для ресурса «{target['name']}» можно запросить: {', '.join(LEVEL_LABEL[x] for x in levels)}. "
+                "Уточни, какие права нужны."
+            )
+            return
+        same_scope = target.get("level", "read") == level and target.get("environment", "") == env
+        if target["status"] == "pending_approval" or (target["status"] == "granted" and same_scope):
             yield from say(f"{target['name']}: {STATUS_LABEL[target['status']]}. Повторная заявка не нужна.")
             return
-        proposal = _proposal(turn, target)
+        proposal = _proposal(turn, target, env, level)
+        who = target.get("approver_label") or "руководитель"
         approval = (
-            f" Это доступ с повышенными правами — его согласует {person_name(turn.contact('lead'), 'руководитель')}."
-            if target["elevated"]
-            else " Обычный доступ выдаётся сразу после заявки."
+            f" Это повышенные права — согласует {who} ({person_name(turn.contact('lead'), 'руководитель')})."
+            if needs_approval(target, env, level)
+            else " Чтение выдаётся сразу после заявки."
         )
-        yield from say(f"Подготовил заявку на доступ: {target['name']}.{approval} Нажми «Отправить», чтобы создать её.")
+        yield from say(
+            f"Подготовил заявку на доступ: {target['name']}{scope_label(env, level)}.{approval}{note} "
+            "Нажми «Отправить», чтобы создать её."
+        )
         yield Event("action_proposal", proposal)
         return
 
@@ -133,20 +208,30 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         )
         return
 
-    lines, missing = [], []
+    rows, missing = [], []
     for r in required:
-        extra = " (повышенные права, нужно согласование руководителя)" if r["elevated"] else ""
-        lines.append(f"- {r['name']} — {STATUS_LABEL.get(r['status'], r['status'])}{extra}")
-        if r["status"] == "not_requested" and not r["elevated"]:
+        envs = ", ".join(r.get("environments") or []) or "—"
+        levels = ", ".join(LEVEL_LABEL.get(x, x) for x in r.get("levels") or ["read"])
+        st = STATUS_LABEL.get(r["status"], r["status"])
+        if r.get("optional") and r["status"] == "not_requested":
+            st = "по запросу"
+        who = "согласование: " + (r.get("approver_label") or "руководитель") if r["elevated"] else "чтение — сразу"
+        rows.append(f"| {r['name']} | {envs} | {levels} | {st} | {who} |")
+        if r["status"] == "not_requested" and not r["elevated"] and not r.get("optional"):
             missing.append(r)
     intro = "Для работы в команде нужны такие доступы:" if turn.user.role == "intern" else "Доступы команды:"
+    table = "| Ресурс | Окружения | Права | Статус | Кто согласует |\n|---|---|---|---|---|\n" + "\n".join(rows)
+    rules = (
+        "\n\nЧтение выдаётся сразу. Запись, администрирование и любой доступ к prod согласует руководитель. "
+        "Пример: «доступ на запись в репозиторий delivery-api» или «доступ к БД на stage на чтение»."
+    )
     tail = (
-        f"\n\nПодготовил заявки на недостающие обычные доступы ({len(missing)}) — отправь нужные карточками. "
+        f"\n\nПодготовил заявки на недостающие доступы на чтение ({len(missing)}) — отправь нужные карточками. "
         "Доступ с повышенными правами запрошу по отдельной просьбе, например «запроси закрытое пространство»."
         if missing
         else "\n\nВсе обычные доступы уже есть или запрошены."
     )
-    yield from say(f"{intro}\n" + "\n".join(lines) + tail)
+    yield from say(f"{intro}\n\n{table}{rules}{tail}")
     for r in missing[:5]:
         yield Event("action_proposal", _proposal(turn, r))
 
@@ -175,7 +260,8 @@ def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
         "status": r["status"],
         "status_label": RESULT_LABEL.get(r["status"], r["status"]),
         "approver_display_name": "" if granted else lead.get("name", ""),
-        "summary": f"Доступ: {r.get('resource_name') or r['resource_id']}",
+        "summary": f"Доступ: {r.get('resource_name') or r['resource_id']}"
+        + scope_label(r.get("environment") or "", r.get("level") or "read"),
         "followup": "Доступ выдан — можно пользоваться."
         if granted
         else "Заявка отправлена руководителю на согласование. Статус обновится здесь после решения.",

@@ -311,3 +311,42 @@ func TestConfirm_Checkpoint_RescheduleAbsence_R71(t *testing.T) {
 		}
 	})
 }
+
+// Checkpoint 11.11: an access request names the environment and the rights; core checks the result has the signed scope
+// and the saved action says it («БД … (stage, чтение)»).
+func TestConfirm_Checkpoint_AccessScope_R71(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	access := func(env, level string) agenttest.Event {
+		args := map[string]any{"resource_id": "db-delivery-orders", "reason": "задача", "level": level}
+		if env != "" {
+			args["environment"] = env
+		}
+		return agenttest.Event{Name: "action_proposal", Data: map[string]any{"proposal_id": agenttest.NewID(), "kind": "access_request",
+			"summary": "Доступ к БД", "draft": map[string]any{"tool": "access.request_access", "args": args}}}
+	}
+	got := e.stream(e.confirmPath(sid, e.proposeWith(sid, anna, access("stage", "read"))), anna, nil).find("action_result")
+	if got == nil || got["status"] != "granted" ||
+		e.str(`SELECT summary FROM core.actions WHERE id = $1`, got["action_id"]) != "Доступ: БД delivery_orders (PostgreSQL) (stage, чтение) — выдан" {
+		t.Fatalf("read on stage %v", got)
+	}
+	got = e.stream(e.confirmPath(sid, e.proposeWith(sid, anna, access("prod", "write"))), anna, nil).find("action_result")
+	if got == nil || got["status"] != "pending_approval" ||
+		!strings.Contains(e.str(`SELECT summary FROM core.actions WHERE id = $1`, got["action_id"]), "(prod, запись)") {
+		t.Fatalf("write on prod %v", got)
+	}
+
+	t.Run("agent reports another scope", func(t *testing.T) {
+		pid := e.proposeWith(sid, anna, access("dev", "read"))
+		e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
+			return []agenttest.Event{{Name: "tool_result", Data: map[string]any{"proposal_id": req.Turn.ProposalID, "kind": "access_request",
+				"tool": "access.request_access", "result": map[string]any{"id": "ACC-000999", "resource_id": "db-delivery-orders",
+					"status": "granted", "environment": "prod", "level": "admin", "created_at": "2026-11-11T10:00:00Z"}}}, agenttest.Done()}
+		})
+		defer e.agent.OnConfirm(nil)
+		if s := e.stream(e.confirmPath(sid, pid), anna, nil); s.find("action_result") != nil {
+			t.Fatalf("%s %v", s.names(), s.last())
+		}
+	})
+}

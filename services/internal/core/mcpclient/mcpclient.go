@@ -170,6 +170,8 @@ type AccessRequest struct {
 	Status          string  `json:"status"`
 	ApproverID      *string `json:"approver_id,omitempty"`
 	ChecklistItemID *string `json:"checklist_item_id,omitempty"`
+	Environment     *string `json:"environment,omitempty"` // dev, stage, prod for a database (checkpoint 11.11)
+	Level           string  `json:"level,omitempty"`       // read, write, admin
 	CreatedAt       string  `json:"created_at"`
 	Replayed        bool    `json:"replayed,omitempty"`
 }

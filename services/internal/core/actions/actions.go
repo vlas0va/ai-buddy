@@ -261,6 +261,7 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 		if resource == "" {
 			resource = r.ResourceID
 		}
+		resource += accessScope(r.Environment, r.Level)
 		d := description{externalID: r.ID, status: accessStatus(r.Status), taskTitle: "Доступ: " + resource, approverName: name,
 			checklistItem: in.ChecklistItemID}
 		if r.ChecklistItemID != nil && *r.ChecklistItemID != "" {
@@ -562,6 +563,19 @@ func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action,
 		return Action{}, err
 	}
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
+}
+
+var accessLevels = map[string]string{"read": "чтение", "write": "запись", "admin": "администрирование"}
+
+// accessScope is « (stage, чтение)» or « (запись)»; empty for plain read access without an environment.
+func accessScope(env *string, level string) string {
+	switch {
+	case env != nil && *env != "":
+		return " (" + *env + ", " + accessLevels[firstNonEmpty(level, "read")] + ")"
+	case level != "" && level != "read":
+		return " (" + accessLevels[level] + ")"
+	}
+	return ""
 }
 
 // withoutApprover drops the «, согласующий — …» tail of a summary.

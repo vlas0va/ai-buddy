@@ -84,7 +84,7 @@ func TestFakeServers_ReadAndWriteTools(t *testing.T) {
 	}
 
 	req := ok(t)(call(t, fake, anna, "access.list_required", nil, ""))
-	if len(req["items"].([]any)) != 3 {
+	if len(req["items"].([]any)) != 4 {
 		t.Fatalf("list_required: %v", req)
 	}
 	ok(t)(call(t, fake, anna, "access.list_team_channels", nil, ""))

@@ -99,12 +99,21 @@ checklist = [
        obj({"periods":{"type":"array","items":obj({"id":{"type":"string"},"label":{"type":"string"}},["id","label"])},
             "items":{"type":"array","items":cl_item}}, ["periods","items"])),
 ]
-res = obj({"resource_id":{"type":"string"},"name":{"type":"string"},"kind":{"type":"string","enum":["tool","space","channel"]},
+acc_env = {"type":"string","enum":["dev","stage","prod"]}
+acc_level = {"type":"string","enum":["read","write","admin"],"description":"чтение, запись, администрирование"}
+res = obj({"resource_id":{"type":"string"},"name":{"type":"string"},
+           "kind":{"type":"string","enum":["tool","space","channel","project","repo","database"]},
            "elevated":{"type":"boolean"},"status":{"type":"string","enum":["not_requested","pending_approval","granted","rejected"]},
-           "checklist_item_id":{"type":"string"}}, ["resource_id","name","kind","elevated","status"])
+           "checklist_item_id":{"type":"string"},
+           "environments":{"type":"array","items":acc_env,"description":"empty = the resource has no environments"},
+           "levels":{"type":"array","items":acc_level},
+           "optional":{"type":"boolean","description":"requested on demand, not part of the onboarding checklist"},
+           "approver_label":{"type":"string","description":"who approves write/admin/prod rights"},
+           "environment":acc_env, "level":acc_level}, ["resource_id","name","kind","elevated","status"])
 acc_req = obj({"id":{"type":"string","pattern":"^ACC-[0-9]{6}$"},"resource_id":{"type":"string"},"resource_name":{"type":"string"},
                "status":{"type":"string","enum":["pending_approval","granted","rejected"]},"approver_id":{"type":["string","null"]},
                "checklist_item_id":{"type":["string","null"],"description":"Plan task to link the action to (R66)"},
+               "environment":{"type":["string","null"],"enum":["dev","stage","prod",None]},"level":acc_level,
                "created_at":{"type":"string","format":"date-time"},"replayed":{"type":"boolean"}},
               ["id","resource_id","status","created_at"])
 access = [
@@ -114,8 +123,9 @@ access = [
        obj({}), obj({"items":{"type":"array","items":res}}, ["items"])),
   tool("list_team_channels", "Каналы и чаты команды (только названия и назначение, без участников).", ["intern","mentor"], False,
        obj({}), obj({"items":{"type":"array","items":obj({"name":{"type":"string"},"purpose":{"type":"string"},"closed":{"type":"boolean"}},["name","closed"])}}, ["items"])),
-  tool("request_access", "Заявка на доступ для пользователя из JWT. Повышенные права уходят на согласование руководителю.", ["intern","mentor"], True,
-       obj({"resource_id":{"type":"string"},"reason":{"type":"string","maxLength":500},"idempotency_key":idem,"confirmation_token":conf},
+  tool("request_access", "Заявка на доступ для пользователя из JWT: конкретный ресурс (проект Jira, репозиторий, БД), окружение и уровень прав. Запись, администрирование и prod уходят на согласование руководителю.", ["intern","mentor"], True,
+       obj({"resource_id":{"type":"string"},"reason":{"type":"string","maxLength":500},
+            "environment":acc_env,"level":{**acc_level,"default":"read"},"idempotency_key":idem,"confirmation_token":conf},
            ["resource_id","idempotency_key","confirmation_token"]),
        acc_req),
 ]

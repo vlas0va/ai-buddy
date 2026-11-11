@@ -8,10 +8,12 @@ from tests.conftest import all_of, first, text_of
 def test_S4_01_lists_required_accesses_with_statuses(anna):
     ev = anna.say("Какие доступы мне нужны?")
     t = text_of(ev)
-    assert "Confluence — есть" in t and "Jira — не запрошен" in t
-    assert "повышенные права" in t  # elevated resource is marked
+    assert "| Confluence | — | чтение, запись | есть |" in t and "| Jira | — | чтение, запись | не запрошен |" in t
+    assert "| Ресурс | Окружения | Права | Статус | Кто согласует |" in t  # checkpoint 11.11: a table
+    assert "согласование: руководитель команды" in t  # elevated resource is marked
     kinds = {p["draft"]["args"]["resource_id"] for p in all_of(ev, "action_proposal")}
-    assert kinds == {"jira", "bitbucket", "space-delivery"}  # only missing ordinary ones, never elevated
+    # only missing ordinary ones on read, never elevated or on-demand (database)
+    assert kinds == {"jira", "bitbucket", "jira-dlv", "bb-delivery-api", "space-delivery"}
 
 
 def test_S4_02_ordinary_access_request_granted_and_saved(anna):
@@ -19,7 +21,7 @@ def test_S4_02_ordinary_access_request_granted_and_saved(anna):
     assert p["requires_approval"] is False and p["task_checklist_item_id"] == "CL-01"
     r = first(anna.confirm(p), "tool_result")
     assert r["status"] == "granted" and r["external_id"].startswith("ACC-")
-    assert "Jira — есть" in text_of(anna.say("какие доступы мне нужны"))
+    assert "| Jira | — | чтение, запись | есть |" in text_of(anna.say("какие доступы мне нужны"))
 
 
 def test_S4_03_elevated_access_goes_through_manager_approval(client, anna):
@@ -83,3 +85,43 @@ def test_S4_12_all_granted_message(anna):
     for p in all_of(anna.say("какие доступы мне нужны"), "action_proposal"):
         anna.confirm(p)
     assert "Все обычные доступы уже есть" in text_of(anna.say("какие доступы мне нужны"))
+
+
+def test_S4_13_concrete_jira_project_and_repository(anna):
+    p = first(anna.say("запроси доступ к проекту DLV в Jira"), "action_proposal")
+    assert p["draft"]["args"] == {"resource_id": "jira-dlv", "reason": p["draft"]["args"]["reason"], "level": "read"}
+    assert first(anna.confirm(p), "tool_result")["status"] == "granted"
+    p = first(anna.say("нужны права на запись в репозиторий delivery-api"), "action_proposal")
+    assert p["draft"]["args"]["resource_id"] == "bb-delivery-api" and p["draft"]["args"]["level"] == "write"
+    assert p["requires_approval"] is True and "владелец репозитория" in p["draft"]["display"]["approver_label"]
+    r = first(anna.confirm(p), "tool_result")
+    assert r["status"] == "pending_approval" and r["summary"].endswith("(запись)")
+
+
+def test_S4_14_database_with_environment_and_rights(anna):
+    ev = anna.say("дай доступ к БД на stage на чтение")
+    p = first(ev, "action_proposal")
+    assert p["draft"]["args"]["resource_id"] == "db-delivery-orders"
+    assert p["draft"]["args"]["environment"] == "stage" and p["draft"]["args"]["level"] == "read"
+    assert p["requires_approval"] is False and "(stage, чтение)" in text_of(ev)
+    assert first(anna.confirm(p), "tool_result")["summary"].endswith("(stage, чтение)")
+    p = first(anna.say("доступ к базе данных на prod"), "action_proposal")
+    assert p["draft"]["args"]["environment"] == "prod" and p["requires_approval"] is True
+    assert "DevOps" in p["draft"]["display"]["approver_label"]
+
+
+def test_S4_15_database_without_environment_takes_dev(anna):
+    ev = anna.say("запроси доступ к базе данных delivery_orders")
+    p = first(ev, "action_proposal")
+    assert p["draft"]["args"]["environment"] == "dev" and "Окружение не указано" in text_of(ev)
+
+
+def test_S4_16_level_the_resource_does_not_offer(anna):
+    ev = anna.say("дай админские права в confluence")
+    assert first(ev, "action_proposal") is None and "можно запросить: чтение, запись" in text_of(ev)
+
+
+def test_S4_17_environment_for_a_resource_without_environments(anna):
+    ev = anna.say("доступ к проекту DLV на stage")
+    p = first(ev, "action_proposal")
+    assert "environment" not in p["draft"]["args"] and "нет окружений" in text_of(ev)
