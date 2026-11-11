@@ -242,7 +242,7 @@ func (a *Agent) Confirm(ctx context.Context, req Request) []Event {
 	case toolErr != nil:
 		return []Event{{"error", map[string]any{"code": string(toolErr.Code), "message": toolErr.Message, "retryable": toolErr.Retryable}}}
 	}
-	kind := map[string]string{"absence.create_request": "absence_request", "access.request_access": "access_request",
+	kind := map[string]string{"absence.create_request": "absence_request", "absence.reschedule_request": "absence_reschedule", "access.request_access": "access_request",
 		"approvals.decide": "approval_decision"}[d.Tool]
 	var res struct {
 		ID              string  `json:"id"`

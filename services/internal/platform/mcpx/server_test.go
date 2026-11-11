@@ -81,7 +81,7 @@ func TestCall_InputValidation_R71(t *testing.T) {
 		want string // substring of the message
 	}{
 		{"unknown field employee_id", "create_request", confirmed(t, "intern.anna", foreign), "employee_id"},
-		{"enum", "validate_request", map[string]any{"type": "vacation", "start_date": "2026-11-14", "end_date": "2026-11-14"}, "Некорректные аргументы"},
+		{"enum", "validate_request", map[string]any{"type": "sick_leave", "start_date": "2026-11-14", "end_date": "2026-11-14"}, "Некорректные аргументы"},
 		{"required", "validate_request", map[string]any{"type": "day_off"}, "Некорректные аргументы"},
 		{"wrong type", "get_request", map[string]any{"id": 5}, "Некорректные аргументы"},
 		{"date format", "validate_request", map[string]any{"type": "day_off", "start_date": "14.11.2026", "end_date": "2026-11-14"}, "ГГГГ-ММ-ДД"},
@@ -278,7 +278,7 @@ func TestInvoke(t *testing.T) {
 	for _, d := range s.Tools() {
 		names = append(names, d.Name)
 	}
-	if !slices.Equal(names, []string{"get_policy", "list_my_requests", "validate_request", "create_request", "get_request"}) {
+	if !slices.Equal(names, []string{"get_policy", "list_my_requests", "validate_request", "create_request", "get_request", "reschedule_request"}) {
 		t.Fatalf("tools %v", names)
 	}
 }

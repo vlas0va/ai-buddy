@@ -5,7 +5,8 @@
       "name": "list_pending",
       "description": "Запросы на согласование, где согласующий — пользователь из JWT.",
       "roles": [
-        "lead"
+        "lead",
+        "hr_admin"
       ],
       "write": false,
       "inputSchema": {
@@ -53,8 +54,17 @@
                   "enum": [
                     "pending",
                     "approved",
-                    "rejected"
+                    "rejected",
+                    "cancelled"
                   ]
+                },
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "lead",
+                    "hr_admin"
+                  ],
+                  "description": "absence: the lead first, then the HR admin"
                 },
                 "comment": {
                   "type": "string"
@@ -86,9 +96,10 @@
     },
     {
       "name": "decide",
-      "description": "Согласовать или отклонить запрос своей команды.",
+      "description": "Согласовать или отклонить запрос, где согласующий — пользователь из JWT (руководитель или HR-администратор).",
       "roles": [
-        "lead"
+        "lead",
+        "hr_admin"
       ],
       "write": true,
       "inputSchema": {
@@ -160,8 +171,17 @@
             "enum": [
               "pending",
               "approved",
-              "rejected"
+              "rejected",
+              "cancelled"
             ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "hr_admin"
+            ],
+            "description": "absence: the lead first, then the HR admin"
           },
           "comment": {
             "type": "string"

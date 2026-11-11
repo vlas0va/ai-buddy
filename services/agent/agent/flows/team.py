@@ -81,7 +81,11 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
     if not pending:
         yield from say("Заявок, ожидающих твоего согласования, нет.")
         return
-    lines = [f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}" for p in pending]
+    stage = {"hr_admin": " (этап HR-администратора)"}
+    lines = [
+        f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}{stage.get(p.get('stage', ''), '')}"
+        for p in pending
+    ]
     yield from say(
         "Ожидают твоего согласования:\n"
         + "\n".join(lines)
@@ -136,11 +140,60 @@ def handle_mentee(turn: Turn, text: str) -> Iterator[Event]:
 
 def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
     label = "Согласовано" if r["status"] == "approved" else "Отклонено"
+    followup = "Стажёр увидит новый статус в AI-buddy."
+    to_hr = r.get("kind") == "absence_request" and r.get("stage", "lead") == "lead" and r["status"] == "approved"
+    if to_hr:  # the lead's approval passes the absence request to the HR admin (checkpoint 11.11)
+        label = "Согласовано руководителем"
+        followup = "Заявка передана HR-администратору на второй этап. Стажёр увидит новый статус в AI-buddy."
+    elif r.get("stage") == "hr_admin" and r["status"] == "approved":
+        followup = "Заявка согласована и оформлена, HR BP получил уведомление. Сотрудник увидит статус в AI-buddy."
     return {
         "external_id": r.get("ref_id") or r["id"],
         "status": r["status"],
         "status_label": label,
         "approver_display_name": "",
         "summary": f"Заявка {r.get('ref_id', r['id'])} ({r.get('requester_display_name', '')}): {label.lower()}",
-        "followup": "Стажёр увидит новый статус в AI-buddy.",
+        "followup": followup,
     }
+
+
+def handle_one_on_one(turn: Turn, text: str) -> Iterator[Event]:
+    """Mentor or lead prepares a 1:1 with an intern: progress from user_context.mentees, an agenda, feedback tips (S1-16)."""
+    from .coach import _doc_hit, _source_event
+
+    mentees = turn.user.mentees
+    selected = [m for m in mentees if _stem_match(m.get("display_name", ""), text)] or mentees[:1]
+    tips = _doc_hit(turn, "mentor-feedback-guide")
+    if tips:
+        yield _source_event([tips])
+    if not selected:
+        yield from say(
+            "Данных о стажёрах в чате нет — открой «Мои стажёры». Общая повестка 1:1: что получилось за период, "
+            "где застрял, обратная связь по фактам, цели на следующий этап."
+        )
+        return
+    m = selected[0]
+    name = m.get("display_name", "стажёр")
+    tasks = m.get("open_tasks") or []
+    overdue = [t for t in tasks if t.get("status") == "overdue"]
+    waiting = [a for a in m.get("accesses", []) if a.get("status") in ("not_requested", "pending_approval")]
+    lines = [f"Повестка 1:1 с {name}:", "", "1. Что получилось за период — попроси рассказать самого стажёра."]
+    if overdue:
+        lines.append("2. Где застрял — просрочено: " + "; ".join(f"«{t.get('title', '')}»" for t in overdue[:3]) + ".")
+    elif tasks:
+        lines.append(
+            f"2. Где нужна помощь — открытых задач плана: {len(tasks)}, ближайшая: «{tasks[0].get('title', '')}»."
+        )
+    else:
+        lines.append("2. Где нужна помощь — открытых задач нет, обсудите следующий этап.")
+    if waiting:
+        lines.append("3. Доступы — ещё не готовы: " + ", ".join(a.get("name", "") for a in waiting[:4]) + ".")
+    else:
+        lines.append("3. Доступы — все нужные выданы или запрошены.")
+    lines += [
+        "4. Обратная связь — по фактам: что сделал, какой результат, что улучшить; начни с сильной стороны.",
+        "5. Цели на следующий этап — 1–2 измеримые, запиши их в «Задать цели» в плане стажёра.",
+        "",
+        "Саму встречу и обратную связь проводишь ты — я только собрал данные из плана.",
+    ]
+    yield from say("\n".join(lines))

@@ -21,8 +21,8 @@ def test_TR_02_lead_approves_in_chat_and_intern_sees_status(client, anna):
     p = first(lead.say(f"согласуй {r['external_id']}"), "action_proposal")
     assert p["kind"] == "approval_decision" and p["draft"]["args"]["decision"] == "approved"
     res = first(lead.confirm(p), "tool_result")
-    assert res["status"] == "approved" and res["status_label"] == "Согласовано"
-    assert "Согласовано" in text_of(anna.say("мои заявки"))
+    assert res["status"] == "approved" and res["status_label"] == "Согласовано руководителем"
+    assert "Ждёт HR-администратора" in text_of(anna.say("мои заявки"))
 
 
 def test_TR_03_lead_rejects_with_comment(client, anna):
@@ -52,7 +52,9 @@ def test_TR_06_lead_approves_elevated_access(client, anna):
     pending = client.agent.mocks.t_approvals__list_pending({"sub": "lead.maria"}, {})["items"]
     p = first(lead.say(f"одобри {pending[0]['ref_id']}"), "action_proposal")
     lead.confirm(p)
-    assert "Закрытое пространство инцидентов «Доставки» — есть" in text_of(anna.say("какие доступы мне нужны"))
+    assert "| Закрытое пространство инцидентов «Доставки» | — | чтение | есть |" in text_of(
+        anna.say("какие доступы мне нужны")
+    )
 
 
 def test_TR_07_decision_twice_is_conflict(client, anna):
@@ -68,3 +70,22 @@ def test_TR_07_decision_twice_is_conflict(client, anna):
 def test_TR_08_lead_sees_mentees_of_team(client):
     lead = client.login("lead.maria")
     assert "Анна Котова" in text_of(lead.say("как дела у моего стажёра"))
+
+
+def test_S1_16_mentor_prepares_one_on_one(client):
+    oleg = client.login("mentor.oleg")
+    ev = oleg.say(
+        "Как выполнить задачу «На 1:1 обсуди со стажёром промежуточные итоги, дай обратную связь по его прогрессу»?"
+    )
+    t = text_of(ev)
+    assert first(ev, "done")["intent"] in ("human_only", "one_on_one")
+    assert "Повестка 1:1" in t and "Анна" in t and first(ev, "escalation_draft") is None
+    ev = oleg.say("подготовь меня к 1:1 с Анной")
+    assert first(ev, "done")["intent"] == "one_on_one" and "Обратная связь" in text_of(ev)
+    oleg.ctx["mentees"] = []
+    assert "Мои стажёры" in text_of(oleg.say("подготовь меня к 1:1"))
+
+
+def test_S1_16b_intern_still_gets_draft_for_feedback(anna):
+    ev = anna.say("дай мне обратную связь по моей работе")
+    assert first(ev, "escalation_draft")["to_role"] == "mentor"

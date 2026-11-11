@@ -43,6 +43,7 @@ const (
 	ToolAddFAQ         = "kb.add_faq"
 	ToolCreateTrip     = "trips.create_request"
 	ToolSignConsent    = "consents.sign"
+	ToolReschedule     = "absence.reschedule_request"
 )
 
 // Config configures a Client.
@@ -169,6 +170,8 @@ type AccessRequest struct {
 	Status          string  `json:"status"`
 	ApproverID      *string `json:"approver_id,omitempty"`
 	ChecklistItemID *string `json:"checklist_item_id,omitempty"`
+	Environment     *string `json:"environment,omitempty"` // dev, stage, prod for a database (checkpoint 11.11)
+	Level           string  `json:"level,omitempty"`       // read, write, admin
 	CreatedAt       string  `json:"created_at"`
 	Replayed        bool    `json:"replayed,omitempty"`
 }
@@ -183,6 +186,7 @@ type Approval struct {
 	Summary              string `json:"summary"`
 	Status               string `json:"status"`
 	Comment              string `json:"comment,omitempty"`
+	Stage                string `json:"stage,omitempty"` // absence: lead, then hr_admin
 	CreatedAt            string `json:"created_at"`
 	Replayed             bool   `json:"replayed,omitempty"`
 }

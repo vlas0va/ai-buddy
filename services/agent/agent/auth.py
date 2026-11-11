@@ -11,7 +11,7 @@ import jwt
 
 from .errors import Forbidden, Unauthorized
 
-ROLES = ("intern", "mentor", "lead", "hrbp", "alumni")
+ROLES = ("intern", "mentor", "lead", "hrbp", "alumni", "hr_admin")
 
 
 @dataclass

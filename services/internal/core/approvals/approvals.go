@@ -44,6 +44,7 @@ type Approval struct {
 	Summary              string  `json:"summary"`
 	Status               string  `json:"status"`
 	Comment              *string `json:"comment"`
+	Stage                string  `json:"stage"` // lead | hr_admin (absence: the HR admin decides after the lead)
 	CreatedAt            string  `json:"created_at"`
 }
 
@@ -75,14 +76,15 @@ var (
 	approvalIDRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
-// lead returns the caller when it is a lead with a token; other roles get forbidden (R71).
+// lead returns the caller when it is a lead or the HR admin (second stage of an absence) with a token; other roles get
+// forbidden (R71). Which items a caller may decide is checked by the approvals service (approver_id).
 func lead(w http.ResponseWriter, r *http.Request) (authn.Claims, string, bool) {
 	c, ok := authn.FromContext(r.Context())
 	token, tok := authn.TokenFromContext(r.Context())
 	switch {
 	case !ok || !tok:
 		apierr.WriteJSON(w, apierr.Unauthorized())
-	case c.Role != "lead":
+	case c.Role != "lead" && c.Role != "hr_admin":
 		apierr.WriteJSON(w, apierr.Forbidden())
 	default:
 		return c, token, true
@@ -173,7 +175,7 @@ func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Appro
 	defer func() { _ = tx.Rollback(ctx) }()
 	// Only the requester's action whose request names the deciding lead as approver (R71).
 	a, changed, err := h.actions.ApplyDecision(ctx, tx, res.Kind, res.RefID, res.Status,
-		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub})
+		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub, Stage: res.Stage})
 	switch {
 	case errors.Is(err, actions.ErrNotFound):
 		h.log.Info("decision for a request without a core action", "approval", res.ID, "ref", res.RefID)
@@ -198,7 +200,11 @@ func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Appro
 
 // toAPI maps an MCP approval onto the openapi shape, filling the requester's name from core when MCP omits it.
 func (h *Handler) toAPI(ctx context.Context, it mcpclient.Approval) (Approval, error) {
-	a := Approval{ID: it.ID, Kind: it.Kind, RequesterDisplayName: it.RequesterDisplayName, Summary: it.Summary,
+	stage := it.Stage
+	if stage == "" {
+		stage = "lead"
+	}
+	a := Approval{ID: it.ID, Kind: it.Kind, Stage: stage, RequesterDisplayName: it.RequesterDisplayName, Summary: it.Summary,
 		Status: it.Status, CreatedAt: it.CreatedAt}
 	if it.Comment != "" {
 		comment := it.Comment

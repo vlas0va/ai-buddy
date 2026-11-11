@@ -267,9 +267,12 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 	added := false
 	if body.AddToKB && h.faq != nil && h.flags != nil && h.flags.Enabled(ctx, flags.EscalationToKB, c.TeamID) {
 		token, _ := authn.TokenFromContext(ctx)
-		title := faqTitle(question)
+		// The FAQ is for every intern: no names, no dates (checkpoint 11.11).
+		names := h.userNames(ctx)
+		q, a := generalize(question, names), generalize(text, names)
+		title := faqTitle(q)
 		// The answer is already saved; a KB failure must not lose it, so it is logged and reported as added_to_kb=false.
-		if err := h.faq.AddFAQ(ctx, token, title, "Вопрос: "+question+"\n\nОтвет: "+text, id); err != nil {
+		if err := h.faq.AddFAQ(ctx, token, title, "Вопрос: "+q+"\n\nОтвет: "+a, id); err != nil {
 			h.log.Warn("kb.add_faq failed", "escalation_id", id, "err", err)
 		} else {
 			added = true
@@ -325,6 +328,24 @@ func (h *Handler) saveAnswer(ctx context.Context, c authn.Claims, id, text strin
 }
 
 // faqTitle is the first line of the question, shortened to 80 characters.
+// userNames lists the display names of all users, to strip them from an FAQ; on error the FAQ keeps only date masking.
+func (h *Handler) userNames(ctx context.Context) []string {
+	rows, err := h.pool.Query(ctx, `SELECT display_name FROM core.users`)
+	if err != nil {
+		h.log.Warn("load user names", "err", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var n string
+		if rows.Scan(&n) == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 func faqTitle(question string) string {
 	line := strings.TrimSpace(strings.SplitN(strings.TrimSpace(question), "\n", 2)[0])
 	r := []rune(line)

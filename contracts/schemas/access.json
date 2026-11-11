@@ -37,7 +37,10 @@
                   "enum": [
                     "tool",
                     "space",
-                    "channel"
+                    "channel",
+                    "project",
+                    "repo",
+                    "database"
                   ]
                 },
                 "elevated": {
@@ -54,6 +57,55 @@
                 },
                 "checklist_item_id": {
                   "type": "string"
+                },
+                "environments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "dev",
+                      "stage",
+                      "prod"
+                    ]
+                  },
+                  "description": "empty = the resource has no environments"
+                },
+                "levels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "read",
+                      "write",
+                      "admin"
+                    ],
+                    "description": "чтение, запись, администрирование"
+                  }
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "requested on demand, not part of the onboarding checklist"
+                },
+                "approver_label": {
+                  "type": "string",
+                  "description": "who approves write/admin/prod rights"
+                },
+                "environment": {
+                  "type": "string",
+                  "enum": [
+                    "dev",
+                    "stage",
+                    "prod"
+                  ]
+                },
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write",
+                    "admin"
+                  ],
+                  "description": "чтение, запись, администрирование"
                 }
               },
               "required": [
@@ -107,7 +159,10 @@
                   "enum": [
                     "tool",
                     "space",
-                    "channel"
+                    "channel",
+                    "project",
+                    "repo",
+                    "database"
                   ]
                 },
                 "elevated": {
@@ -124,6 +179,55 @@
                 },
                 "checklist_item_id": {
                   "type": "string"
+                },
+                "environments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "dev",
+                      "stage",
+                      "prod"
+                    ]
+                  },
+                  "description": "empty = the resource has no environments"
+                },
+                "levels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "read",
+                      "write",
+                      "admin"
+                    ],
+                    "description": "чтение, запись, администрирование"
+                  }
+                },
+                "optional": {
+                  "type": "boolean",
+                  "description": "requested on demand, not part of the onboarding checklist"
+                },
+                "approver_label": {
+                  "type": "string",
+                  "description": "who approves write/admin/prod rights"
+                },
+                "environment": {
+                  "type": "string",
+                  "enum": [
+                    "dev",
+                    "stage",
+                    "prod"
+                  ]
+                },
+                "level": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write",
+                    "admin"
+                  ],
+                  "description": "чтение, запись, администрирование"
                 }
               },
               "required": [
@@ -190,7 +294,7 @@
     },
     {
       "name": "request_access",
-      "description": "Заявка на доступ для пользователя из JWT. Повышенные права уходят на согласование руководителю.",
+      "description": "Заявка на доступ для пользователя из JWT: конкретный ресурс (проект Jira, репозиторий, БД), окружение и уровень прав. Запись, администрирование и prod уходят на согласование руководителю.",
       "roles": [
         "intern",
         "mentor"
@@ -207,6 +311,24 @@
           "reason": {
             "type": "string",
             "maxLength": 500
+          },
+          "environment": {
+            "type": "string",
+            "enum": [
+              "dev",
+              "stage",
+              "prod"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "admin"
+            ],
+            "description": "чтение, запись, администрирование",
+            "default": "read"
           },
           "idempotency_key": {
             "type": "string",
@@ -259,6 +381,27 @@
               "null"
             ],
             "description": "Plan task to link the action to (R66)"
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "dev",
+              "stage",
+              "prod",
+              null
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "admin"
+            ],
+            "description": "чтение, запись, администрирование"
           },
           "created_at": {
             "type": "string",

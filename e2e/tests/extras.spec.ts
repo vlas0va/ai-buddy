@@ -82,7 +82,7 @@ test('Day off: the approved request shows the HR admin and HR BP steps', async (
   await waitAnswer(intern)
   await intern.getByLabel('Черновик заявки').last().getByRole('button', { name: 'Отправить' }).click()
   const result = intern.getByLabel('Результат заявки').last()
-  await expect(result).toContainText('HR-администратор: оформит после согласования')
+  await expect(result).toContainText('HR-администратор: согласует после руководителя')
   const id = (await result.locator('h3').innerText()).match(/ABS-\d+/)![0]
 
   const lead = await (await browser.newContext()).newPage()
@@ -91,6 +91,13 @@ test('Day off: the approved request shows the HR admin and HR BP steps', async (
   const card = lead.getByLabel('Заявка: Анна Котова').filter({ hasText: ddmmyyyy(day).slice(0, 5) }).first()
   await card.getByRole('button', { name: 'Согласовать' }).click()
   await expect(card).toHaveCount(0)
+
+  const admin = await (await browser.newContext()).newPage()
+  await login(admin, 'hradmin.olga')
+  await admin.getByRole('link', { name: 'Согласования' }).click()
+  const hrCard = admin.getByLabel('Заявка: Анна Котова').filter({ hasText: ddmmyyyy(day).slice(0, 5) }).first()
+  await hrCard.getByRole('button', { name: 'Согласовать' }).click()
+  await expect(hrCard).toHaveCount(0)
 
   await intern.reload()
   const panel = intern.getByRole('complementary', { name: 'Мои заявки' })
@@ -130,4 +137,24 @@ test('Web search: a general technical question gets external sources, never the 
   await expect(web).toContainText('Внешний источник')
   await expect(web.getByRole('link').first()).toHaveAttribute('href', /^https:\/\//)
   await expect(lastTurn(page)).toContainText('не правила Авито')
+})
+
+test('Vacation: Labour Code facts and the process, then a vacation draft with its type', async ({ page }) => {
+  await login(page, 'mentor.sergey')
+  await newDialog(page)
+  await ask(page, 'сколько дней отпуска положено и как взять отпуск?')
+  await waitAnswer(page)
+  const answer = lastTurn(page)
+  await expect(answer).toContainText('28 календарных дней')
+  await expect(answer).toContainText('HR-администратор')
+  const start = new Date()
+  start.setHours(12, 0, 0, 0)
+  start.setDate(start.getDate() + 200 + (Math.floor(Date.now() / 1000) % 100))
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  await ask(page, `хочу в отпуск с ${ddmmyyyy(start)} по ${ddmmyyyy(end)}`)
+  await waitAnswer(page)
+  const draft = page.getByLabel('Черновик заявки').last()
+  await expect(draft).toContainText('Отпуск')
+  await expect(draft).toContainText('Календарных дней')
 })

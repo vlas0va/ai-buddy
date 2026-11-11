@@ -154,9 +154,21 @@ def main() -> None:
          {"Idempotency-Key": str(uuid.uuid4())})
     _, actions = call("GET", "/api/actions", anna)
     saved = next((a for a in actions if a.get("external_id") == result["external_id"]), None)
+    if not saved or saved.get("status") != "pending_hr":
+        fail(f"S3 status after the lead: {saved}")
+    ok("S3 lead approved, the request waits for the HR admin")
+    olga = login("hradmin.olga")
+    _, pending = call("GET", "/api/approvals", olga)
+    item = next((a for a in pending if a.get("stage") == "hr_admin" and a.get("status") == "pending"), None)
+    if not item:
+        fail(f"HR admin sees no pending absence approval: {pending}")
+    call("POST", f"/api/approvals/{item['id']}/decision", olga, {"decision": "approved", "comment": ""},
+         {"Idempotency-Key": str(uuid.uuid4())})
+    _, actions = call("GET", "/api/actions", anna)
+    saved = next((a for a in actions if a.get("external_id") == result["external_id"]), None)
     if not saved or saved.get("status") != "approved":
         fail(f"S3 status after approval: {saved}")
-    ok("S3 lead approved, intern's action is approved")
+    ok("S3 HR admin approved, intern's action is approved")
 
     # --- S4: access ----------------------------------------------------------------------------------------------
     ev = stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": "запроси доступ в jira"})

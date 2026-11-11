@@ -29,8 +29,9 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "absence.validate_request": {"intern", "mentor", "lead"},
     "absence.create_request": {"intern", "mentor", "lead"},
     "absence.get_request": {"intern", "mentor", "lead"},
-    "approvals.list_pending": {"lead"},
-    "approvals.decide": {"lead"},
+    "absence.reschedule_request": {"intern", "mentor", "lead"},
+    "approvals.list_pending": {"lead", "hr_admin"},
+    "approvals.decide": {"lead", "hr_admin"},
     "access.list_required": {"intern", "mentor"},
     "access.list_my_access": {"intern", "mentor"},
     "access.list_team_channels": {"intern", "mentor"},
@@ -42,16 +43,28 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "consents.list": {"intern", "mentor", "lead", "hrbp", "alumni"},
     "consents.sign": {"intern", "mentor", "lead", "hrbp", "alumni"},
 }
+ABSENCE_TYPES = {"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
+MAX_VACATION_DAYS, VACATION_NOTICE_DAYS, MAX_ABSENCE_DAYS, MAX_DOCUMENTS = 28, 14, 5, 3  # = B's mocks/absence
+LEVEL_LABELS = {"read": "чтение", "write": "запись", "admin": "администрирование"}
 TRIP_OFFICES = ["Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"]  # = B's mocks/trips.Offices
 TRIP_MIN_NOTICE_DAYS = 5
 TRIP_MAX_DAYS = 14
 ALLOWED_ARGS = {
     "absence.list_my_requests": {"status"},
-    "absence.validate_request": {"type", "start_date", "end_date"},
-    "absence.create_request": {"type", "start_date", "end_date", "comment", "idempotency_key", "confirmation_token"},
+    "absence.validate_request": {"type", "start_date", "end_date", "documents", "exclude_id"},
+    "absence.create_request": {
+        "type",
+        "start_date",
+        "end_date",
+        "comment",
+        "documents",
+        "idempotency_key",
+        "confirmation_token",
+    },
+    "absence.reschedule_request": {"id", "start_date", "end_date", "idempotency_key", "confirmation_token"},
     "absence.get_request": {"id"},
     "approvals.decide": {"approval_id", "decision", "comment", "idempotency_key", "confirmation_token"},
-    "access.request_access": {"resource_id", "reason", "idempotency_key", "confirmation_token"},
+    "access.request_access": {"resource_id", "reason", "environment", "level", "idempotency_key", "confirmation_token"},
     "checklist.get_plan_template": {"role"},
     "kb.search": {"query", "k"},
     "trips.validate_request": {"city", "start_date", "end_date", "purpose"},
@@ -118,7 +131,7 @@ class MockServices:
             for r in self.absences:
                 if r["status"] == "pending_approval":
                     self._open_approval(
-                        "absence_request", r["id"], r["employee_id"], r["approver_id"], f"Отгул {self._dates(r)}"
+                        "absence_request", r["id"], r["employee_id"], r["approver_id"], self._abs_summary(r)
                     )
             self.idempotency: dict[str, dict[str, Any]] = {}
             self.seq = {
@@ -142,9 +155,16 @@ class MockServices:
         s, e = date.fromisoformat(r["start_date"]), date.fromisoformat(r["end_date"])
         return s.strftime("%d.%m.%Y") if s == e else f"{s.strftime('%d.%m.%Y')}–{e.strftime('%d.%m.%Y')}"
 
-    def _open_approval(self, kind: str, ref_id: str, requester: str, approver: str, summary: str) -> None:
+    @classmethod
+    def _abs_summary(cls, r: dict[str, Any]) -> str:
+        return f"{ABSENCE_TYPES.get(r.get('type', 'day_off'), 'Отгул')} {cls._dates(r)}"
+
+    def _open_approval(
+        self, kind: str, ref_id: str, requester: str, approver: str, summary: str, stage: str = "lead"
+    ) -> None:
         self.approvals.append(
             {
+                "stage": stage,
                 "id": f"APR-{len(self.approvals) + 1:08x}",
                 "kind": kind,
                 "ref_id": ref_id,
@@ -264,6 +284,7 @@ class MockServices:
         return {
             **{k: r.get(k, "") for k in keys},
             "approver_display_name": self.name(r["approver_id"]),
+            "documents": r.get("documents", []),
             "created_at": r.get("created_at", "2026-11-01T09:00:00Z"),
             "steps": self._absence_steps(r),
         }
@@ -282,8 +303,12 @@ class MockServices:
             "at": None,
         }
         bp = {"role": "hrbp", "display_name": self.name(hrbp), "status": "waiting", "at": None}
-        if r["status"] == "approved":
-            lead.update(status="approved", at=r.get("decided_at"))
+        if r["status"] in ("approved", "pending_hr"):
+            lead.update(status="approved", at=r.get("lead_decided_at") or r.get("decided_at"))
+        elif r["status"] in ("rejected", "cancelled") and r.get("lead_decided_at"):
+            lead.update(status="approved", at=r["lead_decided_at"])
+            admin.update(status="rejected", at=r.get("decided_at"))
+            bp["status"] = "skipped"
         elif r["status"] in ("rejected", "cancelled"):
             lead.update(status="rejected", at=r.get("decided_at"))
             admin["status"] = bp["status"] = "skipped"
@@ -310,13 +335,62 @@ class MockServices:
 
     def _validate(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         problems: list[str] = []
-        pol = self.fixtures["absence_policy"]
         try:
             start, end = date.fromisoformat(a["start_date"]), date.fromisoformat(a["end_date"])
         except (KeyError, ValueError):
             return {"valid": False, "problems": ["Не удалось разобрать даты."]}
-        if a.get("type", "day_off") != "day_off":
-            problems.append("В сервисе отсутствий через buddy оформляется только отгул.")
+        kind = a.get("type", "day_off")
+        docs = a.get("documents") or []
+        if kind not in ABSENCE_TYPES:
+            raise ToolValidationError("Некорректные аргументы: неизвестный вид отсутствия.")
+        if len(docs) > MAX_DOCUMENTS:
+            raise ToolValidationError(f"Можно приложить не больше {MAX_DOCUMENTS} документов")
+        problems += self._type_problems(kind, start, end, len(docs))
+        for r in self.absences:
+            if (
+                r["employee_id"] == c["sub"]
+                and r["id"] != a.get("exclude_id")
+                and r["status"] in ("pending_approval", "pending_hr", "approved")
+                and not (end < date.fromisoformat(r["start_date"]) or start > date.fromisoformat(r["end_date"]))
+            ):
+                problems.append(f"Пересекается с заявкой {r['id']} ({self._dates(r)}).")
+        approver = self.employees.get(c["sub"], {}).get("lead_id") or ""
+        out: dict[str, Any] = {"valid": not problems, "problems": problems}
+        if approver:
+            out |= {"approver_id": approver, "approver_display_name": self.name(approver)}
+        return out
+
+    def _type_problems(self, kind: str, start: date, end: date, docs: int) -> list[str]:
+        """= B's absence.typeProblems: the rules of each kind of absence."""
+        today, problems = clock.today(), []
+        days = (end - start).days + 1
+        if kind == "day_off":
+            return self._day_off_problems(start, end)
+        if kind == "vacation" and start < today + timedelta(days=VACATION_NOTICE_DAYS):
+            earliest = today + timedelta(days=VACATION_NOTICE_DAYS)
+            problems.append(
+                f"Заявку на отпуск подают не позже чем за {VACATION_NOTICE_DAYS} дней: начало не раньше "
+                f"{earliest:%d.%m.%Y}."
+            )
+        if kind == "absence" and start <= today:
+            problems.append(
+                f"Дата начала должна быть не раньше завтрашнего дня ({today + timedelta(days=1):%d.%m.%Y})."
+            )
+        if kind == "parental_leave" and start < today:
+            problems.append("Дата начала уже прошла.")
+        if end < start:
+            return problems + ["Дата окончания не может быть раньше даты начала."]
+        if kind == "vacation" and days > MAX_VACATION_DAYS:
+            problems.append(f"Отпуск за один раз — не больше {MAX_VACATION_DAYS} календарных дней, выбрано {days}.")
+        if kind == "absence" and days > MAX_ABSENCE_DAYS:
+            problems.append(f"Отсутствие оформляется не больше чем на {MAX_ABSENCE_DAYS} дней, выбрано {days}.")
+        if kind == "parental_leave" and docs == 0:
+            problems.append("Для декрета нужен подтверждающий документ — приложите заявление.")
+        return problems
+
+    def _day_off_problems(self, start: date, end: date) -> list[str]:
+        pol = self.fixtures["absence_policy"]
+        problems: list[str] = []
         wd = working_days(start, end)
         today = clock.today()
         if end < start:
@@ -332,20 +406,9 @@ class MockServices:
         if wd > pol["max_working_days"]:
             problems.append(
                 f"Отгул — не больше {pol['max_working_days']} рабочих дней подряд. Для более долгого срока "
-                "оформи отпуск в сервисе отсутствий."
+                "оформи отпуск — я подготовлю заявку."
             )
-        for r in self.absences:
-            if (
-                r["employee_id"] == c["sub"]
-                and r["status"] in ("pending_approval", "approved")
-                and not (end < date.fromisoformat(r["start_date"]) or start > date.fromisoformat(r["end_date"]))
-            ):
-                problems.append(f"Пересекается с заявкой {r['id']} ({self._dates(r)}).")
-        approver = self.employees.get(c["sub"], {}).get("lead_id") or ""
-        out: dict[str, Any] = {"valid": not problems, "problems": problems}
-        if approver:
-            out |= {"approver_id": approver, "approver_display_name": self.name(approver)}
-        return out
+        return problems
 
     def t_absence__validate_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         return self._validate(c, a)
@@ -362,25 +425,59 @@ class MockServices:
         rec = {
             "id": self._next_id("ABS"),
             "employee_id": c["sub"],
-            "type": "day_off",
+            "type": a.get("type", "day_off"),
             "start_date": a["start_date"],
             "end_date": a["end_date"],
             "comment": a.get("comment", ""),
+            "documents": a.get("documents") or [],
             "approver_id": approver,
             "status": "pending_approval" if approver else "approved",
             "created_at": _now_iso(),
         }
         self.absences.append(rec)
         if approver:
-            self._open_approval("absence_request", rec["id"], c["sub"], approver, f"Отгул {self._dates(rec)}")
+            self._open_approval("absence_request", rec["id"], c["sub"], approver, self._abs_summary(rec))
         result = {**self._absence_view(rec), "replayed": False}
+        self.idempotency[key] = result
+        return result
+
+    def t_absence__reschedule_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        """Move a request until the HR admin approves it; it goes back to the lead (= B's absence.rescheduleRequest)."""
+        self._check_confirmation(c, a)
+        key = f"reschedule:{a['idempotency_key']}"
+        if (replay := self._replay(key)) is not None:
+            return replay
+        r = next((r for r in self.absences if r["id"] == a.get("id")), None)
+        if r is None or r["employee_id"] != c["sub"]:
+            raise ToolDenied("Операция недоступна.")
+        if r["status"] not in ("pending_approval", "pending_hr"):
+            raise ToolValidationError(
+                "Перенести можно только заявку, которую HR-администратор ещё не согласовал.", code="conflict"
+            )
+        v = self._validate(
+            c, {**a, "type": r.get("type", "day_off"), "documents": r.get("documents"), "exclude_id": r["id"]}
+        )
+        if not v["valid"]:
+            raise ToolValidationError(" ".join(v["problems"]))
+        for p in self.approvals:
+            if p["kind"] == "absence_request" and p["ref_id"] == r["id"] and p["status"] == "pending":
+                p["status"] = "cancelled"
+        r.update(start_date=a["start_date"], end_date=a["end_date"], status="pending_approval")
+        r.pop("lead_decided_at", None)
+        r.pop("decided_at", None)
+        self._open_approval("absence_request", r["id"], c["sub"], r["approver_id"], self._abs_summary(r) + " (перенос)")
+        result = {**self._absence_view(r), "replayed": False}
         self.idempotency[key] = result
         return result
 
     # ------------------------------------------------------------------ approvals
     def _approval_view(self, p: dict[str, Any]) -> dict[str, Any]:
         keys = ("id", "kind", "ref_id", "requester_id", "summary", "status", "comment", "created_at")
-        return {**{k: p[k] for k in keys}, "requester_display_name": self.name(p["requester_id"])}
+        return {
+            **{k: p[k] for k in keys},
+            "stage": p.get("stage", "lead"),
+            "requester_display_name": self.name(p["requester_id"]),
+        }
 
     def t_approvals__list_pending(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -406,9 +503,16 @@ class MockServices:
         p.update(status=a["decision"], comment=a.get("comment", ""))
         if p["kind"] == "absence_request":
             ref = next(r for r in self.absences if r["id"] == p["ref_id"])
-            ref["status"] = "approved" if a["decision"] == "approved" else "rejected"
-            ref["decided_at"] = _now_iso()
-            if a["decision"] == "approved":
+            if p.get("stage", "lead") == "lead" and a["decision"] == "approved":
+                # the lead approved: the request goes to the HR admin (checkpoint 11.11)
+                ref |= {"status": "pending_hr", "lead_decided_at": _now_iso()}
+                self._open_approval(
+                    "absence_request", ref["id"], ref["employee_id"], self._hr_admin(), p["summary"], stage="hr_admin"
+                )
+            else:
+                ref["status"] = "approved" if a["decision"] == "approved" else "rejected"
+                ref["decided_at"] = _now_iso()
+            if ref["status"] == "approved":
                 ref |= {
                     "hr_admin_id": self._hr_admin(),
                     "registered_at": _now_iso(),
@@ -427,25 +531,36 @@ class MockServices:
 
     # ------------------------------------------------------------------ access
     def _required_ids(self, team_id: str) -> list[str]:
-        return [
+        order = ["tool", "project", "repo", "space", "database"]  # = B's list_required order
+        rids = [
             rid
             for rid, r in self.fixtures["access_resources"].items()
             if r["team_id"] in (None, team_id) and r["kind"] != "channel"
         ]
+        return sorted(rids, key=lambda rid: order.index(self.fixtures["access_resources"][rid]["kind"]))
 
     def _access_item(self, user_id: str, rid: str) -> dict[str, Any]:
         r = self.fixtures["access_resources"][rid]
         req = next(
             (x for x in reversed(self.accesses) if x["employee_id"] == user_id and x["resource_id"] == rid), None
         )
-        return {
+        out = {
             "resource_id": rid,
             "name": r["name"],
             "kind": r["kind"],
             "elevated": bool(r["elevated"]),
             "status": req["status"] if req else "not_requested",
-            "checklist_item_id": r.get("checklist_item_id", ""),
+            "checklist_item_id": r.get("checklist_item_id") or "",
+            "environments": list(r.get("environments") or []),
+            "levels": list(r.get("levels") or ["read"]),
+            "optional": bool(r.get("optional")),
+            "approver_label": r.get("approver_label") or "руководитель команды",
         }
+        if req:
+            out |= {"level": req.get("level", "read")} | (
+                {"environment": req["environment"]} if req.get("environment") else {}
+            )
+        return out
 
     def t_access__list_required(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         return {"items": [self._access_item(c["sub"], rid) for rid in self._required_ids(c.get("team_id", ""))]}
@@ -473,22 +588,47 @@ class MockServices:
         res = self.fixtures["access_resources"].get(rid)
         if res is None or res["team_id"] not in (None, c.get("team_id")):
             raise ToolDenied("Операция недоступна.")  # other team's resource: same answer as a missing one
-        current = self._access_item(c["sub"], rid)["status"]
-        if current in ("granted", "pending_approval"):
+        env, level = a.get("environment") or "", a.get("level") or "read"
+        envs, levels = list(res.get("environments") or []), list(res.get("levels") or ["read"])
+        if envs and env not in envs:
+            raise ToolValidationError(f"Для ресурса «{res['name']}» укажите окружение: {', '.join(envs)}.")
+        if not envs and env:
+            raise ToolValidationError(f"У ресурса «{res['name']}» нет окружений.")
+        if level not in levels:
+            raise ToolValidationError(
+                f"Права «{LEVEL_LABELS.get(level, level)}» недоступны для ресурса «{res['name']}»."
+            )
+        last = next(
+            (
+                x
+                for x in reversed(self.accesses)
+                if x["employee_id"] == c["sub"] and x["resource_id"] == rid and (x.get("environment") or "") == env
+            ),
+            None,
+        )
+        if last and (
+            last["status"] == "pending_approval" or (last["status"] == "granted" and last.get("level", "read") == level)
+        ):
             raise ToolValidationError("Доступ уже выдан или ждёт согласования.", code="conflict")
-        approver = self.employees.get(c["sub"], {}).get("lead_id") if res["elevated"] else None
+        elevated = bool(res["elevated"]) or level != "read" or env == "prod"  # checkpoint 11.11
+        approver = self.employees.get(c["sub"], {}).get("lead_id") if elevated else None
         rec = {
             "id": self._next_id("ACC"),
             "employee_id": c["sub"],
             "resource_id": rid,
             "reason": a.get("reason", ""),
-            "status": "pending_approval" if res["elevated"] else "granted",
+            "status": "pending_approval" if elevated else "granted",
             "approver_id": approver,
+            "environment": env or None,
+            "level": level,
             "created_at": _now_iso(),
         }
         self.accesses.append(rec)
-        if res["elevated"] and approver:
-            self._open_approval("access_request", rec["id"], c["sub"], approver, f"Доступ: {res['name']}")
+        if elevated and approver:
+            scope = (
+                f" ({env}, {LEVEL_LABELS[level]})" if env else (f" ({LEVEL_LABELS[level]})" if level != "read" else "")
+            )
+            self._open_approval("access_request", rec["id"], c["sub"], approver, f"Доступ: {res['name']}{scope}")
         result = {
             "id": rec["id"],
             "resource_id": rid,
@@ -496,6 +636,8 @@ class MockServices:
             "status": rec["status"],
             "approver_id": approver,
             "checklist_item_id": res.get("checklist_item_id"),
+            "environment": env or None,
+            "level": level,
             "created_at": rec["created_at"],
             "replayed": False,
         }

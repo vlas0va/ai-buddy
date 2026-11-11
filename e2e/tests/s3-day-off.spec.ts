@@ -38,8 +38,19 @@ test('S3: day off from question to lead approval, visible after reload', async (
   await card.getByRole('button', { name: 'Согласовать' }).click()
   await expect(card).toHaveCount(0)
 
+  // checkpoint 11.11: after the lead, the HR admin approves the request
   await intern.reload()
   const panel = intern.getByRole('complementary', { name: 'Мои заявки' })
+  await expect(panel.locator('li, .ui-card').filter({ hasText: id }).first()).toContainText('Ждёт HR-администратора')
+  const admin = await (await browser.newContext()).newPage()
+  await login(admin, 'hradmin.olga')
+  await admin.getByRole('link', { name: 'Согласования' }).click()
+  const hrCard = admin.getByLabel('Заявка: Иван Белов').filter({ hasText: day.slice(0, 5) }).first()
+  await expect(hrCard).toContainText('Этап: HR-администратор')
+  await hrCard.getByRole('button', { name: 'Согласовать' }).click()
+  await expect(hrCard).toHaveCount(0)
+
+  await intern.reload()
   await expect(panel.locator('li, .ui-card').filter({ hasText: id }).first()).toContainText('Согласовано')
 })
 

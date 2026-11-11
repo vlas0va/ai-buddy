@@ -190,3 +190,75 @@ describe('attachments (AT-xx)', () => {
     expect(h.messages[0]?.attachments?.[0]?.kind).toBe('document')
   })
 })
+
+describe('suggestions by role (checkpoint 11.11)', () => {
+  it('lead and mentor get their own list; unknown roles fall back to the intern list', async () => {
+    const { filterSuggestions } = await import('@/chat/suggestions')
+    const items = (role?: string) => filterSuggestions('', role).flatMap((g) => g.items)
+    expect(items('lead')).toContain('Покажи заявки на согласование')
+    expect(items('mentor')).toContain('Подготовь меня к 1:1 со стажёром')
+    expect(items('mentor')).not.toContain('Хочу взять отгул в пятницу')
+    expect(items('robot')).toEqual(items('intern'))
+    expect(filterSuggestions('1:1', 'lead')[0]?.items).toEqual(['Подготовь меня к 1:1 со стажёром'])
+  })
+})
+
+describe('Checkpoint 11.11: absence types, HR admin stage, reschedule', () => {
+  it('absence steps: after the lead, the HR admin is the current step', () => {
+    expect(absenceSteps('pending_hr').map((s) => s.state)).toEqual(['done', 'current', 'waiting'])
+  })
+
+  it('vacation draft shows the type, calendar days, documents and both approvers', () => {
+    const p = {
+      proposal_id: 'v1',
+      kind: 'absence_request',
+      state: 'pending',
+      draft: {
+        tool: 'absence.create_request',
+        args: { type: 'vacation', start_date: '2026-12-01', end_date: '2026-12-10' },
+        display: { dates: '01.12.2026–10.12.2026', calendar_days: 10, documents: ['заявление.pdf'], approver_display_name: 'Мария Лебедева' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('Отпуск')).toBeInTheDocument()
+    expect(screen.getByText('Календарных дней')).toBeInTheDocument()
+    expect(screen.getByText('заявление.pdf')).toBeInTheDocument()
+    expect(screen.getByText('HR-администратор')).toBeInTheDocument()
+  })
+
+  it('reschedule draft shows the old and the new dates', () => {
+    const p = {
+      proposal_id: 'r1',
+      kind: 'absence_reschedule',
+      state: 'pending',
+      draft: {
+        tool: 'absence.reschedule_request',
+        args: { id: 'ABS-000101', start_date: '2026-12-08', end_date: '2026-12-17' },
+        display: { ref_id: 'ABS-000101', type_label: 'Отпуск', old_period_label: 'с 1 по 10 декабря', period_label: 'с 8 по 17 декабря' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('Перенос заявки')).toBeInTheDocument()
+    expect(screen.getByText('ABS-000101 — Отпуск')).toBeInTheDocument()
+    expect(screen.getByText('с 8 по 17 декабря')).toBeInTheDocument()
+  })
+})
+
+describe('Checkpoint 11.11: access to a concrete resource', () => {
+  it('shows the environment, the rights and who approves', () => {
+    const p = {
+      proposal_id: 'a1',
+      kind: 'access_request',
+      state: 'pending',
+      draft: {
+        tool: 'access.request_access',
+        args: { resource_id: 'db-delivery-orders', environment: 'prod', level: 'read' },
+        display: { resource_name: 'БД delivery_orders (PostgreSQL)', elevated: true, approver_label: 'руководитель команды, права выдаёт DevOps' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('prod')).toBeInTheDocument()
+    expect(screen.getByText('чтение')).toBeInTheDocument()
+    expect(screen.getByText('руководитель команды, права выдаёт DevOps')).toBeInTheDocument()
+  })
+})

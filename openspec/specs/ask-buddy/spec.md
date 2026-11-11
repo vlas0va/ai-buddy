@@ -104,3 +104,12 @@ The agent SHALL produce the same events with the stub and with an OpenAI-compati
 #### Scenario: S2-21 Tool calling
 - **WHEN** LLM_TOOL_CALLING is true
 - **THEN** only read tools of the role are offered and a call to a foreign tool is denied by the gateway
+
+### Requirement: Mentor answers go to the knowledge base as a general FAQ (checkpoint 11.11)
+An escalated question and the mentor's answer added to the knowledge base are valid for every intern: greetings, names
+of people and concrete dates are removed before the FAQ is stored (core before kb.add_faq, the agent in faq-draft).
+
+#### Scenario: S2-22 General FAQ
+- **WHEN** a mentor answers «Анна, да, предупреди Марию за два дня, в пятницу согласует» with «в базу знаний»
+- **THEN** the FAQ has no names and no dates («в нужный день»), and the answer form asks to write it in a general way
+

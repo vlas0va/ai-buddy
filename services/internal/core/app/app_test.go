@@ -210,6 +210,21 @@ func TestApp_S3_DayOffThroughRealWiring_R66(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("decision: %d %s", status, body)
 	}
+	if _, _, body = s.do(http.MethodGet, "/api/actions", anna, ""); !strings.Contains(string(body), `"status":"pending_hr"`) {
+		t.Fatalf("action waiting for the HR admin: %s", body)
+	}
+	olga := s.login("hradmin.olga")
+	_, _, body = s.do(http.MethodGet, "/api/approvals", olga, "")
+	pending = nil
+	_ = json.Unmarshal(body, &pending)
+	if len(pending) != 1 || pending[0]["stage"] != "hr_admin" {
+		t.Fatalf("HR admin approvals: %s", body)
+	}
+	status, _, body = s.do(http.MethodPost, "/api/approvals/"+pending[0]["id"].(string)+"/decision", olga, `{"decision":"approved"}`,
+		"Idempotency-Key", agenttest.NewID())
+	if status != http.StatusOK {
+		t.Fatalf("HR admin decision: %d %s", status, body)
+	}
 	if _, _, body = s.do(http.MethodGet, "/api/actions", anna, ""); !strings.Contains(string(body), `"status":"approved"`) {
 		t.Fatalf("approved action: %s", body)
 	}

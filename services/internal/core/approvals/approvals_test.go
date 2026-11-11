@@ -186,8 +186,23 @@ func TestApprovals_S3_LeadQueueAndDecision_R66(t *testing.T) {
 	if status != http.StatusOK || decided["status"] != "approved" || decided["comment"] != "Хорошего отдыха" || decided["id"] != absApproval {
 		t.Fatalf("%d %s", status, body)
 	}
-	if e.mcp.AbsenceStatus(absID) != "approved" {
-		t.Fatal("absence not approved in MCP")
+	// Lead approved: the request waits for the HR admin (second stage), then is approved.
+	if e.mcp.AbsenceStatus(absID) != "pending_hr" || e.count(`SELECT count(*) FROM core.actions WHERE external_id = $1 AND status = 'pending_hr'`, absID) != 1 {
+		t.Fatal("absence not waiting for the HR admin")
+	}
+	olga := tok(t, mcptest.HRAdmin, "hr_admin", "people")
+	if status, _ := e.do(http.MethodGet, "/api/approvals", tok(t, "intern.anna", "intern", "delivery"), ""); status != http.StatusForbidden {
+		t.Fatalf("intern sees approvals: %d", status)
+	}
+	status, hrBody := e.do(http.MethodGet, "/api/approvals", olga, "")
+	var hrQueue []map[string]any
+	_ = json.Unmarshal(hrBody, &hrQueue)
+	if status != http.StatusOK || len(hrQueue) != 1 || hrQueue[0]["stage"] != "hr_admin" {
+		t.Fatalf("HR admin queue: %d %s", status, hrBody)
+	}
+	status, hrBody = e.do(http.MethodPost, "/api/approvals/"+hrQueue[0]["id"].(string)+"/decision", olga, `{"decision":"approved"}`, "Idempotency-Key", agenttest.NewID())
+	if status != http.StatusOK || e.mcp.AbsenceStatus(absID) != "approved" {
+		t.Fatalf("HR admin decision: %d %s", status, hrBody)
 	}
 	if e.count(`SELECT count(*) FROM core.actions a JOIN core.plan_tasks t ON t.id = a.task_id
 		WHERE a.external_id = $1 AND a.status = 'approved' AND t.status = 'done'`, absID) != 1 {
@@ -205,8 +220,8 @@ func TestApprovals_S3_LeadQueueAndDecision_R66(t *testing.T) {
 		if status != http.StatusOK || string(again) != string(body) {
 			t.Fatalf("%d %s", status, again)
 		}
-		if e.count(`SELECT count(*) FROM core.analytics_events WHERE name = 'action.status_changed'`) != 1 {
-			t.Fatal("replay changed state again")
+		if e.count(`SELECT count(*) FROM core.analytics_events WHERE name = 'action.status_changed'`) != 2 {
+			t.Fatalf("replay changed state again: %d", e.count(`SELECT count(*) FROM core.analytics_events WHERE name = 'action.status_changed'`))
 		}
 		status, conflict := e.do(http.MethodPost, "/api/approvals/"+absApproval+"/decision", maria, `{"decision":"rejected"}`, "Idempotency-Key", agenttest.NewID())
 		if status != http.StatusConflict || code(t, conflict) != "conflict" {

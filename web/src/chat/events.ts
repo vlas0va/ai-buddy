@@ -15,7 +15,7 @@ export type Draft = z.infer<typeof draftSchema>
 
 export const proposalSchema = z.object({
   proposal_id: z.string(),
-  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule']),
   draft: draftSchema,
   summary: z.string().optional(),
 })
@@ -23,7 +23,7 @@ export type Proposal = z.infer<typeof proposalSchema>
 
 export const resultSchema = z.object({
   action_id: z.string(),
-  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule']),
   external_id: z.string().nullable().optional(),
   status: z.enum(ACTION_STATUSES),
   summary: z.string().optional(),

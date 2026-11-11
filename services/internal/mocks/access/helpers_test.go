@@ -139,8 +139,14 @@ type statusItem struct {
 	Name            string `json:"name"`
 	Kind            string `json:"kind"`
 	Elevated        bool   `json:"elevated"`
-	Status          string `json:"status"`
-	ChecklistItemID string `json:"checklist_item_id"`
+	Status          string   `json:"status"`
+	ChecklistItemID string   `json:"checklist_item_id"`
+	Environments    []string `json:"environments"`
+	Levels          []string `json:"levels"`
+	Optional        bool     `json:"optional"`
+	ApproverLabel   string   `json:"approver_label"`
+	Environment     string   `json:"environment"`
+	Level           string   `json:"level"`
 }
 
 type statusList struct {
@@ -162,6 +168,8 @@ type result struct {
 	Status          string  `json:"status"`
 	ApproverID      *string `json:"approver_id"`
 	ChecklistItemID *string `json:"checklist_item_id"`
+	Environment     *string `json:"environment"`
+	Level           string  `json:"level"`
 	CreatedAt       string  `json:"created_at"`
 	Replayed        bool    `json:"replayed"`
 }

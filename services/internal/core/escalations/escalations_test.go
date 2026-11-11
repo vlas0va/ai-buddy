@@ -349,3 +349,30 @@ func TestHandlers_NoClaims(t *testing.T) {
 		}
 	}
 }
+
+// Checkpoint 11.11: the FAQ that goes to the knowledge base is general — no names and no dates of this intern.
+func TestAnswer_Checkpoint_FAQIsGeneral_R10(t *testing.T) {
+	e := setup(t, true)
+	esc := e.send(anna, "mentor", "Олег, привет! Можно ли Анне Котовой взять отгул 13 ноября перед релизом?")
+	body := `{"text":"Анна, да, только предупреди Марию Лебедеву за два дня, в пятницу согласует.","add_to_kb":true}`
+	req, _ := http.NewRequest("POST", e.srv.URL+"/api/escalations/"+esc["id"].(string)+"/answer", strings.NewReader(body))
+	tok, _ := authn.Issue(secret, authn.Claims{Sub: "mentor.oleg", Role: "mentor", TeamID: "delivery"}, time.Hour)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if len(e.faq.calls) != 1 {
+		t.Fatalf("faq calls: %d", len(e.faq.calls))
+	}
+	call := e.faq.calls[0]
+	for _, bad := range []string{"Анн", "Котов", "Олег", "Мари", "Лебедев", "13 ноября", "пятниц", "привет"} {
+		if strings.Contains(call["title"]+call["body"], bad) {
+			t.Fatalf("FAQ keeps %q: %v", bad, call)
+		}
+	}
+	if !strings.Contains(call["body"], "предупреди за два дня") || !strings.HasPrefix(call["title"], "Можно ли взять отгул в нужный день") {
+		t.Fatalf("FAQ text: %v", call)
+	}
+}

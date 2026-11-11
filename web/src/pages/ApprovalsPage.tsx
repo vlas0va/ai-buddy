@@ -23,7 +23,7 @@ const KIND_TEXT: Record<Approval["kind"], string> = {
 /** What happens after the decision, so the lead knows what the button starts (Q&A 10.11: HR steps of a day off). */
 const AFTER_TEXT: Record<Approval["kind"], string> = {
   absence_request:
-    "После согласования HR-администратор оформит отгул, HR BP получит уведомление.",
+    "После вашего согласования заявку согласует HR-администратор; до этого сотрудник может перенести даты.",
   access_request:
     "Повышенный доступ выдаётся только с вашего согласия; обычные доступы выдаются без вас.",
   trip_request:
@@ -82,7 +82,14 @@ function ApprovalCard({ approval }: { approval: Approval }) {
         </span>
       </div>
       <p className="approval-summary">{withoutApprover(approval.summary)}</p>
-      <p className="hint">{AFTER_TEXT[approval.kind]}</p>
+      {approval.stage === "hr_admin" ? (
+        <p className="hint">
+          Этап: HR-администратор. Руководитель уже согласовал; после вашего
+          согласования отсутствие оформлено, HR BP получит уведомление.
+        </p>
+      ) : (
+        <p className="hint">{AFTER_TEXT[approval.kind]}</p>
+      )}
       <label className="approval-comment">
         <span className="hint">Комментарий (необязательно)</span>
         <textarea

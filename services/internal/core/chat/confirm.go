@@ -382,7 +382,7 @@ func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, me
 	var out *actions.Action
 	err = h.inProposalTx(ctx, at.p.id, func(ctx context.Context, tx pgx.Tx, sessionID string) (string, error) {
 		a, changed, err := h.actions.ApplyDecision(ctx, tx, decided.Kind, decided.RefID, decided.Status,
-			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub})
+			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub, Stage: decided.Stage})
 		switch {
 		case errors.Is(err, actions.ErrNotFound):
 		case err != nil:
@@ -537,6 +537,13 @@ func parseToolResult(data json.RawMessage, p proposal, d draft) (toolResult, err
 	return tr, nil
 }
 
+func orRead(level string) string {
+	if level == "" {
+		return "read"
+	}
+	return level
+}
+
 // checkResult verifies that an MCP result is the result of the confirmed draft: the same dates or resource, the
 // approval and decision that were signed, and a status a new request can have.
 func checkResult(d draft, result map[string]json.RawMessage) error {
@@ -563,8 +570,20 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 		if err := same("resource_id"); err != nil {
 			return err
 		}
+		// the environment and the level that were signed (checkpoint 11.11); a draft without them means read, no environment
+		if str(result, "environment") != str(args, "environment") || orRead(str(result, "level")) != orRead(str(args, "level")) {
+			return fmt.Errorf("access scope %q/%q differs from the confirmed %q/%q", str(result, "environment"), str(result, "level"),
+				str(args, "environment"), str(args, "level"))
+		}
 		if !strings.HasPrefix(id, "ACC-") || (status != actions.StatusPendingApproval && status != actions.StatusGranted) {
 			return fmt.Errorf("new access request %q has status %q", id, status)
+		}
+	case mcpclient.ToolReschedule:
+		if err := same("start_date", "end_date"); err != nil {
+			return err
+		}
+		if id != str(args, "id") || !strings.HasPrefix(id, "ABS-") || status != actions.StatusPendingApproval {
+			return fmt.Errorf("moved request %q/%q differs from the confirmed %q", id, status, str(args, "id"))
 		}
 	case mcpclient.ToolCreateTrip:
 		if err := same("city", "start_date", "end_date"); err != nil {

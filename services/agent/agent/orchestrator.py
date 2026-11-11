@@ -29,7 +29,7 @@ from .nlu.router import IntentRouter, Route
 from .retrieval import KnowledgeBase
 from .sse import Event, status
 from .state import StateStore, make_store
-from .text import normalize, same_person
+from .text import generalize, normalize, same_person
 from .tools.base import ToolBackend, ToolGateway
 from .tools.inprocess import InProcessServer, MockServices
 from .tools.mcp_client import McpHttpServer
@@ -72,6 +72,8 @@ QUIZ_BREAK_INTENTS = {
     "benefit",
 }
 SLOT_INTENTS_BLOCKING = {
+    "task_message",
+    "one_on_one",
     "absence_status",
     "trip_status",
     "consents",
@@ -251,7 +253,7 @@ class Agent:
             same_person(person, m.get("display_name", "")) for m in turn.user.mentees
         ):
             return Route("mentee", 0.9, "rule")
-        if turn.user.role == "lead":
+        if turn.user.role in ("lead", "hr_admin"):
             try:
                 pending = items(turn.gateway.read("approvals.list_pending"))
             except ToolError:
@@ -287,6 +289,8 @@ class Agent:
             "channels": access.handle_channels,
             "plan": plan.handle,
             "summary": plan.handle_summary,
+            "task_message": plan.handle_task_message,
+            "one_on_one": team.handle_one_on_one,
             "approvals": team.handle_approvals,
             "mentee": team.handle_mentee,
             "whois": qa.handle_whois,
@@ -378,6 +382,7 @@ class Agent:
             pass
         card = {
             "absence_request": absence.result_card,
+            "absence_reschedule": absence.reschedule_card,
             "access_request": access.result_card,
             "approval_decision": team.result_card,
             "trip_request": trips.result_card,
@@ -415,6 +420,8 @@ class Agent:
             raise Forbidden("Можно пополнять базу знаний только своей команды.")
         if not question.strip() or not answer.strip():
             raise BadRequest("Нужны вопрос и ответ.")
+        names = [e.get("display_name", "") for e in self.mocks.employees.values()] if self.mocks else []
+        question, answer = generalize(question, names), generalize(answer, names)  # an FAQ for every intern
         digest = hashlib.sha1(f"{team_id}:{question}".encode()).hexdigest()[:8]
         doc_id = f"faq-{team_id}-{digest}"
         title = question.strip().rstrip("?")[:90]

@@ -1,7 +1,8 @@
 .chat-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .chat-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 .chat-main { display: flex; flex-direction: column; min-height: 0; }
-.chat-list { flex: 1; overflow-y: auto; display: grid; align-content: start; gap: var(--space-4); padding-bottom: var(--space-3); }
+/* position: relative keeps visually-hidden and absolute children inside the scroller, so the page itself never scrolls */
+.chat-list { position: relative; flex: 1; overflow-y: auto; display: grid; align-content: start; gap: var(--space-4); padding-bottom: var(--space-3); }
 .chat-turn { display: grid; gap: var(--space-3); }
 .chat-row { display: flex; gap: var(--space-2); align-items: flex-start; }
 .chat-row-user { justify-content: flex-end; }

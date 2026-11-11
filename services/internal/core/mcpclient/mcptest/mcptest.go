@@ -43,6 +43,7 @@ var resources = map[string]resource{
 	"space-delivery":           {"Пространство кластера «Доставка»", "space", "delivery", "CL-05", false},
 	"space-delivery-incidents": {"Закрытое пространство инцидентов «Доставки»", "space", "delivery", "CL-05", true},
 	"space-search":             {"Пространство кластера «Поиск»", "space", "search", "CL-05", false},
+	"db-delivery-orders":       {"БД delivery_orders (PostgreSQL)", "database", "delivery", "", false},
 }
 
 type absenceRec struct {
@@ -92,7 +93,7 @@ func New(t testing.TB, jwtSecret, confirmationSecret []byte) *Server {
 	for name, tools := range map[string]map[string]mcpx.HandlerFunc{
 		"absence": {
 			"get_policy": s.getPolicy, "list_my_requests": s.listMyRequests, "validate_request": s.validateRequest,
-			"create_request": s.createRequest, "get_request": s.getRequest,
+			"create_request": s.createRequest, "get_request": s.getRequest, "reschedule_request": s.rescheduleRequest,
 		},
 		"access": {
 			"list_required": s.listRequired, "list_my_access": s.listMyAccess, "list_team_channels": s.listTeamChannels,
@@ -208,8 +209,43 @@ func ruDate(d string) string {
 func (s *Server) addApproval(kind, ref, requester, approver, summary string) {
 	s.approvals = append(s.approvals, &approvalRec{approver: approver, res: mcpclient.Approval{
 		ID: fmt.Sprintf("APR-%08x", len(s.approvals)+1), Kind: kind, RefID: ref, RequesterID: requester,
-		RequesterDisplayName: people[requester].name, Summary: summary, Status: "pending", CreatedAt: now(),
+		RequesterDisplayName: people[requester].name, Summary: summary, Status: "pending", Stage: "lead", CreatedAt: now(),
 	}})
+}
+
+// HRAdmin is the HR admin who decides the second stage of an absence request.
+const HRAdmin = "hradmin.olga"
+
+// rescheduleRequest moves the caller's request while the HR admin has not approved it; approval starts again.
+func (s *Server) rescheduleRequest(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
+	var in struct {
+		ID        string `json:"id"`
+		StartDate string `json:"start_date"`
+		EndDate   string `json:"end_date"`
+		Key       string `json:"idempotency_key"`
+	}
+	if err := mcpx.DecodeArgs(args, &in); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.absence {
+		if r.res.ID != in.ID || r.owner != c.Sub {
+			continue
+		}
+		if r.res.Status != "pending_approval" && r.res.Status != "pending_hr" {
+			return nil, apierr.Conflict().WithMessage("Перенести можно только заявку, которую HR-администратор ещё не согласовал")
+		}
+		r.res.StartDate, r.res.EndDate, r.res.Status = in.StartDate, in.EndDate, "pending_approval"
+		for _, a := range s.approvals {
+			if a.res.RefID == in.ID && a.res.Status == "pending" {
+				a.res.Status = "cancelled"
+			}
+		}
+		s.addApproval("absence_request", r.res.ID, c.Sub, r.res.ApproverID, "Отгул "+ruDate(in.StartDate)+" (перенос)")
+		return r.res, nil
+	}
+	return nil, apierr.Forbidden()
 }
 
 // ---- absence ----
@@ -331,11 +367,16 @@ func (s *Server) listTeamChannels(_ context.Context, c mcpx.Caller, _ json.RawMe
 
 func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in struct {
-		ResourceID string `json:"resource_id"`
-		Key        string `json:"idempotency_key"`
+		ResourceID  string `json:"resource_id"`
+		Environment string `json:"environment"`
+		Level       string `json:"level"`
+		Key         string `json:"idempotency_key"`
 	}
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
 		return nil, err
+	}
+	if in.Level == "" {
+		in.Level = "read"
 	}
 	r, ok := resources[in.ResourceID]
 	if !ok || (r.team != "" && r.team != c.TeamID) {
@@ -351,8 +392,12 @@ func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMe
 	s.seqACC++
 	item := r.item
 	res := mcpclient.AccessRequest{ID: fmt.Sprintf("ACC-%06d", s.seqACC), ResourceID: in.ResourceID, ResourceName: r.name,
-		Status: "granted", ChecklistItemID: &item, CreatedAt: now()}
-	if r.elevated {
+		Status: "granted", ChecklistItemID: &item, Level: in.Level, CreatedAt: now()}
+	if in.Environment != "" {
+		env := in.Environment
+		res.Environment = &env
+	}
+	if r.elevated || in.Level != "read" || in.Environment == "prod" { // checkpoint 11.11: write, admin and prod are approved
 		approver, _ := approverOf(c.Sub)
 		res.Status, res.ApproverID = "pending_approval", &approver
 		s.addApproval("access_request", res.ID, c.Sub, approver, "Доступ: "+r.name)
@@ -409,7 +454,15 @@ func (s *Server) decide(_ context.Context, c mcpx.Caller, args json.RawMessage) 
 // applyDecision must be called with s.mu held.
 func (s *Server) applyDecision(a mcpclient.Approval) {
 	for _, r := range s.absence {
-		if a.Kind == "absence_request" && r.res.ID == a.RefID {
+		if a.Kind != "absence_request" || r.res.ID != a.RefID {
+			continue
+		}
+		switch {
+		case a.Stage == "lead" && a.Status == "approved":
+			r.res.Status = "pending_hr"
+			s.addApproval("absence_request", r.res.ID, a.RequesterID, HRAdmin, a.Summary)
+			s.approvals[len(s.approvals)-1].res.Stage = "hr_admin"
+		default:
 			r.res.Status = a.Status
 		}
 	}

@@ -133,11 +133,10 @@ def test_S3_12_invalid_or_tampered_confirmation_is_rejected(anna, ivan):
     assert first(ivan.confirm(p), "error")["code"] == "confirmation_invalid"
 
 
-def test_S3_13_vacation_and_sick_leave_are_explained_not_created(anna):
+def test_S3_13_vacation_is_a_request_with_its_type_not_a_day_off(anna):
     ev = anna.say("хочу отпуск с 1 по 10 декабря")
-    assert first(ev, "action_proposal") is None
-    assert "только отгул" in text_of(ev)
-    assert first(ev, "sources")["items"][0]["doc_id"] == "common-vacation"
+    assert first(ev, "action_proposal")["draft"]["args"]["type"] == "vacation"
+    assert "только отгул" not in text_of(ev)
 
 
 def test_S3_14_short_notice_warning(anna):

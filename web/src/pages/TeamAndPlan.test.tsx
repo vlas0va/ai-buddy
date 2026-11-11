@@ -164,6 +164,7 @@ describe('questions and notifications', () => {
     mountAt('/questions')
     await userEvent.type(await screen.findByLabelText('Ответ для Анна Соколова'), 'В Confluence, раздел «Дизайн»')
     await userEvent.click(screen.getByLabelText(/Добавить ответ в базу знаний/))
+    expect(screen.getByText(/без имён и конкретных дат/)).toBeInTheDocument() // checkpoint 11.11: the FAQ is general
     await userEvent.click(screen.getByRole('button', { name: 'Ответить' }))
     expect(await screen.findByText('Есть ответ')).toBeInTheDocument()
     expect(screen.getByText('Ответ добавлен в базу знаний команды.')).toBeInTheDocument()

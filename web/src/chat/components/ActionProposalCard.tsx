@@ -3,7 +3,9 @@ import { Card } from '@/components/ui/Card'
 import type { Proposal } from '@/chat/events'
 import type { ProposalState } from '../stream'
 
-const TYPE_TEXT: Record<string, string> = { day_off: 'Отгул', vacation: 'Отпуск', sick: 'Больничный' }
+const TYPE_TEXT: Record<string, string> = { day_off: 'Отгул', vacation: 'Отпуск', absence: 'Отсутствие', parental_leave: 'Декрет' }
+
+const LEVEL_TEXT: Record<string, string> = { read: 'чтение', write: 'запись', admin: 'администрирование' }
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
@@ -16,9 +18,21 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
     const end = str(args.end_date)
     return [
       { label: 'Даты', value: str(display?.dates) || (start === end || !end ? start : `${start} — ${end}`) },
-      { label: 'Тип', value: TYPE_TEXT[str(args.type)] ?? str(args.type) },
-      { label: 'Рабочих дней', value: typeof display?.working_days === 'number' ? String(display.working_days) : '' },
+      { label: 'Вид', value: TYPE_TEXT[str(args.type)] ?? str(args.type) },
+      typeof display?.calendar_days === 'number'
+        ? { label: 'Календарных дней', value: String(display.calendar_days) }
+        : { label: 'Рабочих дней', value: typeof display?.working_days === 'number' ? String(display.working_days) : '' },
+      { label: 'Документы', value: Array.isArray(display?.documents) ? display.documents.map(str).join(', ') : '' },
       { label: 'Согласующий', value: str(display?.approver_display_name) },
+      { label: 'Затем', value: 'HR-администратор' },
+    ]
+  }
+  if (p.kind === 'absence_reschedule') {
+    return [
+      { label: 'Заявка', value: `${str(display?.ref_id) || str(args.id)} — ${str(display?.type_label)}` },
+      { label: 'Было', value: str(display?.old_period_label) },
+      { label: 'Станет', value: str(display?.period_label) || `${str(args.start_date)} — ${str(args.end_date)}` },
+      { label: 'Дальше', value: 'снова согласуют руководитель и HR-администратор' },
     ]
   }
   if (p.kind === 'trip_request') {
@@ -45,14 +59,19 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
       { label: 'Решение', value: str(display?.decision_label) },
     ]
   }
+  // checkpoint 11.11: a concrete resource, the environment, the rights and who approves
   return [
     { label: 'Ресурс', value: str(display?.resource_name) || str(args.resource_id) },
+    { label: 'Окружение', value: str(args.environment) },
+    { label: 'Права', value: str(display?.level_label) || (args.level ? LEVEL_TEXT[str(args.level)] ?? str(args.level) : '') },
     { label: 'Повышенные права', value: display?.elevated ? 'Да, нужно согласование' : 'Нет' },
+    { label: 'Кто согласует', value: display?.elevated ? str(display?.approver_label) : '' },
   ]
 }
 
 const TITLE: Record<Proposal['kind'], string> = {
-  absence_request: 'Черновик заявки на отгул',
+  absence_request: 'Черновик заявки на отсутствие',
+  absence_reschedule: 'Перенос заявки',
   access_request: 'Черновик заявки на доступ',
   trip_request: 'Черновик заявки на командировку',
   consent: 'Подпись согласия',

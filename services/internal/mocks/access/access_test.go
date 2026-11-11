@@ -34,9 +34,12 @@ func TestListRequired_S4_TeamScope_R71(t *testing.T) {
 		c    mcpx.Caller
 		want []string
 	}{
-		{"intern of delivery", anna, []string{"bitbucket", "confluence", "jira", "space-delivery", "space-delivery-incidents"}},
-		{"mentor of delivery", oleg, []string{"bitbucket", "confluence", "jira", "space-delivery", "space-delivery-incidents"}},
-		{"intern of search", ivan, []string{"bitbucket", "confluence", "jira", "space-search"}},
+		{"intern of delivery", anna, []string{"bitbucket", "confluence", "jira", "jira-dlv", "bb-delivery-api", "space-delivery",
+			"space-delivery-incidents", "db-delivery-orders"}},
+		{"mentor of delivery", oleg, []string{"bitbucket", "confluence", "jira", "jira-dlv", "bb-delivery-api", "space-delivery",
+			"space-delivery-incidents", "db-delivery-orders"}},
+		{"intern of search", ivan, []string{"bitbucket", "confluence", "jira", "jira-srch", "bb-search-indexer", "space-search",
+			"db-search-catalog"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,7 +48,7 @@ func TestListRequired_S4_TeamScope_R71(t *testing.T) {
 				t.Fatalf("got %v, want %v", ids(got), tt.want)
 			}
 			for _, it := range got.Items {
-				if it.Status != "not_requested" || it.Kind == "channel" || it.ChecklistItemID == "" || it.Name == "" {
+				if it.Status != "not_requested" || it.Kind == "channel" || (it.ChecklistItemID == "") != it.Optional || it.Name == "" {
 					t.Fatalf("item %+v", it)
 				}
 			}
@@ -450,5 +453,61 @@ func TestRoundTrip_S4_HTTP_R71(t *testing.T) {
 	}
 	if n := e.count(`SELECT count(*) FROM access.requests WHERE employee_id = 'intern.anna'`); n != 2 {
 		t.Fatalf("requests = %d", n)
+	}
+}
+
+// Checkpoint 11.11: a request names a concrete resource, the environment and the rights; reading dev/stage is granted
+// at once, write/admin rights and prod go to the lead; the table shows who approves.
+func TestRequestAccess_Checkpoint_EnvironmentAndLevel_R71(t *testing.T) {
+	e := newEnv(t)
+	with := func(id, env, level string) map[string]any {
+		m := resource(id)
+		if env != "" {
+			m["environment"] = env
+		}
+		if level != "" {
+			m["level"] = level
+		}
+		return m
+	}
+	read := mustCall[result](e, anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "stage", "read")))
+	if read.Status != "granted" || read.Environment == nil || *read.Environment != "stage" || read.Level != "read" {
+		t.Fatalf("read on stage %+v", read)
+	}
+	write := mustCall[result](e, anna, "request_access", confirmed(t, anna, newKey(t), with("bb-delivery-api", "", "write")))
+	if write.Status != "pending_approval" || write.Level != "write" || write.Environment != nil {
+		t.Fatalf("write to the repo %+v", write)
+	}
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary = 'Доступ: Bitbucket: репозиторий delivery-api (запись)'`,
+		write.ID); n != 1 {
+		t.Fatal("approval summary without the level")
+	}
+	prod := mustCall[result](e, anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "prod", "read")))
+	if prod.Status != "pending_approval" {
+		t.Fatalf("prod %+v", prod)
+	}
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary LIKE '%(prod, чтение)'`, prod.ID); n != 1 {
+		t.Fatal("approval summary without the environment")
+	}
+	// the same read on stage again is a duplicate; another environment is a new request
+	e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "stage", "read")), apierr.CodeConflict)
+	if got := mustCall[result](e, anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "dev", ""))); got.Status != "granted" {
+		t.Fatalf("dev %+v", got)
+	}
+	for _, bad := range []map[string]any{
+		with("db-delivery-orders", "", "read"), // a database needs an environment
+		with("jira-dlv", "dev", "read"),        // a project has none
+		with("confluence", "", "admin"),        // a level the resource does not offer
+	} {
+		e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), bad), apierr.CodeValidation)
+	}
+	m := mustCall[statusList](e, anna, "list_required", nil).byID()
+	db := m["db-delivery-orders"]
+	if !db.Optional || !slices.Equal(db.Environments, []string{"dev", "stage", "prod"}) || db.Environment != "dev" ||
+		!strings.Contains(db.ApproverLabel, "DevOps") || !slices.Equal(m["jira-dlv"].Levels, []string{"read", "write", "admin"}) {
+		t.Fatalf("table rows %+v %+v", db, m["jira-dlv"])
+	}
+	if scopeLabel(requestIn{Level: "read"}) != "" || deref(nil) != "" {
+		t.Fatal("helpers")
 	}
 }

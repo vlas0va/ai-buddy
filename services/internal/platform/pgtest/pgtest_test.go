@@ -14,7 +14,7 @@ func TestNewAppliesMigrationsAndSeed(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM checklist.items").Scan(&items); err != nil {
 		t.Fatal(err)
 	}
-	if users != 9 || items != 16 {
+	if users != 10 || items != 16 { // 9 seeded + the HR admin (0007)
 		t.Fatalf("seed not applied: users=%d items=%d", users, items)
 	}
 	if URL(t, pool) == "" {

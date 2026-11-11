@@ -59,7 +59,7 @@ mcp_servers:
   trips:     {url: "${MCP_TRIPS_URL:-}",     timeout_s: 5}   # http://mcp-mocks:8100/mcp/trips
   consents:  {url: "${MCP_CONSENTS_URL:-}",  timeout_s: 5}   # http://mcp-mocks:8100/mcp/consents
 
-roles: [intern, mentor, lead, hrbp, alumni]
+roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
 
 # Role → tools, mirrors "roles" in contracts/schemas/*.json. The LLM is offered only READ tools of the caller's role;
 # write tools run only in a confirm turn after the user pressed «Отправить» (ADR-003).
@@ -68,37 +68,45 @@ tools:
   - name: absence.get_policy
     roles: [intern, mentor, lead]
     write: false
-    description: Тестовая инструкция об оформлении отгула (документ базы знаний).
+    description: Тестовая инструкция об оформлении отгула и других видов отсутствия (документ базы знаний).
     input_schema: {type: object, properties: {}}
   - name: absence.list_my_requests
     roles: [intern, mentor, lead]
     write: false
-    description: Мои заявки на отгул и их статусы.
-    input_schema: {type: object, properties: {status: {type: string, enum: [pending_approval, approved, rejected, cancelled]}}}
+    description: Мои заявки на отсутствие (отгул, отпуск, отсутствие, декрет) и их статусы.
+    input_schema: {type: object, properties: {status: {type: string, enum: [pending_approval, pending_hr, approved, rejected, cancelled]}}}
   - name: absence.get_request
     roles: [intern, mentor, lead]
     write: false
-    description: Одна моя заявка на отгул по номеру ABS-xxxxxx.
+    description: Одна моя заявка на отсутствие по номеру ABS-xxxxxx.
     input_schema: {type: object, properties: {id: {type: string}}, required: [id]}
   - name: absence.validate_request
     roles: [intern, mentor, lead]
     write: false
-    description: Проверить даты отгула (будущее, рабочие дни, пересечения, лимит).
+    description: Проверить даты заявки на отсутствие (вид, будущее, лимит, пересечения, документы для декрета).
     input_schema:
       type: object
-      properties: {type: {type: string, enum: [day_off]}, start_date: {type: string, format: date}, end_date: {type: string, format: date}}
+      properties:
+        type: {type: string, enum: [day_off, vacation, absence, parental_leave]}
+        start_date: {type: string, format: date}
+        end_date: {type: string, format: date}
+        exclude_id: {type: string}
       required: [type, start_date, end_date]
   - name: absence.create_request
     roles: [intern, mentor, lead]
     write: true
     proposal_kind: absence_request
+  - name: absence.reschedule_request
+    roles: [intern, mentor, lead]
+    write: true
+    proposal_kind: absence_reschedule
   - name: approvals.list_pending
-    roles: [lead]
+    roles: [lead, hr_admin]
     write: false
-    description: Заявки моей команды, ожидающие моего согласования.
+    description: Заявки, ожидающие моего согласования (руководитель — своей команды, HR-администратор — второй этап).
     input_schema: {type: object, properties: {}}
   - name: approvals.decide
-    roles: [lead]
+    roles: [lead, hr_admin]
     write: true
     proposal_kind: approval_decision
   - name: directory.whoami
@@ -179,9 +187,11 @@ intents:
   channels:     {roles: [intern, mentor], flag: scenario_s4}
   plan:         {roles: [intern, mentor, lead, alumni], flag: scenario_s1}
   summary:      {roles: [intern, mentor], flag: scenario_s1}
-  approvals:    {roles: [lead]}
+  task_message: {roles: [intern], flag: scenario_s1}
+  one_on_one:   {roles: [mentor, lead]}
+  approvals:    {roles: [lead, hr_admin]}
   mentee:       {roles: [mentor, lead]}
-  kb_question:  {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}
+  kb_question:  {roles: [intern, mentor, lead, hrbp, alumni, hr_admin], flag: scenario_s2}
   quiz:         {roles: [intern, alumni], flag: scenario_s2}
   quiz_answer:  {roles: [intern, alumni], flag: scenario_s2}
   code_review:  {roles: [intern, mentor, lead], flag: scenario_s2}

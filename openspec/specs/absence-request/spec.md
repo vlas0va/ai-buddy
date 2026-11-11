@@ -78,8 +78,10 @@ The agent SHALL relay validation problems, SHALL warn about short notice and SHA
 - **THEN** no proposal and the problem is explained
 
 #### Scenario: S3-13 Vacation and sick leave
-- **WHEN** the intern asks for a vacation
-- **THEN** no proposal, the vacation instruction is cited
+- **WHEN** the intern asks for a vacation with dates
+- **THEN** the draft is a request of type vacation, not a day off
+- **WHEN** the intern reports a sick leave
+- **THEN** no proposal: medical data stays out of the chat, the lead and HR BP are named
 
 #### Scenario: S3-14 Short notice
 - **WHEN** the day off is tomorrow
@@ -100,3 +102,44 @@ The agent SHALL relay validation problems, SHALL warn about short notice and SHA
 #### Scenario: S3-11 For another person
 - **WHEN** an intern asks to file a day off for Ivan
 - **THEN** refusal no_rights and no proposal
+
+### Requirement: One absence request with a type, documents and two approval stages (checkpoint 11.11)
+The request has dates, a type (day_off, vacation, absence, parental_leave) and up to 3 documents attached to the chat
+message (metadata only). The lead approves first, then the HR admin; until the HR admin approves, the dates can be moved.
+
+#### Scenario: S3-23 Vacation question
+- **WHEN** the intern asks how many vacation days there are and how to take a vacation
+- **THEN** the answer gives the Labour Code facts (28 calendar days, art. 115; after 6 months, art. 122), the process
+  (dates → type → documents → lead → HR admin, reschedule until the HR admin approves) and asks for dates; no proposal
+
+#### Scenario: S3-24 Vacation request
+- **WHEN** the intern asks for a vacation with dates at least 14 days ahead
+- **THEN** the draft has type vacation, calendar days, and the created request is shown as «Отпуск …»
+
+#### Scenario: S3-25 Vacation notice
+- **WHEN** the vacation starts in less than 14 days
+- **THEN** no proposal, the notice rule is explained
+
+#### Scenario: S3-26 Parental leave needs a document
+- **WHEN** the intern asks for parental leave without a document
+- **THEN** no proposal, buddy asks to attach a document
+- **WHEN** the intern then attaches a document
+- **THEN** the draft carries the document metadata and the created request keeps it
+
+#### Scenario: S3-27 Absence with a document
+- **WHEN** the intern asks for an absence for study and attaches a document in the same message
+- **THEN** the draft has type absence and lists the document
+
+#### Scenario: S3-28 Lead then HR admin
+- **WHEN** the lead approves the request
+- **THEN** it waits for the HR admin («Ждёт HR-администратора»), the HR admin sees it in the queue with the stage
+- **WHEN** the HR admin approves
+- **THEN** the request is approved and the steps show the HR admin registered it
+
+#### Scenario: S3-29 Reschedule until the HR admin approves
+- **WHEN** the intern asks to move a request the HR admin has not approved
+- **THEN** a draft absence_reschedule (tool absence.reschedule_request) with the new dates; after confirmation the request
+  goes back to the lead
+- **WHEN** the request is already approved by the HR admin, unknown, or the new dates are invalid
+- **THEN** no proposal and the reason is explained
+

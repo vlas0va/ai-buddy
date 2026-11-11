@@ -154,14 +154,29 @@ func TestChat_S3_DayOffEndToEnd_R66(t *testing.T) {
 		}
 		var list []map[string]any
 		e.do(http.MethodGet, "/api/actions", anna, nil).json(t, &list)
+		if list[0]["status"] != "pending_hr" {
+			t.Fatalf("action after the lead %v", list[0])
+		}
+		// Second stage: the HR admin approves the request in «Согласования».
+		olga := agenttest.Token(t, jwtSecret, "hradmin.olga", "hr_admin", "people", "")
+		pending = nil
+		e.do(http.MethodGet, "/api/approvals", olga, nil).json(t, &pending)
+		if len(pending) != 1 || pending[0]["stage"] != "hr_admin" {
+			t.Fatalf("HR admin approvals %v", pending)
+		}
+		if r := e.do(http.MethodPost, "/api/approvals/"+pending[0]["id"].(string)+"/decision", olga,
+			map[string]string{"decision": "approved"}, "Idempotency-Key", agenttest.NewID()); r.status != http.StatusOK {
+			t.Fatalf("HR admin decision %d %s", r.status, r.body)
+		}
+		e.do(http.MethodGet, "/api/actions", anna, nil).json(t, &list)
 		if list[0]["status"] != "approved" {
 			t.Fatalf("action %v", list[0])
 		}
 		if e.str(`SELECT status FROM core.plan_tasks WHERE id = $1`, taskID) != "done" {
 			t.Fatal("task not done")
 		}
-		if e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND kind = 'status_change'`) != 1 {
-			t.Fatal("no notification for the intern")
+		if e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND kind = 'status_change'`) != 2 {
+			t.Fatal("no notifications for the intern")
 		}
 	})
 
@@ -639,16 +654,17 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	c := e.stream(e.confirmPath(sid, pid), maria, nil)
 	got := c.find("action_result")
 	// Two decide calls: the agent's write and core's read-back with the same idempotency key (a replay).
-	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "approved" || e.mcp.Calls("approvals.decide") != 2 {
+	// The lead's approval passes the request to the HR admin.
+	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "pending_hr" || e.mcp.Calls("approvals.decide") != 2 {
 		t.Fatalf("%s %v", c.names(), got)
 	}
-	if e.str(`SELECT status FROM core.plan_tasks WHERE id = $1`, ar["task_id"]) != "done" ||
+	if e.str(`SELECT status FROM core.plan_tasks WHERE id = $1`, ar["task_id"]) != "waiting_approval" ||
 		e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND kind = 'status_change'`) != 1 ||
 		e.count(`SELECT count(*) FROM core.analytics_events WHERE name = 'action.status_changed'`) != 1 {
 		t.Fatal("decision not applied")
 	}
 	again := e.stream(e.confirmPath(sid, pid), maria, nil)
-	if again.names() != "action_result,done" || again.find("action_result")["status"] != "approved" ||
+	if again.names() != "action_result,done" || again.find("action_result")["status"] != "pending_hr" ||
 		again.last()["message_id"] != c.last()["message_id"] || e.mcp.Calls("approvals.decide") != 2 {
 		t.Fatalf("replay %s %v", again.names(), again.last())
 	}

@@ -157,14 +157,14 @@ export const handlers = [
   http.get('*/api/approvals', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
-    if (user.role !== 'lead') return forbidden()
+    if (user.role !== 'lead' && user.role !== 'hr_admin') return forbidden()
     return HttpResponse.json(listPendingApprovals(user))
   }),
 
   http.post('*/api/approvals/:approvalId/decision', async ({ request, params }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
-    if (user.role !== 'lead') return forbidden()
+    if (user.role !== 'lead' && user.role !== 'hr_admin') return forbidden()
     const key = request.headers.get('Idempotency-Key')
     const body = (await request.json().catch(() => ({}))) as { decision?: string; comment?: string }
     if (!key || (body.decision !== 'approved' && body.decision !== 'rejected')) {

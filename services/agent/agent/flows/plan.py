@@ -3,6 +3,7 @@ AI-cron reminder texts. Spec: openspec/specs/plan-assistant/spec.md (S1-01 … S
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from datetime import date
 from typing import Any
@@ -229,3 +230,35 @@ def reminder_text(item: dict[str, Any], user_name: str = "") -> dict[str, Any]:
         "text": text,
         "kind": kind,
     }
+
+
+TASK_MESSAGE = re.compile(
+    r"(написать|напиши|сообщение)\s+(\w+\s+)?наставник\w*\s+(про|по|о)\s+задач\w*\s+«([^»]+)»", re.IGNORECASE
+)
+
+
+def handle_task_message(turn: Turn, text: str) -> Iterator[Event]:
+    """«Помоги написать наставнику про задачу «…»» from the plan: a concrete draft about that task, not a KB search (S1-14)."""
+    from .coach import _mentor_draft  # local import: coach imports plan helpers indirectly
+
+    m = TASK_MESSAGE.search(text)
+    title = m.group(4).strip() if m else ""
+    task = next((t for t in turn.user.tasks if not t.parent_task_id and t.title.lower() == title.lower()), None)
+    open_subs = [t.title for t in turn.user.tasks if task and t.parent_task_id == task.task_id and t.status != "done"]
+    mentor = first_name(turn.contact("mentor"), "наставнику")
+    if open_subs:
+        points = "\n".join(f"— {s}" for s in open_subs[:4])
+        body = f"Сейчас занимаюсь задачей «{title}» из плана адаптации. Хочу обсудить с тобой:\n{points}\nКогда тебе удобно?"
+        lead = f"Подготовил сообщение для {mentor} про задачу «{title}» — в нём пункты, которые ещё не сделаны."
+    else:
+        body = (
+            f"Сейчас занимаюсь задачей «{title}» из плана адаптации. Уже сделал: <что>. "
+            "Нужна помощь с: <вопрос>. Когда тебе удобно обсудить?"
+        )
+        lead = f"Подготовил сообщение для {mentor} про задачу «{title}»."
+    yield from say(
+        lead
+        + " Допиши, что уже сделал, и нажми «Отправить» — сообщение уйдёт наставнику, а ответ появится в «Мои вопросы»."
+    )
+    yield _mentor_draft(turn, "task", body)
+    turn.meta["escalated"] = True

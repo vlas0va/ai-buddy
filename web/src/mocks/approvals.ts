@@ -5,7 +5,8 @@ import { MOCK_USERS, state } from './db'
 
 type Approval = z.infer<typeof approvalSchema>
 
-// Mock of GET /api/approvals and POST /api/approvals/{id}/decision. Approvals are the intern actions that wait for the lead.
+// Mock of GET /api/approvals and POST /api/approvals/{id}/decision. Approvals are the intern actions that wait for the
+// lead (pending_approval) or, for an absence the lead approved, for the HR admin (pending_hr; checkpoint 11.11).
 
 function requesterOf(actionId: string): { user: User; action: Action } | null {
   for (const [userId, actions] of state.actions) {
@@ -16,9 +17,11 @@ function requesterOf(actionId: string): { user: User; action: Action } | null {
   return null
 }
 
-function toApproval(user: User, action: Action, comment?: string): Approval {
-  const status = action.status === 'pending_approval' ? 'pending' : action.status === 'rejected' ? 'rejected' : 'approved'
+function toApproval(user: User, action: Action, comment?: string, stage: 'lead' | 'hr_admin' = 'lead'): Approval {
+  const waiting = stage === 'hr_admin' ? 'pending_hr' : 'pending_approval'
+  const status = action.status === waiting ? 'pending' : action.status === 'rejected' ? 'rejected' : 'approved'
   return {
+    stage,
     id: action.id,
     kind: action.kind === 'access_request' ? 'access_request' : 'absence_request',
     requester_display_name: user.display_name,
@@ -29,12 +32,16 @@ function toApproval(user: User, action: Action, comment?: string): Approval {
   }
 }
 
-export function listPendingApprovals(lead: User): Approval[] {
+export function listPendingApprovals(approver: User): Approval[] {
   const out: Approval[] = []
+  const hr = approver.role === 'hr_admin'
   for (const [userId, actions] of state.actions) {
     const user = MOCK_USERS.find((u) => u.id === userId)
-    if (!user || user.team_id !== lead.team_id) continue
-    for (const a of actions) if (a.status === 'pending_approval') out.push(toApproval(user, a))
+    if (!user || (!hr && user.team_id !== approver.team_id)) continue
+    for (const a of actions) {
+      if (hr && a.status === 'pending_hr') out.push(toApproval(user, a, undefined, 'hr_admin'))
+      if (!hr && a.status === 'pending_approval') out.push(toApproval(user, a))
+    }
   }
   return out.sort((x, y) => y.created_at.localeCompare(x.created_at))
 }
@@ -48,19 +55,23 @@ export function decideApproval(
 ): Approval | 'not_found' | 'forbidden' | 'conflict' {
   const found = requesterOf(approvalId)
   if (!found) return 'not_found'
-  if (found.user.team_id !== lead.team_id) return 'forbidden'
+  const hr = lead.role === 'hr_admin'
+  if (!hr && found.user.team_id !== lead.team_id) return 'forbidden'
   const { user, action } = found
+  const stage = hr ? 'hr_admin' : 'lead'
 
   const replay = state.decisions.get(key)
-  if (replay) return replay.actionId === approvalId && replay.decision === decision ? toApproval(user, action, comment) : 'conflict'
-  if (action.status !== 'pending_approval') return 'conflict'
+  if (replay) return replay.actionId === approvalId && replay.decision === decision ? toApproval(user, action, comment, stage) : 'conflict'
+  if (action.status !== (hr ? 'pending_hr' : 'pending_approval')) return 'conflict'
 
-  // an approved access request means the access is granted; an approved absence just gets "approved"
-  action.status = decision === 'rejected' ? 'rejected' : action.kind === 'access_request' ? 'granted' : 'approved'
-  action.approver_display_name = lead.display_name
+  // access: approved = granted; absence: the lead passes it to the HR admin, the HR admin approves it
+  const toHR = !hr && decision === 'approved' && action.kind === 'absence_request'
+  action.status = decision === 'rejected' ? 'rejected' : action.kind === 'access_request' ? 'granted' : toHR ? 'pending_hr' : 'approved'
+  if (!hr) action.approver_display_name = lead.display_name
   action.updated_at = new Date().toISOString()
   const task = state.extraTasks.get(user.id)?.find((t) => t.id === action.task_id)
-  if (task) task.status = decision === 'approved' ? 'done' : 'in_progress'
+  if (task) task.status = toHR ? 'waiting_approval' : decision === 'approved' ? 'done' : 'in_progress'
   state.decisions.set(key, { actionId: approvalId, decision })
-  return toApproval(user, action, comment)
+  const out = toApproval(user, action, comment, stage)
+  return toHR ? { ...out, status: 'approved' } : out
 }

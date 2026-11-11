@@ -266,3 +266,42 @@ def canonical_query(text: str) -> str:
     for rx, repl in _SLANG_RE:
         out = rx.sub(repl, out)
     return out
+
+
+# --- FAQ for every intern (checkpoint 11.11): no greetings, names or dates (= B's core/escalations.generalize) ---------
+ANY_DAY = "в нужный день"
+_MONTHS = r"(?:январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*"
+_WEEKDAYS = r"(?:понедельник|вторник|сред[ау]|четверг|пятниц[ау]|суббот[ау]|воскресенье)"
+_PREP = r"(?:(?:на|в|во|с|со|до|к|по)\s+)?"
+_DATE_RES = [
+    re.compile(rf"\b{_PREP}\d{{1,2}}\s*(?:-|–|—|по|до)\s*\d{{1,2}}\s+{_MONTHS}(?:\s+\d{{4}}(?:\s+года?)?)?", re.I),
+    re.compile(rf"\b{_PREP}\d{{1,2}}\s+{_MONTHS}(?:\s+\d{{4}}(?:\s+года?)?)?", re.I),
+    re.compile(rf"\b{_PREP}\d{{1,2}}[./]\d{{1,2}}(?:[./]\d{{2,4}})?\b", re.I),
+    re.compile(rf"\b{_PREP}\d{{4}}-\d{{2}}-\d{{2}}\b", re.I),
+    re.compile(
+        rf"\b(?:{_PREP}(?:сегодня|завтра|послезавтра|вчера)|(?:в|во|на|до|к)\s+{_WEEKDAYS}|на\s+(?:этой|следующей|прошлой)\s+неделе)\b",
+        re.I,
+    ),
+]
+_GREETING = re.compile(r"^\s*(привет|здравствуй(те)?|добрый\s+(день|вечер)|доброе\s+утро)[\s,!.]*", re.I)
+_LEADING = re.compile(r"^[\s,.!:;—-]+")
+
+
+def generalize(text: str, names: list[str]) -> str:
+    """Remove greetings, people's names (with Russian endings) and concrete dates from a question or an answer."""
+    out = text.strip()
+    words = sorted({w for n in names for w in n.split() if len(w) >= 3}, key=len, reverse=True)
+    for w in words:
+        stem = w.rstrip("аяоеьйиыу")
+        stem = stem if len(stem) >= 3 else w
+        out = re.sub(rf"(?<!\w){re.escape(stem)}[а-яё]{{0,3}}(?:[,!]\s*)?", "", out)
+    out = _GREETING.sub("", _LEADING.sub("", out))
+    for rx in _DATE_RES:
+        out = rx.sub(ANY_DAY, out)
+    lines = []
+    for line in out.split("\n"):
+        line = re.sub(r"[ \t]{2,}", " ", line)
+        line = re.sub(r"\s+([,.!?:;])", r"\1", line).replace(",,", ",")
+        line = _LEADING.sub("", line.rstrip())
+        lines.append(line[:1].upper() + line[1:])
+    return "\n".join(lines).strip()

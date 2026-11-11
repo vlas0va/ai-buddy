@@ -17,8 +17,14 @@
    expect: {events: [action_proposal], text_contains: ["за 2 рабочих дня"]}, expect_result: {approver_display_name: "Дмитрий Волков"}}
 - {id: s3-10, category: s3, user: intern.ivan, turns: ["какой статус моей заявки?"], expect: {intent: absence_status, text_contains: ["ABS-000100", "На согласовании"]}}
 - {id: s3-11, category: s3, user: intern.anna, turns: ["хочу отпуск с 1 по 10 декабря"],
-   expect: {not_events: [action_proposal], text_contains: ["только отгул"], sources_include: [common-vacation]}}
+   expect: {events: [action_proposal], args: {type: vacation, start_date: "2026-12-01", end_date: "2026-12-10"}}}
 - {id: s3-12, category: s3, user: mentor.oleg, turns: ["оформи мне отгул 20 ноября"], confirm: true,
    expect: {events: [action_proposal]}, expect_result: {status: pending_approval, approver_display_name: "Мария Лебедева"}}
 - {id: s3-13, category: s3, user: intern.anna, turns: ["в понедельник меня не будет, оформишь отгул?"],
    expect: {args: {start_date: "2026-11-16"}}}
+- {id: s3-23, category: s3, user: intern.anna, turns: ["сколько дней отпуска положено и как взять отпуск?"],
+   expect: {not_events: [action_proposal], text_contains: ["28 календарных дней", "ст. 115", "HR-администратор"], sources_include: [common-vacation]}}
+- {id: s3-24, category: s3, user: intern.anna, turns: ["оформи декрет с 1 декабря по 30 марта"],
+   expect: {not_events: [action_proposal], text_contains: ["документ"]}}
+- {id: s3-25, category: s3, user: intern.anna, turns: ["нужно отсутствие на учёбу 20 ноября"], confirm: true,
+   expect: {events: [action_proposal], args: {type: absence}}, expect_result: {status: pending_approval}}

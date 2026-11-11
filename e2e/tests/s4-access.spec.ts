@@ -20,13 +20,15 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   }
 })
 
-test('S4: channels of the team come with a draft to the mentor', async ({ page }) => {
+// checkpoint 11.11: adding to groups is asked in personal messages, so buddy gives advice without a draft
+test('S4: channels of the team come with advice to write the mentor personally', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)
   await ask(page, 'в какие каналы мне вступить?')
   await waitAnswer(page)
   await expect(lastTurn(page)).toContainText('#delivery')
-  await expect(page.getByLabel('Черновик сообщения').last()).toBeVisible()
+  await expect(lastTurn(page)).toContainText('личные сообщения')
+  await expect(lastTurn(page).getByLabel('Черновик сообщения')).toHaveCount(0)
 })
 
 test('S4: a clone question is engineering help, not an access request', async ({ page }) => {
@@ -36,4 +38,20 @@ test('S4: a clone question is engineering help, not an access request', async ({
   await waitAnswer(page)
   await expect(lastTurn(page).getByLabel('Источники')).toBeVisible()
   await expect(lastTurn(page).getByLabel('Черновик заявки')).toHaveCount(0)
+})
+
+// checkpoint 11.11: the accesses are a table; a request names the resource, the environment and the rights
+test('S4: accesses table and a database request on stage for reading', async ({ page }) => {
+  await login(page, 'mentor.oleg')
+  await newDialog(page)
+  await ask(page, 'какие доступы мне нужны?')
+  await waitAnswer(page)
+  await expect(lastTurn(page).locator('table')).toContainText('Jira: проект DLV')
+  await expect(lastTurn(page).locator('table')).toContainText('dev, stage, prod')
+  await ask(page, 'дай доступ к БД на stage на чтение')
+  await waitAnswer(page)
+  const draft = page.getByLabel('Черновик заявки').last()
+  await expect(draft).toContainText('БД delivery_orders')
+  await expect(draft).toContainText('stage')
+  await expect(draft).toContainText('чтение')
 })
