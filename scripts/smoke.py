@@ -169,6 +169,51 @@ def main() -> None:
         fail(f"S4 result: {result}")
     ok(f"S4 access request {result.get('external_id')} {result['status']}, task {result['task_id']}")
 
+    # --- HR steps of the approved day off: the HR BP got a notice (Q&A 10.11) -------------------------------------
+    elena = login("hrbp.elena")
+    _, notes = call("GET", "/api/notifications", elena)
+    items = notes.get("items", notes) if isinstance(notes, dict) else notes
+    if not any(str(n.get("title", "")).startswith("Отгул оформлен") for n in items):
+        fail(f"HR BP notice after approval: {items}")
+    ok("S3 approved day off registered by the HR admin, HR BP notified")
+
+    # --- trip: draft → confirm → TRP-… → lead approves ------------------------------------------------------------
+    start = dt.date.today() + dt.timedelta(days=12)
+    end = start + dt.timedelta(days=2)
+    text = f"оформи командировку в Казань с {start:%d.%m.%Y} по {end:%d.%m.%Y}, цель — встреча с командой"
+    proposal = first(stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": text}), "action_proposal")
+    if proposal.get("kind") != "trip_request" or proposal["draft"]["args"].get("city") != "Казань":
+        fail(f"trip draft: {proposal}")
+    result = first(stream(f"/api/chat/sessions/{sid}/proposals/{proposal['proposal_id']}/confirm", anna), "action_result")
+    if not str(result.get("external_id", "")).startswith("TRP-") or result.get("status") != "pending_approval":
+        fail(f"trip result: {result}")
+    _, pending = call("GET", "/api/approvals", maria)
+    item = next((p for p in pending if p.get("kind") == "trip_request"), None)
+    if not item:
+        fail(f"trip approval missing: {pending}")
+    call("POST", f"/api/approvals/{item['id']}/decision", maria, {"decision": "approved", "comment": ""},
+         headers={"Idempotency-Key": str(uuid.uuid4())})
+    _, actions = call("GET", "/api/actions", anna)
+    saved = next((a for a in actions if a.get("external_id") == result["external_id"]), None)
+    if not saved or saved.get("status") != "approved":
+        fail(f"trip status after approval: {saved}")
+    ok(f"trip {result['external_id']} approved by the lead")
+
+    # --- consent: voluntary consent signed after confirmation -----------------------------------------------------
+    proposal = first(stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": "подпиши согласие на фото"}), "action_proposal")
+    result = first(stream(f"/api/chat/sessions/{sid}/proposals/{proposal['proposal_id']}/confirm", anna), "action_result")
+    if result.get("kind") != "consent" or result.get("status") != "signed":
+        fail(f"consent result: {result}")
+    ok(f"consent {result.get('external_id')} signed")
+
+    # --- attachments: a log with a secret is masked ---------------------------------------------------------------
+    log = "ERROR connect postgres://buddy:hunter2@db:5432/app\nconnection refused\n"
+    ev = stream(f"/api/chat/sessions/{sid}/messages", anna,
+                {"text": "", "attachments": [{"name": "app.log", "kind": "text", "size": len(log), "text": log}]})
+    if "hunter2" in json.dumps(ev, ensure_ascii=False) or not any(name == "done" for name, _ in ev):
+        fail(f"attachment turn: {ev[-3:]}")
+    ok("attachment: log analysed, secret masked")
+
     print("SMOKE OK")
 
 
