@@ -143,6 +143,9 @@ func TestCreate_Validation_R71(t *testing.T) {
 	_ = e.pool.QueryRow(context.Background(), `INSERT INTO core.chat_sessions (user_id) VALUES ('intern.anna') RETURNING id::text`).Scan(&sid)
 	_ = e.pool.QueryRow(context.Background(), `INSERT INTO core.chat_sessions (user_id) VALUES ('intern.ivan') RETURNING id::text`).Scan(&foreignSid)
 	long := strings.Repeat("я", 4001)
+	var mid, foreignMid string
+	_ = e.pool.QueryRow(context.Background(), `INSERT INTO core.chat_messages (id, session_id, author, text) VALUES (gen_random_uuid(), $1, 'assistant', 'черновик') RETURNING id::text`, sid).Scan(&mid)
+	_ = e.pool.QueryRow(context.Background(), `INSERT INTO core.chat_messages (id, session_id, author, text) VALUES (gen_random_uuid(), $1, 'assistant', 'чужой') RETURNING id::text`, foreignSid).Scan(&foreignMid)
 	cases := []struct {
 		name string
 		u    user
@@ -153,6 +156,11 @@ func TestCreate_Validation_R71(t *testing.T) {
 		{"foreign session", anna, `{"to_role":"mentor","text":"q","session_id":"` + foreignSid + `"}`, 403},
 		{"unknown session", anna, `{"to_role":"mentor","text":"q","session_id":"00000000-0000-4000-8000-000000000000"}`, 403},
 		{"malformed session", anna, `{"to_role":"mentor","text":"q","session_id":"x"}`, 400},
+		// feedback 12.11: the draft of one message is sent once; the message must be the user's own
+		{"from a draft", anna, `{"to_role":"mentor","text":"q","message_id":"` + mid + `"}`, 201},
+		{"the same draft again", anna, `{"to_role":"mentor","text":"q","message_id":"` + mid + `"}`, 409},
+		{"a foreign draft", anna, `{"to_role":"mentor","text":"q","message_id":"` + foreignMid + `"}`, 403},
+		{"malformed message", anna, `{"to_role":"mentor","text":"q","message_id":"x"}`, 400},
 		{"bad role", anna, `{"to_role":"alumni","text":"q"}`, 400},
 		{"empty text", anna, `{"to_role":"mentor","text":"   "}`, 400},
 		{"long text", anna, `{"to_role":"mentor","text":"` + long + `"}`, 400},

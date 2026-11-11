@@ -99,7 +99,17 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
             snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
         # the LLM gets the whole readable document (not only the snippet), so A-Vibe answers with its details
         body = sanitize_snippet(doc.body[:2500]) if doc is not None else ""
-        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist, "body": body})
+        coverage = kb.coverage(query, doc.doc_id) if doc is not None and query else 0.0
+        out.append(
+            {
+                **h,
+                "snippet": sanitize_snippet(snippet),
+                "score": score,
+                "checklist": checklist,
+                "body": body,
+                "coverage": coverage,
+            }
+        )
     return sorted(out, key=lambda h: h["score"], reverse=True)
 
 
@@ -137,9 +147,10 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     if remote and not raw and _or_query(text):
         raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
-    if remote and turn.kb is not None and _weak(turn, hits, text):
-        # Postgres FTS misses short terms (CI/CD) and synonyms; the agent's own copy of the same test KB, filtered by the
-        # same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking used in eval
+    if remote and turn.kb is not None:
+        # Postgres FTS misses short terms (CI/CD), synonyms and loose wording («у меня будет свой ноутбук?»); the agent's
+        # own copy of the same test KB, filtered by the same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking
+        # used in eval. The set whose best document covers more of the question wins.
         local = [
             {**hit.source(), "score": hit.score, "snippet": hit.snippet}
             for hit in turn.kb.search(text, turn.user.role, turn.user.team_id, k=k)
@@ -147,7 +158,7 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         local_hits = [
             h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
         ]
-        if local_hits:
+        if local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
             hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]

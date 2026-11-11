@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -15,6 +16,10 @@ from ..tools.base import ToolGateway
 from .openai_compat import OpenAICompatClient
 
 log = logging.getLogger("agent.llm")
+
+# «В базе знаний я этого не нашёл» while a document covers the question: a small local model sometimes gives up
+NOT_FOUND = re.compile(r"не\s+нашёл|не\s+нашел|нет\s+(информации|конкретн|данных)|не\s+содерж|не\s+указан", re.I)
+STRONG_COVERAGE = 0.75
 
 ROLE_RU = {
     "intern": "стажёр",
@@ -123,7 +128,21 @@ class LLMWriter:
         try:
             if self.tool_calling and gateway is not None:
                 msgs = self._run_tools(msgs, user, gateway)
-            yield from self.client.stream(msgs)
+            strong = bool(hits) and float(hits[0].get("coverage", 0) or 0) >= STRONG_COVERAGE
+            stream = self.client.stream(msgs)
+            head = ""
+            for chunk in stream:  # hold the first sentence: a «not found» over a strong document is replaced
+                head += chunk
+                if len(head) >= 120 or any(p in head for p in ".!?\n"):
+                    break
+            if strong and self.fallback and NOT_FOUND.search(head):
+                log.info("LLM said «not found» over a covering document; answering from the document")
+                if meta is not None:
+                    meta["llm_not_found_override"] = True
+                yield from self.fallback.answer(question, hits, user, task_hint)
+                return
+            yield head
+            yield from stream
         except LLMError as exc:
             # the reason goes to the log, so «упрощённый режим» can be diagnosed (model name, address, timeout)
             log.warning(

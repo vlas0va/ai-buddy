@@ -11,17 +11,20 @@ import { ROLE_TEXT } from '../statusText'
 export function EscalationDraft({
   draft,
   sessionId,
+  messageId,
   canSend = true,
   sent = false,
 }: {
   draft: EscalationDraftData
   sessionId?: string
+  /** the assistant message of the draft: core marks exactly this draft as sent and never sends it twice */
+  messageId?: string
   canSend?: boolean
   /** already sent before (restored from the history): no second «Отправить» */
   sent?: boolean
 }) {
   const [text, setText] = useState(draft.text)
-  const mutation = useMutation({ mutationFn: () => sendEscalation({ to_role: draft.to_role, text, session_id: sessionId }) })
+  const mutation = useMutation({ mutationFn: () => sendEscalation({ to_role: draft.to_role, text, ...(messageId ? { message_id: messageId } : { session_id: sessionId }) }) })
   const send = { ...mutation, isSuccess: mutation.isSuccess || sent }
   return (
     <Card className="chat-card" aria-label="Черновик сообщения">

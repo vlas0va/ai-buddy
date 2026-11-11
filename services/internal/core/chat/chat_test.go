@@ -790,6 +790,7 @@ func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 	pid := e.propose(sid, anna)
 
 	type msg struct {
+		ID             string         `json:"id"`
 		Author         string         `json:"author"`
 		Escalation     map[string]any `json:"escalation"`
 		EscalationSent bool           `json:"escalation_sent"`
@@ -820,8 +821,16 @@ func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 	if m[1].EscalationSent {
 		t.Fatal("not sent yet")
 	}
+	// a message sent from another draft of the session does not mark this one
 	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text)
-		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'Олег, подскажи')`, sid); err != nil {
+		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'другое')`, sid); err != nil {
+		t.Fatal(err)
+	}
+	if history()[1].EscalationSent {
+		t.Fatal("marked by another escalation")
+	}
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text, message_id)
+		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'Олег, подскажи', $2)`, sid, m[1].ID); err != nil {
 		t.Fatal(err)
 	}
 	if !history()[1].EscalationSent {
@@ -867,5 +876,25 @@ func TestChat_Feedback_HistoryKeepsAllDraftsOfAMessage_R66(t *testing.T) {
 	}
 	if restoreProposals(json.RawMessage(`{}`), []byte(`{}`)) != nil {
 		t.Fatal("broken cards")
+	}
+}
+
+// Feedback 12.11: a source chip opens the test document — only one the user may read (the agent checks the ACL).
+func TestChat_Feedback_SourceChipOpensDocument_R69(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	r := e.do(http.MethodGet, "/api/kb/common-laptop", anna, nil)
+	var doc map[string]any
+	r.json(t, &doc)
+	if r.status != http.StatusOK || doc["doc_id"] != "common-laptop" || doc["badge"] != "Тестовая инструкция прототипа" {
+		t.Fatalf("%d %v", r.status, doc)
+	}
+	for id, want := range map[string]int{"mentor-only": 404, "Bad%20id": 404, "broken": 502} {
+		if got := e.do(http.MethodGet, "/api/kb/"+id, anna, nil).status; got != want {
+			t.Errorf("%s: %d, want %d", id, got, want)
+		}
+	}
+	if got := e.do(http.MethodGet, "/api/kb/common-laptop", "", nil).status; got != http.StatusUnauthorized {
+		t.Errorf("anonymous: %d", got)
 	}
 }

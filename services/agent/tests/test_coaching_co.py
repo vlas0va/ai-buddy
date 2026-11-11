@@ -242,3 +242,13 @@ def test_CO_17_nearby_documents_before_escalation_and_kb_loop(anna, monkeypatch)
     monkeypatch.undo()
     ev = anna.say("Где посмотреть расписание командного митапа по архитектуре?")
     assert "Ниже черновик" in text_of(ev) and first(ev, "sources") is None
+
+
+def test_CO_22_unsure_classifier_but_the_kb_knows(anna, client):
+    """«расскажи про ноутбук» looked off-topic to the classifier; the KB document on laptops answers it."""
+    from tests.conftest import first
+
+    ev = anna.say("расскажи про ноутбук")
+    assert first(ev, "sources")["items"][0]["doc_id"] == "common-laptop"
+    assert "Я помогаю с адаптацией" not in "".join(e.data["text"] for e in ev if e.name == "token")
+    assert first(anna.say("расскажи анекдот"), "sources") is None  # a real off-topic question stays off-topic

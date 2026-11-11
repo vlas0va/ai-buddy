@@ -192,10 +192,11 @@ func TestPlan_OverdueComputedOnRead_R19(t *testing.T) {
 		t.Fatalf("statuses: %v %v", it["CL-05"]["status"], it["CL-04"]["status"])
 	}
 	// the clock drives the rule: a month later CL-07 is overdue too
-	e.h.Now = func() time.Time { return time.Now().AddDate(0, 0, 5) }
+	// 6 days, not 5: the seed counts from the database date, which may already be tomorrow near midnight UTC
+	e.h.Now = func() time.Time { return time.Now().AddDate(0, 0, 6) }
 	_, p = e.getPlan(anna, "")
 	if items(p)["CL-07"]["status"] != "overdue" || p["current_period"] != "month_1" {
-		t.Fatalf("after 5 days: %v %v", items(p)["CL-07"]["status"], p["current_period"])
+		t.Fatalf("after 6 days: %v %v", items(p)["CL-07"]["status"], p["current_period"])
 	}
 }
 

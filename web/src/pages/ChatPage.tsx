@@ -96,7 +96,7 @@ export function ChatPage() {
                     />
                   )}
                   {m.result && <ActionResultCard result={m.result} />}
-                  {m.escalation && <EscalationDraft draft={m.escalation} canSend={user?.role === 'intern'} sent={m.escalationSent} />}
+                  {m.escalation && <EscalationDraft draft={m.escalation} messageId={m.serverId} canSend={user?.role === 'intern'} sent={m.escalationSent} />}
                   {m.refusal && <RefusalBlock refusal={m.refusal} />}
                   {m.nextStep && <NextStepCard step={m.nextStep} disabled={state.streaming} onAsk={send} />}
                   {!inlineError && errorBlock}

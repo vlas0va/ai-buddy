@@ -317,3 +317,35 @@ def test_MCP_15_mcp_base_url_routes_every_server(monkeypatch):
     agent = build_agent(settings, load_agent_config())
     assert {k: v.url for k, v in agent.backends.items()}["absence"] == "http://mcp-mocks:8100/mcp/absence"
     assert load_agent_config().sanitized("intern")["mcp_servers"]["kb"] == "http"
+
+
+def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
+    """A small local model (A-Vibe Q4) sometimes says «не нашёл» although the document answers: the answer then comes
+    from the document; a «not found» over a weak hit and a normal answer are streamed as they are."""
+    from agent.auth import User
+    from agent.llm.writer import LLMWriter, StubWriter
+
+    cfg = load_agent_config(env={"LLM_PROVIDER": "openai_compat", "LLM_BASE_URL": "http://llm/v1", "LLM_MODEL": "m"})
+    user = User(user_id="intern.anna", role="intern", team_id="delivery", token="t")
+    hit = {
+        "doc_id": "common-laptop",
+        "title": "Ноутбук и техника",
+        "snippet": "Забери ноутбук на стойке поддержки.",
+        "score": 3,
+    }
+
+    def writer(chunks):  # noqa: ANN001, ANN202
+        client = OpenAICompatClient("http://llm/v1", "", "m", client=httpx.Client(transport=llm_transport(chunks)))
+        return LLMWriter(cfg, client, StubWriter())
+
+    meta: dict = {}
+    out = "".join(
+        writer(["В базе знаний команды я этого не нашёл."]).answer(
+            "где ноут?", [{**hit, "coverage": 1.0}], user, meta=meta
+        )
+    )
+    assert "стойке поддержки" in out and "не нашёл" not in out and meta["llm_not_found_override"]
+    weak = "".join(writer(["Я этого не нашёл."]).answer("где ноут?", [{**hit, "coverage": 0.3}], user))
+    assert weak == "Я этого не нашёл."
+    ok = "".join(writer(["Забери ноутбук", " на стойке."]).answer("где ноут?", [{**hit, "coverage": 1.0}], user))
+    assert ok == "Забери ноутбук на стойке."

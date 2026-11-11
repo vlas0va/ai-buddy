@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -280,4 +281,39 @@ func (s *Stream) Next() (Event, error) {
 func (s *Stream) Close() error {
 	s.cancel()
 	return s.body.Close()
+}
+
+// KBDoc returns a test KB document the user may read (GET /v1/kb/{doc_id}: the agent checks the JWT and the ACL).
+// found is false for a missing or unreadable document; other failures are *UnavailableError.
+func (c *Client) KBDoc(ctx context.Context, userToken, docID string) (doc json.RawMessage, found bool, err error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(c.BaseURL, "/")+"/v1/kb/"+url.PathEscape(docID), nil)
+	if err != nil {
+		return nil, false, &UnavailableError{Op: "build request", Err: err}
+	}
+	hreq.Header.Set("Authorization", "Bearer "+userToken)
+	if c.ServiceToken != "" {
+		hreq.Header.Set("X-Service-Token", c.ServiceToken)
+	}
+	hc := c.HTTPClient
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	resp, err := hc.Do(hreq)
+	if err != nil {
+		return nil, false, &UnavailableError{Op: "connect", Err: err}
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK:
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+		if err != nil || !json.Valid(body) {
+			return nil, false, &UnavailableError{Op: "read document", Err: err}
+		}
+		return body, true, nil
+	case http.StatusNotFound, http.StatusForbidden:
+		return nil, false, nil
+	}
+	return nil, false, &UnavailableError{Op: fmt.Sprintf("status %d", resp.StatusCode), Status: resp.StatusCode}
 }

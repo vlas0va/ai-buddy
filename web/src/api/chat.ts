@@ -7,7 +7,7 @@ export function createSession() {
   return apiRequest('/api/chat/sessions', chatSessionSchema, { method: 'POST' })
 }
 
-export function sendEscalation(body: { to_role: string; text: string; session_id?: string }) {
+export function sendEscalation(body: { to_role: string; text: string; session_id?: string; message_id?: string }) {
   return apiRequest('/api/escalations', escalationSchema, { method: 'POST', body })
 }
 
@@ -32,6 +32,13 @@ const historySchema = chatHistorySchema.extend({
   ),
 })
 export type ChatHistory = z.infer<typeof historySchema>
+
+// feedback 12.11: a source chip opens the test document (core asks the agent, which checks the ACL)
+export const kbDocSchema = z.object({ doc_id: z.string(), title: z.string(), body: z.string(), badge: z.string().optional() })
+
+export function getKBDoc(docId: string) {
+  return apiRequest(`/api/kb/${encodeURIComponent(docId)}`, kbDocSchema)
+}
 
 export function getSession(sessionId: string) {
   return apiRequest(`/api/chat/sessions/${sessionId}`, historySchema)

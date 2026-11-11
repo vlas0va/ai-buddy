@@ -139,6 +139,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat/sessions/{session_id}/messages", h.postMessage)
 	mux.HandleFunc("POST /api/chat/sessions/{session_id}/proposals/{proposal_id}/confirm", h.confirm)
 	mux.HandleFunc("POST /api/chat/sessions/{session_id}/proposals/{proposal_id}/cancel", h.cancel)
+	mux.HandleFunc("GET /api/kb/{doc_id}", h.kbDoc)
 }
 
 var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -229,8 +230,7 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		coalesce((SELECT jsonb_object_agg(p.id::text, p.status) FROM core.proposals p WHERE p.session_id = m.session_id
 		          AND p.id::text IN (SELECT x->>'proposal_id' FROM jsonb_array_elements(
 		              CASE WHEN jsonb_typeof(m.cards->'proposals') = 'array' THEN m.cards->'proposals' ELSE '[]' END) x)), '{}'),
-		EXISTS (SELECT 1 FROM core.escalations e WHERE e.session_id = m.session_id AND e.created_at > m.created_at
-		        AND e.to_role = m.cards->'escalation'->>'to_role')
+		EXISTS (SELECT 1 FROM core.escalations e WHERE e.message_id = m.id)
 		FROM (SELECT * FROM core.chat_messages WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2) m
 		ORDER BY m.created_at, m.id`, sid, messagesLimit)
 	if err != nil {
@@ -310,6 +310,38 @@ func restoreProposals(raw json.RawMessage, rawStatuses []byte) []historyProposal
 		}
 	}
 	return out
+}
+
+// KBReader reads one KB document through the agent (its ACL check); *agentclient.Client implements it.
+type KBReader interface {
+	KBDoc(ctx context.Context, userToken, docID string) (json.RawMessage, bool, error)
+}
+
+var docIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}$`)
+
+// kbDoc opens a source chip of an answer: the test document, only if the user may read it (R69, R71).
+func (h *Handler) kbDoc(w http.ResponseWriter, r *http.Request) {
+	_, token, ok := caller(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("doc_id")
+	kb, isReader := h.agent.(KBReader)
+	if !docIDRE.MatchString(id) || !isReader {
+		apierr.WriteJSON(w, apierr.NotFound())
+		return
+	}
+	doc, found, err := kb.KBDoc(r.Context(), token, id)
+	switch {
+	case err != nil:
+		h.log.Warn("kb document unavailable", "doc", id, "err", err)
+		apierr.WriteJSON(w, apierr.Unavailable())
+	case !found:
+		apierr.WriteJSON(w, apierr.NotFound())
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(doc)
+	}
 }
 
 // proposalState is what the chat card shows for a stored proposal.

@@ -29,7 +29,7 @@ from .nlu.router import IntentRouter, Route
 from .retrieval import KnowledgeBase
 from .sse import Event, status
 from .state import StateStore, make_store
-from .text import generalize, normalize, same_person
+from .text import canonical_query, generalize, normalize, same_person
 from .tools.base import ToolBackend, ToolGateway
 from .tools.inprocess import InProcessServer, MockServices
 from .tools.mcp_client import McpHttpServer
@@ -201,6 +201,17 @@ class Agent:
         turn.meta["ranking"] = route.detail.get("ranking", [])
         yield from self._dispatch(turn, route, message)
 
+    def _kb_knows(self, turn: Turn, message: str) -> bool:
+        """A readable KB document that covers most of the question (same ACL as search, before ranking)."""
+        if turn.kb is None:
+            return False
+        text = canonical_query(message)
+        min_score = float(turn.config.retrieval.get("min_score", 1.2))
+        return any(
+            h.score >= min_score and turn.kb.coverage(text, h.doc.doc_id) >= 0.75
+            for h in turn.kb.search(text, turn.user.role, turn.user.team_id, k=2)
+        )
+
     def _finish_metrics(self, route: Route, started: float, error: str | None = None) -> int:
         elapsed = time.perf_counter() - started
         self.metrics.observe("agent_turn_seconds", elapsed)
@@ -211,6 +222,9 @@ class Agent:
 
     def _route(self, turn: Turn, message: str) -> Route:
         route = self.router.route(message, turn.user.display_name)
+        if route.intent == "offtopic" and route.source == "classifier" and self._kb_knows(turn, message):
+            # «расскажи про ноутбук»: the classifier is unsure, but the test KB has a document that covers the question
+            route = Route("kb_question", route.confidence, "kb", detail=route.detail)
         state = turn.state().get("absence")
         if (
             state
