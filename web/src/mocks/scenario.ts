@@ -219,8 +219,30 @@ function genericEvents(): MockEvent[] {
   ]
 }
 
-export function messageEvents(sessionId: string, user: User, text: string): MockEvent[] {
+export interface MockAttachment {
+  name: string
+  kind: 'text' | 'image' | 'document'
+  size: number
+  text?: string
+}
+
+const SECRET = /\b(\w*?(?:password|secret|token|api[_-]?key)\w*)([ \t]*[=:][ \t]*)\S+/gi
+
+/** Attachments as the real agent answers them (openspec attachments-websearch): logs masked, screenshots and docs not read. */
+function attachmentEvents(files: MockAttachment[]): MockEvent[] {
+  const text = files.filter((f) => f.kind === 'text').map((f) => f.text ?? '').join('\n')
+  const masked = (text.match(SECRET) ?? []).length
+  const parts: string[] = []
+  if (masked) parts.push(`В файле были секреты (${masked}) — я их скрыл.`)
+  if (text) parts.push(`Главная строка: «${text.replace(SECRET, '$1$2***').split('\n')[0]?.slice(0, 120) ?? ''}».`)
+  if (files.some((f) => f.kind === 'image')) parts.push('Скриншот я в прототипе не распознаю — скопируйте текст ошибки.')
+  if (files.some((f) => f.kind === 'document')) parts.push('Документы я не открываю: кадровые документы загружаются в кадровый портал.')
+  return [thinking(), ...words(parts.join(' ')), done()]
+}
+
+export function messageEvents(sessionId: string, user: User, text: string, files: MockAttachment[] = []): MockEvent[] {
   const lower = text.toLowerCase()
+  if (files.length > 0 && !text.trim()) return attachmentEvents(files)
 
   if (lower.includes('ошибк') && !state.failedOnce.has(lower)) {
     state.failedOnce.add(lower)

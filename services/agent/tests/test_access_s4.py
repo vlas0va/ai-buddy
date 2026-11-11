@@ -11,7 +11,7 @@ def test_S4_01_lists_required_accesses_with_statuses(anna):
     assert "Confluence — есть" in t and "Jira — не запрошен" in t
     assert "повышенные права" in t  # elevated resource is marked
     kinds = {p["draft"]["args"]["resource_id"] for p in all_of(ev, "action_proposal")}
-    assert kinds == {"jira", "gitlab", "space-delivery"}  # only missing ordinary ones, never elevated
+    assert kinds == {"jira", "bitbucket", "space-delivery"}  # only missing ordinary ones, never elevated
 
 
 def test_S4_02_ordinary_access_request_granted_and_saved(anna):

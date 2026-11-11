@@ -24,10 +24,16 @@ function push(sessionId: string, ...messages: StoredMessage[]): void {
   saveState()
 }
 
-export function recordTurn(sessionId: string, userText: string, events: MockEvent[]): void {
+export function recordTurn(
+  sessionId: string,
+  userText: string,
+  events: MockEvent[],
+  files: { name: string; kind: string; size: number }[] = [],
+): void {
   // a failed turn is not stored: "Повторить" sends the same text again
   if (events.some((e) => e.event === 'error')) return
-  const user: StoredMessage = { id: uuid(), author: 'user', text: userText, sources: [], created_at: new Date().toISOString() }
+  const attachments = files.map(({ name, kind, size }) => ({ name, kind, size })) // metadata only, never the text
+  const user: StoredMessage = { id: uuid(), author: 'user', text: userText, sources: [], attachments, created_at: new Date().toISOString() }
   push(sessionId, user, assistantFrom(events))
 }
 

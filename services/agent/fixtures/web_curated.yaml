@@ -1,0 +1,110 @@
+# Curated public documentation for WEB_SEARCH_PROVIDER=curated (default, works offline): official docs only.
+# Snippets are short descriptions written for the prototype, not quotes. Live search: WEB_SEARCH_PROVIDER=searxng.
+- title: "Pro Git: ветвление в Git"
+  url: https://git-scm.com/book/ru/v2/Ветвление-в-Git-Основы-ветвления-и-слияния
+  snippet: "Как создать ветку (git switch -c), переключаться между ветками и сливать их (git merge); что делать при конфликте слияния."
+  keywords: [git, гит, ветка, ветки, branch, merge, слияние, конфликт, switch, checkout]
+- title: "Pro Git: перебазирование (rebase)"
+  url: https://git-scm.com/book/ru/v2/Ветвление-в-Git-Перебазирование
+  snippet: "Чем rebase отличается от merge, как перенести свои коммиты на свежую main и почему нельзя перебазировать уже опубликованные коммиты."
+  keywords: [git, rebase, ребейз, перебазирование, merge, история, коммит]
+- title: "Pro Git: отмена изменений"
+  url: https://git-scm.com/book/ru/v2/Основы-Git-Операции-отмены
+  snippet: "Как исправить последний коммит (git commit --amend), убрать файл из индекса и откатить изменения в рабочей копии (git restore)."
+  keywords: [git, отменить, откатить, коммит, amend, restore, reset, revert, вернуть]
+- title: "Pro Git: припрятывание (stash)"
+  url: https://git-scm.com/book/ru/v2/Инструменты-Git-Припрятывание-и-очистка
+  snippet: "git stash временно убирает незакоммиченные изменения, чтобы переключиться на другую ветку; git stash pop возвращает их."
+  keywords: [git, stash, спрятать, изменения, переключиться]
+- title: "Git: документация git cherry-pick"
+  url: https://git-scm.com/docs/git-cherry-pick
+  snippet: "Перенос отдельного коммита из одной ветки в другую."
+  keywords: [git, cherry, pick, перенести, коммит]
+- title: "Docker: Get started"
+  url: https://docs.docker.com/get-started/
+  snippet: "Что такое образ и контейнер, как собрать образ по Dockerfile (docker build) и запустить контейнер (docker run)."
+  keywords: [docker, докер, контейнер, образ, image, dockerfile, build, run]
+- title: "Docker Compose: обзор"
+  url: https://docs.docker.com/compose/
+  snippet: "Описание нескольких сервисов в compose-файле и запуск их одной командой docker compose up; логи — docker compose logs."
+  keywords: [docker, compose, докер, сервисы, up, logs, контейнер]
+- title: "Kubernetes: основные понятия"
+  url: https://kubernetes.io/ru/docs/concepts/
+  snippet: "Под, деплоймент, сервис и неймспейс: из чего состоит приложение в Kubernetes и как его масштабируют."
+  keywords: [kubernetes, k8s, кубер, под, pod, деплоймент, deployment, сервис, namespace]
+- title: "kubectl: шпаргалка"
+  url: https://kubernetes.io/ru/docs/reference/kubectl/cheatsheet/
+  snippet: "Частые команды kubectl: get pods, describe, logs, exec, port-forward."
+  keywords: [kubectl, kubernetes, k8s, логи, pods, команды, port-forward]
+- title: "Python: официальное руководство"
+  url: https://docs.python.org/3/tutorial/
+  snippet: "Основы языка: типы, функции, классы, модули, исключения и стандартная библиотека."
+  keywords: [python, питон, функция, класс, исключение, модуль, список, словарь]
+- title: "Python: виртуальные окружения (venv)"
+  url: https://docs.python.org/3/library/venv.html
+  snippet: "Как создать изолированное окружение (python -m venv .venv), активировать его и ставить зависимости через pip."
+  keywords: [python, venv, pip, окружение, зависимости, виртуальное]
+- title: "pytest: документация"
+  url: https://docs.pytest.org/en/stable/
+  snippet: "Как писать тесты функциями с assert, использовать фикстуры и параметризацию, запускать отдельные тесты (pytest -k)."
+  keywords: [pytest, тест, тесты, юнит, unit, фикстура, python]
+- title: "Go: A Tour of Go"
+  url: https://go.dev/tour/
+  snippet: "Интерактивный тур по Go: синтаксис, структуры, интерфейсы, горутины и каналы."
+  keywords: [go, golang, горутина, канал, интерфейс, структура]
+- title: "Go: Effective Go"
+  url: https://go.dev/doc/effective_go
+  snippet: "Идиоматичный Go: именование, обработка ошибок, интерфейсы, конкурентность."
+  keywords: [go, golang, ошибки, error, идиомы, конкурентность, горутины]
+- title: "Go: тестирование (пакет testing)"
+  url: https://pkg.go.dev/testing
+  snippet: "Тесты в Go: функции TestXxx, табличные тесты, бенчмарки, запуск go test ./... и покрытие -cover."
+  keywords: [go, golang, тест, тесты, testing, unit, покрытие]
+- title: "PostgreSQL: документация на русском"
+  url: https://postgrespro.ru/docs/postgresql/current/
+  snippet: "SQL-запросы, индексы, транзакции и уровни изоляции, EXPLAIN для разбора медленных запросов."
+  keywords: [postgres, postgresql, постгрес, sql, индекс, транзакция, explain, запрос]
+- title: "PostgreSQL: индексы"
+  url: https://postgrespro.ru/docs/postgresql/current/indexes
+  snippet: "Какие бывают индексы (B-tree, GIN), когда они ускоряют запрос и когда мешают записи."
+  keywords: [индекс, индексы, postgres, sql, btree, ускорить, запрос]
+- title: "Redis: документация"
+  url: https://redis.io/docs/latest/
+  snippet: "Структуры данных Redis, время жизни ключей (TTL) и типичные сценарии: кэш, очереди, счётчики."
+  keywords: [redis, кэш, cache, ttl, ключ]
+- title: "Apache Kafka: введение"
+  url: https://kafka.apache.org/intro
+  snippet: "Топики, партиции, продюсеры и консьюмеры; чем Kafka отличается от обычной очереди."
+  keywords: [kafka, кафка, топик, партиция, консьюмер, продюсер, очередь]
+- title: "TypeScript: Handbook"
+  url: https://www.typescriptlang.org/docs/handbook/intro.html
+  snippet: "Типы, интерфейсы, дженерики и строгий режим TypeScript."
+  keywords: [typescript, ts, тип, типы, интерфейс, generic, дженерик]
+- title: "React: документация"
+  url: https://react.dev/learn
+  snippet: "Компоненты, состояние (useState), эффекты (useEffect) и передача данных через props."
+  keywords: [react, реакт, компонент, хук, useState, useEffect, props]
+- title: "MDN: HTTP"
+  url: https://developer.mozilla.org/ru/docs/Web/HTTP
+  snippet: "Методы и коды ответа HTTP, заголовки, кэширование и CORS."
+  keywords: [http, rest, запрос, ответ, код, статус, cors, заголовок, api]
+- title: "MDN: регулярные выражения в JavaScript"
+  url: https://developer.mozilla.org/ru/docs/Web/JavaScript/Guide/Regular_expressions
+  snippet: "Синтаксис регулярных выражений: классы символов, квантификаторы, группы."
+  keywords: [regex, регулярка, регулярные, выражения, javascript, js]
+- title: "GNU Bash: справочник"
+  url: https://www.gnu.org/software/bash/manual/bash.html
+  snippet: "Переменные, циклы и условия в bash-скриптах, перенаправление вывода и конвейеры."
+  keywords: [bash, shell, терминал, консоль, скрипт, linux, линукс, команда]
+- title: "gRPC: введение"
+  url: https://grpc.io/docs/what-is-grpc/introduction/
+  snippet: "Сервисы и сообщения в protobuf, генерация клиентов и серверов, отличие от REST."
+  keywords: [grpc, protobuf, rpc, rest, сервис, api]
+- title: "Refactoring.Guru: паттерны проектирования"
+  url: https://refactoring.guru/ru/design-patterns
+  snippet: "Каталог паттернов (стратегия, фабрика, наблюдатель …) с примерами и признаки кода, который пора рефакторить."
+  keywords: [паттерн, паттерны, проектирование, рефакторинг, solid, ооп, архитектура]
+- title: "OWASP: шпаргалка по хранению секретов"
+  url: https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html
+  snippet: "Почему секреты нельзя хранить в коде и логах, как их ротировать и откуда приложение должно их получать."
+  keywords: [секрет, секреты, токен, пароль, ключ, хранить, ротация, безопасность]

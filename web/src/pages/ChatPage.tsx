@@ -8,6 +8,8 @@ import { ActionsPanel } from '@/chat/components/ActionsPanel'
 import { ChatInput } from '@/chat/components/ChatInput'
 import { ErrorBlock } from '@/chat/components/ErrorBlock'
 import { EscalationDraft } from '@/chat/components/EscalationDraft'
+import { FeedbackBar } from '@/chat/components/FeedbackBar'
+import { NextStepCard } from '@/chat/components/NextStepCard'
 import { MessageBubble, WelcomeBubble } from '@/chat/components/MessageBubble'
 import { RefusalBlock } from '@/chat/components/RefusalBlock'
 import { RequestsDrawer } from '@/chat/components/RequestsDrawer'
@@ -15,6 +17,7 @@ import { STAGE_TEXT } from '@/chat/statusText'
 import { useChat } from '@/chat/useChat'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { useAsk } from '@/store/ask'
 import { useSession } from '@/store/session'
 
 export function ChatPage() {
@@ -28,6 +31,14 @@ export function ChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: 'end' })
   }, [state.messages, state.stage])
+
+  // a question queued on the plan page («Спросить buddy») is sent once the conversation is restored
+  const pending = useAsk((s) => s.pending)
+  useEffect(() => {
+    if (restoring || state.streaming || pending === null) return
+    const text = useAsk.getState().take()
+    if (text) void send(text)
+  }, [pending, restoring, state.streaming, send])
 
   const lastId = state.messages.at(-1)?.id ?? null
   const firstName = user?.display_name.split(' ')[0] ?? ''
@@ -57,7 +68,9 @@ export function ChatPage() {
               const errorBlock = m.error && (
                 <ErrorBlock
                   error={m.error}
-                  onRetry={m.retryText && !state.streaming ? () => retry(m.id, m.retryText as string) : undefined}
+                  onRetry={
+                    m.retryText !== undefined && !state.streaming ? () => retry(m.id, m.retryText as string, m.retryAttachments) : undefined
+                  }
                 />
               )
               // an error without any text sits next to the avatar, like a buddy message
@@ -74,9 +87,13 @@ export function ChatPage() {
                     <ActionProposalCard proposal={m.proposal} disabled={state.streaming} onConfirm={confirm} onCancel={(id) => void cancel(id)} />
                   )}
                   {m.result && <ActionResultCard result={m.result} />}
-                  {m.escalation && <EscalationDraft draft={m.escalation} />}
+                  {m.escalation && <EscalationDraft draft={m.escalation} canSend={user?.role === 'intern'} />}
                   {m.refusal && <RefusalBlock refusal={m.refusal} />}
+                  {m.nextStep && <NextStepCard step={m.nextStep} disabled={state.streaming} onAsk={send} />}
                   {!inlineError && errorBlock}
+                  {m.author === 'assistant' && m.serverId && !typing && m.text !== '' && !m.error && (
+                    <FeedbackBar messageId={m.serverId} />
+                  )}
                 </div>
               )
             })}

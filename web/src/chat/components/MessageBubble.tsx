@@ -1,6 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { RichText } from '@/components/rich/RichText'
+import { ClipIcon } from '@/components/ui/icons'
 import { Logo } from '@/components/ui/Logo'
+import { KIND_TEXT, formatSize } from '../attachments'
 import type { ChatMessage } from '../stream'
 import { SourceChips } from './SourceChips'
 
@@ -16,9 +19,21 @@ interface BubbleProps {
 
 export function MessageBubble({ message, typing, status, error }: BubbleProps) {
   if (message.author === 'user') {
+    const files = message.attachments ?? []
     return (
       <div className="chat-row chat-row-user">
-        <div className="chat-bubble chat-bubble-user">{message.text}</div>
+        <div className="chat-bubble chat-bubble-user">
+          {message.text}
+          {files.length > 0 && (
+            <div className="chat-attachments" aria-label="Вложения">
+              {files.map((f, i) => (
+                <span key={`${f.name}-${i}`} className="chat-attachment">
+                  <ClipIcon /> {f.name} · {KIND_TEXT[f.kind]}, {formatSize(f.size)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -39,7 +54,7 @@ export function MessageBubble({ message, typing, status, error }: BubbleProps) {
         )}
         {showBubble && (
           <div className="chat-bubble chat-bubble-buddy">
-            {body}
+            {typing ? body : <RichText text={body} />}
             {typing && (
               <span className="chat-typing" aria-label="Buddy печатает">
                 <i />

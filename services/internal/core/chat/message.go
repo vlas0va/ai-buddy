@@ -28,6 +28,8 @@ const kindApprovalDecision = "approval_decision"
 var allowedTools = map[string]string{
 	"absence_request":    mcpclient.ToolCreateAbsence,
 	"access_request":     mcpclient.ToolRequestAccess,
+	"trip_request":       mcpclient.ToolCreateTrip,
+	"consent":            mcpclient.ToolSignConsent,
 	kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
 }
 
@@ -134,14 +136,20 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Text string `json:"text"`
+		Text        string                   `json:"text"`
+		Attachments []agentclient.Attachment `json:"attachments"`
 	}
-	if err := httpx.ReadJSONLimit(w, r, &body, 64<<10); err != nil {
+	if err := httpx.ReadJSONLimit(w, r, &body, maxMessageBodyBytes); err != nil {
+		apierr.WriteJSON(w, err)
+		return
+	}
+	atts, err := validateAttachments(body.Attachments)
+	if err != nil {
 		apierr.WriteJSON(w, err)
 		return
 	}
 	text := strings.TrimSpace(body.Text)
-	if text == "" || utf8.RuneCountInString(text) > maxTextRunes {
+	if (text == "" && len(atts) == 0) || utf8.RuneCountInString(text) > maxTextRunes {
 		apierr.WriteJSON(w, apierr.Validation().WithMessage("Сообщение: от 1 до 4000 символов"))
 		return
 	}
@@ -160,7 +168,11 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	h.emit(ctx, c, "chat.message_sent", map[string]any{"session_id": sid})
+	if err := saveAttachments(ctx, h.pool, userMsgID, atts); err != nil {
+		apierr.WriteJSON(w, err)
+		return
+	}
+	h.emit(ctx, c, "chat.message_sent", map[string]any{"session_id": sid, "attachments": len(atts)})
 	uc, flags, err := h.userContext(ctx, c)
 	if err != nil {
 		apierr.WriteJSON(w, err)
@@ -180,7 +192,7 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 	started := h.Now()
 	assistantID := newUUID()
 	stream, err := h.agent.Turn(ctx, token, agentclient.TurnRequest{SessionID: sid, MessageID: assistantID,
-		Turn: agentclient.Turn{Kind: agentclient.KindMessage, Text: text}, UserContext: uc, History: hist, Flags: flags})
+		Turn: agentclient.Turn{Kind: agentclient.KindMessage, Text: text, Attachments: atts}, UserContext: uc, History: hist, Flags: flags})
 	if err != nil {
 		h.log.Warn("agent turn failed", "session", sid, "err", err)
 		_ = sse.Send(agentclient.EventError, agentError(err))

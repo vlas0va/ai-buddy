@@ -9,7 +9,9 @@ from typing import Any
 
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
-from ..text import normalize
+from ..text import STOPWORDS, canonical_query, normalize, stems, words
+from ..websearch import is_general_tech
+from .coach import mask_secrets
 from .common import CONTACT_LABELS, Turn, first_name, items, person_name, say
 
 CURATOR_TOPICS = re.compile(r"практик|вуз|учебн|диплом|курсов|экватор|выпускн|методичк|опрос")
@@ -56,6 +58,15 @@ def escalation_event(turn: Turn, question: str, role: str, topic: str = "questio
     )
 
 
+CITY_WORDS = re.compile(r"москв|петербург|питер|спб|удал[её]н|казан|новосибирск|екатеринбург")
+
+
+def _location_hint(turn: Turn, query: str) -> str:
+    if not turn.user.location or CITY_WORDS.search(normalize(query)):
+        return ""
+    return turn.user.location
+
+
 def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict[str, Any]]:
     """Defense in depth + context (ADR-003 layer 1, R02, R15): drop results the user may not read according to the
     agent's own copy of the KB ACL, then boost documents of the user's team and of open plan tasks."""
@@ -81,17 +92,69 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
                 score *= team_boost
             if open_items.intersection(checklist):
                 score *= stage_boost
-        out.append({**h, "snippet": sanitize_snippet(h.get("snippet", "")), "score": score, "checklist": checklist})
+        snippet = h.get("snippet", "")
+        if doc is not None and query:
+            # the local copy gives clean paragraphs (no ts_headline fragments or markdown) and lets the user's office
+            # city pick the right section («Москва» / «Санкт-Петербург» / «Удалённо») when the question has none
+            snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
+        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist})
     return sorted(out, key=lambda h: h["score"], reverse=True)
+
+
+def _remote_kb(turn: Turn) -> bool:
+    backend = getattr(turn.gateway, "backends", {}).get("kb")
+    return backend is not None and backend.__class__.__name__ != "InProcessServer"
+
+
+def _or_query(text: str) -> str:
+    """mcp-kb uses websearch_to_tsquery (all words must match): the fallback asks for any meaningful word."""
+    return " or ".join(w for w in words(text) if len(w) > 2 and w not in STOPWORDS)[:500]
+
+
+def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
+    return not hits or max(turn.kb.coverage(text, h["doc_id"]) for h in hits) < 0.5
+
+
+def _nearby(turn: Turn, text: str) -> list[Any]:
+    """Documents that share some meaningful words with the question but fail the answer threshold: offered as «maybe
+    this», never quoted as an answer. Same ACL as search (readable_by before ranking)."""
+    if turn.kb is None:
+        return []
+    found = turn.kb.search(text, turn.user.role, turn.user.team_id, k=2)
+    return [h.doc for h in found if turn.kb.coverage(text, h.doc.doc_id) >= 0.2]
 
 
 def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     yield status("searching_kb")
-    min_score = float(turn.config.retrieval.get("min_score", 1.2))
-    raw = items(turn.gateway.read("kb.search", query=text[:500], k=int(turn.config.retrieval.get("k", 4))))
+    remote = _remote_kb(turn)
+    min_score = float(turn.config.retrieval.get("min_score_remote" if remote else "min_score", 0.0 if remote else 1.2))
+    k = int(turn.config.retrieval.get("k", 4))
+    asked = text
+    text = canonical_query(text)  # «ноут», «репа», «пр» → the words the KB is written with
+    raw = items(turn.gateway.read("kb.search", query=text[:500], k=k))
+    if remote and not raw and _or_query(text):
+        raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
+    if remote and turn.kb is not None and _weak(turn, hits, text):
+        # Postgres FTS misses short terms (CI/CD) and synonyms; the agent's own copy of the same test KB, filtered by the
+        # same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking used in eval
+        local = [
+            {**hit.source(), "score": hit.score, "snippet": hit.snippet}
+            for hit in turn.kb.search(text, turn.user.role, turn.user.team_id, k=k)
+        ]
+        local_hits = [
+            h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
+        ]
+        if local_hits:
+            hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
+    weak_kb = not hits or (turn.kb is not None and _weak(turn, hits, text))
+    if weak_kb and turn.web is not None and turn.web.enabled and is_general_tech(asked):
+        found = turn.web.search(mask_secrets(asked)[0][:300])  # only the masked question leaves the agent
+        if found:
+            yield from _web_answer(turn, asked, found)
+            return
     if not hits:
         ranking = turn.meta.get("ranking", [])
         work_words = re.search(r"команд|работ|стажир|наставник|задач|проект|офис|сервис", normalize(text))
@@ -100,13 +163,29 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ):
             yield from handle_offtopic(turn, text)
             return
-        role = _addressee(text)
+        role = _addressee(asked)
         label = CONTACT_LABELS.get(role, "наставник")
+        near = _nearby(turn, text)
+        if near:
+            yield Event(
+                "sources",
+                {
+                    "items": [
+                        {"doc_id": d.doc_id, "title": d.title, "source_type": "test", "url": d.url, "badge": TEST_BADGE}
+                        for d in near
+                    ]
+                },
+            )
+            titles = ", ".join(f"«{d.title}»" for d in near)
+            lead = f"Точного ответа в базе знаний нет. Возможно, поможет: {titles} — загляни туда сначала."
+        else:
+            lead = "В базе знаний команды я не нашёл ответа на этот вопрос."
+        tail = "Если не то — ниже" if near else "Ниже"
         yield from say(
-            f"В базе знаний команды я не нашёл ответа на этот вопрос. Лучше уточнить у человека — "
-            f"подготовил черновик сообщения ({label}), можешь отредактировать и отправить."
+            f"{lead} {tail} черновик вопроса ({label}). Когда он ответит, ответ можно одной галочкой "
+            "добавить в базу знаний, и в следующий раз я отвечу сам."
         )
-        yield escalation_event(turn, text, role)
+        yield escalation_event(turn, asked, role)
         turn.meta["escalated"] = True
         return
     yield Event(
@@ -132,13 +211,32 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             break
     yield status("composing", "Формулирую ответ")
     for chunk in turn.writer.answer(
-        text, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
+        asked, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
     ):
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."
         )
+
+
+def _web_answer(turn: Turn, asked: str, found: list[Any]) -> Iterator[Event]:
+    """General technical question outside the KB: public documentation, clearly marked as an external source (WS-01)."""
+    yield status("searching_web", "Ищу в открытых источниках")
+    yield Event("sources", {"items": [r.source() for r in found]})
+    lines = [
+        "Это общий технический вопрос — в базе знаний команды его нет, поэтому посмотрел открытые источники "
+        "(это не правила Авито):",
+        "",
+    ]
+    lines += [f"- {r.title}: {sanitize_snippet(r.snippet)}" if r.snippet else f"- {r.title}" for r in found]
+    lines += [
+        "",
+        "Попробуй сначала сам по документации. Если речь о том, как это принято в вашей команде (ветки, CI, ревью), "
+        "спроси наставника — могу подготовить вопрос.",
+    ]
+    yield from say("\n".join(lines))
+    turn.meta["web_search"] = len(found)
 
 
 def handle_whois(turn: Turn, text: str) -> Iterator[Event]:
@@ -206,7 +304,8 @@ REFUSAL_TEXT = {
 }
 OUT_OF_SCOPE_TEXT = {
     "hr": "Найм и увольнения не входят в мои задачи — это кадровые вопросы.",
-    "trip": "Командировки я не оформляю: решение принимает руководитель, оформление идёт через сервис командировок.",
+    "trip": "Билеты и гостиницу я не бронирую и не оплачиваю: после согласования командировки это делает служба "
+    "командировок. Саму заявку на командировку могу подготовить — напиши город, даты и цель.",
     "benefit": "Бенефиты и компенсации я не оформляю — могу дать только общую справку.",
 }
 
@@ -250,7 +349,13 @@ def handle_refusal(turn: Turn, reason: str, redirect_role: str = "", topic: str 
 HELP = {
     "intern": "Я AI-buddy — помогаю освоиться в команде. Могу:\n- показать план адаптации и следующий шаг («что дальше?»);\n"
     "- ответить на вопросы о команде и инструментах со ссылкой на источник;\n- оформить отгул («хочу отгул в пятницу»);\n"
-    "- запросить доступы и подсказать каналы команды;\n- подсказать, к кому идти, и подготовить сообщение наставнику.",
+    "- запросить доступы (Confluence, Jira, Bitbucket) и подсказать каналы команды;\n"
+    "- помочь с инженерным онбордингом: репозиторий, ветки и pull request, CI/CD, секреты, dev-стенд;\n"
+    "- подготовить к код-ревью и подсказать, кого позвать («кого позвать на ревью?»);\n"
+    "- разобрать ошибку из лога — пришли текст, секреты я скрою;\n"
+    "- проверить понимание инструкции («проверь меня по защите данных»);\n"
+    "- подсказать, к кому идти, и подготовить сообщение наставнику.\n"
+    "Задачи за тебя я не делаю — помогаю разобраться, чтобы ты сделал их сам.",
     "mentor": "Я AI-buddy. Наставнику могу: показать твой план и пункты чек-листа, что запросили твои стажёры, подготовить "
     "сводку прогресса к 1:1 и экватору, ответить по методичке и базе знаний.",
     "lead": "Я AI-buddy. Руководителю могу: показать заявки на согласование и оформить решение («согласуй ABS-1001»), ответить "

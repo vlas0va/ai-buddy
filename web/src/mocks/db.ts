@@ -32,6 +32,7 @@ export interface MockProposal {
 }
 
 export interface StoredMessage {
+  attachments?: { name: string; kind: string; size: number }[]
   id: string
   author: 'user' | 'assistant'
   text: string
@@ -50,11 +51,56 @@ export interface MockState {
   failedOnce: Set<string>
   /** Idempotency-Key -> decision already applied (replay of POST /api/approvals/{id}/decision) */
   decisions: Map<string, { actionId: string; decision: 'approved' | 'rejected' }>
+  /** `${userId}:${taskId}` -> status set from the plan page */
+  taskStatus: Map<string, string>
+  goals: Map<string, { id: string; created_by: string; title: string; criteria?: string }[]>
+  escalations: MockEscalation[]
+  notifications: Map<string, MockNotification[]>
   seq: number
 }
 
+export interface MockEscalation {
+  id: string
+  from_id: string
+  from_display_name: string
+  to_role: 'mentor' | 'lead' | 'hrbp' | 'curator'
+  text: string
+  status: 'open' | 'answered'
+  answer: string | null
+  added_to_kb: boolean
+  created_at: string
+}
+
+export interface MockNotification {
+  id: string
+  kind: 'reminder' | 'overdue' | 'status_change' | 'escalation_answer'
+  title: string
+  body?: string | null
+  checklist_item_id?: string | null
+  read: boolean
+  created_at: string
+}
+
+export function seedNotifications(): Map<string, MockNotification[]> {
+  const at = '2026-11-10T06:00:00Z'
+  return new Map([
+    [
+      'intern.anna',
+      [
+        { id: '10000000-0000-4000-8000-000000000001', kind: 'reminder', title: 'Напоминание: вторая неделя', body: 'Пора настроить рабочее окружение и пройти вводный курс по безопасности.', checklist_item_id: 'CL-08', read: false, created_at: at },
+      ],
+    ],
+    [
+      'mentor.oleg',
+      [
+        { id: '10000000-0000-4000-8000-000000000002', kind: 'reminder', title: 'Встреча 1:1 со стажёром', body: 'Запланируйте регулярную встречу с Анной на этой неделе.', checklist_item_id: 'CL-07', read: false, created_at: at },
+      ],
+    ],
+  ])
+}
+
 export function freshState(): MockState {
-  return { actions: new Map(), proposals: new Map(), sessions: new Map(), extraTasks: new Map(), failedOnce: new Set(), decisions: new Map(), seq: 1041 }
+  return { actions: new Map(), proposals: new Map(), sessions: new Map(), extraTasks: new Map(), failedOnce: new Set(), decisions: new Map(), taskStatus: new Map(), goals: new Map(), escalations: [], notifications: seedNotifications(), seq: 1041 }
 }
 
 export let state: MockState = freshState()
@@ -75,6 +121,10 @@ export function serializeState(s: MockState): string {
     extraTasks: [...s.extraTasks],
     failedOnce: [...s.failedOnce],
     decisions: [...s.decisions],
+    taskStatus: [...s.taskStatus],
+    goals: [...s.goals],
+    escalations: s.escalations,
+    notifications: [...s.notifications],
     seq: s.seq,
   })
 }
@@ -90,6 +140,10 @@ export function parseState(raw: string | null): MockState | null {
       extraTasks: new Map(d.extraTasks as []),
       failedOnce: new Set(d.failedOnce as []),
       decisions: new Map((d.decisions as []) ?? []),
+      taskStatus: new Map((d.taskStatus as []) ?? []),
+      goals: new Map((d.goals as []) ?? []),
+      escalations: (d.escalations as MockEscalation[]) ?? [],
+      notifications: d.notifications ? new Map(d.notifications as []) : seedNotifications(),
       seq: typeof d.seq === 'number' ? d.seq : 1041,
     }
   } catch {

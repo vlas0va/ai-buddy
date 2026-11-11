@@ -49,6 +49,7 @@ class Turn:
     session_id: str
     writer: Any
     kb: Any = None
+    web: Any = None  # websearch.WebSearch for general technical questions the KB does not cover
     history: list[dict[str, str]] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
 

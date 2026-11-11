@@ -96,6 +96,7 @@ export const taskSchema: z.ZodType<Task> = z.lazy(() =>
 export const planSchema = z.object({
   user_id: z.string(),
   plan_role: z.enum(['intern', 'mentor']),
+  intern_id: z.string().nullable().optional(),
   current_period: periodSchema,
   periods: z.array(z.object({ id: periodSchema, label: z.string(), tasks: z.array(taskSchema) })),
   goals: z.array(goalSchema),
@@ -115,15 +116,26 @@ export const internProgressSchema = z.object({
 export const sourceSchema = z.object({
   doc_id: z.string(),
   title: z.string(),
-  source_type: z.literal('test'),
+  // test = synthetic KB document (R69); external = public page from web search for a general technical question
+  source_type: z.enum(['test', 'external']),
   url: z.string().optional(),
 })
+
+export const ATTACHMENT_KINDS = ['text', 'image', 'document'] as const
+export const attachmentSchema = z.object({
+  name: z.string(),
+  kind: z.enum(ATTACHMENT_KINDS),
+  mime: z.string().optional(),
+  size: z.number().int().nonnegative(),
+})
+export type AttachmentMeta = z.infer<typeof attachmentSchema>
 
 export const chatMessageSchema = z.object({
   id: z.string(),
   author: z.enum(['user', 'assistant']),
   text: z.string(),
   sources: z.array(sourceSchema).optional(),
+  attachments: z.array(attachmentSchema).optional(),
   created_at: z.string(),
 })
 
@@ -133,11 +145,14 @@ export const chatHistorySchema = z.object({
   messages: z.array(chatMessageSchema),
 })
 
+export const ACTION_KINDS = ['absence_request', 'access_request', 'trip_request', 'consent'] as const
+export const ACTION_STATUSES = ['pending_approval', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed'] as const
+
 export const actionSchema = z.object({
   id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum(ACTION_KINDS),
   external_id: z.string().nullable().optional(),
-  status: z.enum(['pending_approval', 'approved', 'rejected', 'granted', 'created', 'failed']),
+  status: z.enum(ACTION_STATUSES),
   summary: z.string(),
   approver_display_name: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
@@ -148,7 +163,7 @@ export const actionsSchema = z.array(actionSchema)
 
 export const approvalSchema = z.object({
   id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum(['absence_request', 'access_request', 'trip_request']),
   requester_display_name: z.string(),
   summary: z.string(),
   status: z.enum(['pending', 'approved', 'rejected']),
@@ -182,3 +197,8 @@ export type Role = z.infer<typeof roleSchema>
 export type User = z.infer<typeof userSchema>
 export type Plan = z.infer<typeof planSchema>
 export type Action = z.infer<typeof actionSchema>
+export type Goal = z.infer<typeof goalSchema>
+export type NextStepInfo = z.infer<typeof nextStepSchema>
+export type InternProgress = z.infer<typeof internProgressSchema>
+export type Period = z.infer<typeof periodSchema>
+export type TaskStatus = z.infer<typeof taskStatusSchema>

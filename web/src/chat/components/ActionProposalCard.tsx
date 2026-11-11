@@ -20,10 +20,42 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
       { label: 'Согласующий', value: str(display?.approver_display_name) },
     ]
   }
+  if (p.kind === 'trip_request') {
+    const start = str(args.start_date)
+    const end = str(args.end_date)
+    return [
+      { label: 'Город', value: str(args.city) },
+      { label: 'Даты', value: str(display?.dates) || (start === end || !end ? start : `${start} — ${end}`) },
+      { label: 'Цель', value: str(args.purpose) },
+      { label: 'Согласующий', value: str(display?.approver_display_name) },
+    ]
+  }
+  if (p.kind === 'consent') {
+    return [
+      { label: 'Согласие', value: str(display?.consent_title) || str(args.consent_id) },
+      { label: 'Что это', value: str(display?.description) },
+      { label: 'Отозвать', value: 'через HR BP' },
+    ]
+  }
+  if (p.kind === 'approval_decision') {
+    return [
+      { label: 'Заявка', value: `${str(display?.ref_id)} — ${str(display?.requester_display_name)}` },
+      { label: 'Что', value: str(display?.request_summary) },
+      { label: 'Решение', value: str(display?.decision_label) },
+    ]
+  }
   return [
     { label: 'Ресурс', value: str(display?.resource_name) || str(args.resource_id) },
     { label: 'Повышенные права', value: display?.elevated ? 'Да, нужно согласование' : 'Нет' },
   ]
+}
+
+const TITLE: Record<Proposal['kind'], string> = {
+  absence_request: 'Черновик заявки на отгул',
+  access_request: 'Черновик заявки на доступ',
+  trip_request: 'Черновик заявки на командировку',
+  consent: 'Подпись согласия',
+  approval_decision: 'Решение по заявке',
 }
 
 interface Props {
@@ -39,9 +71,9 @@ export function ActionProposalCard({ proposal, disabled, onConfirm, onCancel }: 
   const finished = state === 'confirmed' || state === 'cancelled'
   return (
     <Card className="chat-card" aria-label="Черновик заявки">
-      <h3>{proposal.kind === 'absence_request' ? 'Черновик заявки на отгул' : 'Черновик заявки на доступ'}</h3>
+      <h3>{TITLE[proposal.kind]}</h3>
       <dl className="chat-rows">
-        {proposalRows(proposal).map((r) => (
+        {proposalRows(proposal).filter((r) => r.value).map((r) => (
           <div key={r.label}>
             <dt>{r.label}</dt>
             <dd>{r.value}</dd>

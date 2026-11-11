@@ -1,0 +1,8 @@
+# Optional live web search for the agent (compose profile websearch). Only general technical questions reach it, masked.
+use_default_settings: true
+server:
+  limiter: false
+  image_proxy: false
+search:
+  safe_search: 1
+  formats: [html, json]   # the agent reads /search?format=json

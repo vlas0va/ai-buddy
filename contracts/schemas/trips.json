@@ -1,0 +1,310 @@
+{
+  "server": "trips",
+  "tools": [
+    {
+      "name": "get_policy",
+      "description": "Правила командировок (тестовые): офисы, срок подачи, длительность.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "offices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "min_notice_days": {
+            "type": "integer"
+          },
+          "max_days": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "offices",
+          "min_notice_days",
+          "max_days",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "list_my_requests",
+      "description": "Заявки на командировку текущего пользователя.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^TRP-[0-9]{6}$"
+                },
+                "city": {
+                  "type": "string"
+                },
+                "start_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "end_date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "purpose": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending_approval",
+                    "approved",
+                    "rejected",
+                    "cancelled"
+                  ]
+                },
+                "approver_id": {
+                  "type": "string"
+                },
+                "approver_display_name": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "replayed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "city",
+                "start_date",
+                "end_date",
+                "purpose",
+                "status",
+                "approver_id",
+                "created_at"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "validate_request",
+      "description": "Проверка без записи: офис из списка, не свой город, срок подачи, длительность, нет пересечений.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "city",
+          "start_date",
+          "end_date",
+          "purpose"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid",
+          "problems"
+        ]
+      }
+    },
+    {
+      "name": "create_request",
+      "description": "Создать заявку на командировку от имени пользователя из JWT; согласует руководитель. Только после подтверждения.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 80
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 300
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "city",
+          "start_date",
+          "end_date",
+          "purpose",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^TRP-[0-9]{6}$"
+          },
+          "city": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "approved",
+              "rejected",
+              "cancelled"
+            ]
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "city",
+          "start_date",
+          "end_date",
+          "purpose",
+          "status",
+          "approver_id",
+          "created_at"
+        ]
+      }
+    }
+  ]
+}

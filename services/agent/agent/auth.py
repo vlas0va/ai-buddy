@@ -50,6 +50,7 @@ class User:
     tasks: list[PlanTask] = field(default_factory=list)
     flags: dict[str, bool] = field(default_factory=dict)
     mentees: list[dict[str, Any]] = field(default_factory=list)
+    location: str = ""  # office city or «удалённо»: personal data the organizers allow buddy to use (Q&A 10.11)
 
     def flag_enabled(self, key: str | None) -> bool:
         return True if not key else self.flags.get(key, True)
@@ -105,4 +106,5 @@ def build_user(
         tasks=tasks,
         flags=dict(flags or ctx.get("flags") or {}),
         mentees=list(ctx.get("mentees") or []),
+        location=str(ctx.get("location") or "")[:60],
     )

@@ -41,6 +41,8 @@ POST /v1/turn {turn.kind: message}
        S3 отгул / S4 доступы / согласования  — конечный автомат → action_proposal (запись НЕ выполняется)
        S2 вопрос                               — kb.search (ACL) → повторная проверка ACL → ответ stub или LLM + sources
        S1 план, сводка, контакты, эскалация    — детерминированно по данным инструментов
+       Наставничество (CO-xx)                  — «учись, а не делегируй», подготовка к код-ревью, разбор лога
+                                                 с маскированием секретов, квиз по инструкции, бенефиты без денег
   → SSE: status → token… → sources / action_proposal / escalation_draft / next_step / refusal → done | error
 
 POST /v1/turn {turn.kind: confirm, proposal_id, draft, confirmation_token}
@@ -66,7 +68,7 @@ POST /v1/turn {turn.kind: confirm, proposal_id, draft, confirmation_token}
 | `AGENT_DEV_MODE`, `AGENT_ALLOW_CLOCK_OVERRIDE` | `false` | консоль `/dev`; поле `today` в запросе для демо и e2e |
 | `MOCK_FAULTS` | пусто | имитация сбоев для демо R79: `absence.create_request=timeout_after:1` |
 
-### Локальная модель на ноутбуке (Ollama)
+### Своя модель: Ollama на ноутбуке или A-Vibe на GPU
 ```bash
 docker compose -f deploy/docker-compose.yml --profile core --profile ollama up -d
 docker compose -f deploy/docker-compose.yml exec ollama ollama pull qwen2.5:7b-instruct
@@ -75,6 +77,9 @@ LLM_PROVIDER=openai_compat
 LLM_BASE_URL=http://ollama:11434/v1
 LLM_MODEL=qwen2.5:7b-instruct
 ```
+Своя модель A-Vibe (`AvitoTech/avibe`) через vLLM: профиль `avibe` в compose, `LLM_BASE_URL=http://avibe:8000/v1`,
+`LLM_MODEL=AvitoTech/avibe` — подробности и требования к GPU в `docs/llm-and-keys.md`.
+
 Сценарии записи (S3, S4, согласования) от модели не зависят (ADR-007): LLM отвечает на вопросы по базе знаний и
 формулирует текст, а заявки собирает детерминированный автомат.
 
@@ -92,3 +97,14 @@ python training/augment_with_llm.py     # опционально: парафра
 - `python tools/spec_trace.py --report ../../eval/reports/spec-trace.md` — у каждого из 140 сценариев есть тест.
 - Матрица прав имитаций (`tests/test_mocks.py`) повторяет требования `contracts/mcp-tools.md` к Go-серверам B.
 - MCP-клиент и LLM-провайдер проверяются через `httpx.MockTransport`: CI не нужны ни сеть, ни ключ.
+
+## Наставничество вместо исполнения (ответы организаторов 10.11)
+
+| Сообщение стажёра | Что делает buddy | Сценарий |
+|---|---|---|
+| «напиши за меня код задачи» | не делает: план из шагов, правила работы с нейросетями, когда звать наставника | CO-01 |
+| «кого позвать на код-ревью?» | чек-лист перед ревью, правила и ревьюеры команды, черновик наставнику | CO-02, CO-03 |
+| вставленный лог ошибки | главная строка, вероятная причина по базе знаний, секреты скрыты, черновик с выдержкой | CO-04 … CO-06 |
+| «проверь меня по защите данных» | квиз с пропусками по тестовой инструкции, разбор ответов, подсказка отметить задачу плана | CO-07 … CO-11 |
+| «подключи компенсацию спорта» | отказ от операции + справка с тестовыми цифрами и порядком действий | CO-12 |
+| «как создать ветку?», «где получить ноутбук?» | ответы по `eng-*` и оргдокументам; раздел офиса — по `user_context.location` | CO-13, CO-14 |

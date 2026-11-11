@@ -4,7 +4,8 @@ import type { actionSchema } from '@/api/schemas'
 import { QueryState } from '@/components/QueryState'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
-import { ACTION_STATUS_TEXT, ACTION_STATUS_VARIANT, withoutApprover } from '../statusText'
+import { ACTION_STATUS_TEXT, ACTION_STATUS_VARIANT, absenceSteps, withoutApprover } from '../statusText'
+import { Steps } from './Steps'
 
 type Action = z.infer<typeof actionSchema>
 
@@ -27,6 +28,7 @@ export function ActionsPanel({ query }: { query: Pick<UseQueryResult<Action[]>, 
                 <Badge variant={ACTION_STATUS_VARIANT[a.status] ?? 'neutral'}>{ACTION_STATUS_TEXT[a.status] ?? a.status}</Badge>
               </div>
               <p className="hint">{withoutApprover(a.summary)}</p>
+              {a.kind === 'absence_request' && a.status !== 'pending_approval' && <Steps steps={absenceSteps(a.status)} />}
             </Card>
           </li>
         ))}

@@ -106,7 +106,7 @@ describe('S3 day off flow', () => {
   it('welcome bubble only for an empty conversation; exactly one text field', async () => {
     const { container } = mount()
     expect(await screen.findByText(/Привет, Анна! Я помогу с адаптацией/)).toBeInTheDocument()
-    expect(container.querySelectorAll('textarea, input')).toHaveLength(1)
+    expect(container.querySelectorAll('textarea, input:not([type=file])')).toHaveLength(1)
     await ask('привет')
     await screen.findByText(/тестовый ответ прототипа/i)
     expect(screen.queryByText(/Привет, Анна/)).not.toBeInTheDocument()

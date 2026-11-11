@@ -41,7 +41,7 @@ func TestChat_S3_DayOffEndToEnd_R66(t *testing.T) {
 		uc := msgTurn.UserContext
 		if msgTurn.Auth != "Bearer "+anna || msgTurn.Turn.Kind != "message" || msgTurn.Turn.Text != "Хочу отгул в пятницу" ||
 			msgTurn.SessionID != sid || uc.UserID != "intern.anna" || uc.Role != "intern" || uc.TeamID != "delivery" ||
-			uc.CurrentPeriod != "week_2" || uc.DisplayName != "Анна Котова" || !msgTurn.Flags["scenario_s3"] {
+			uc.CurrentPeriod != "week_2" || uc.DisplayName != "Анна Котова" || uc.Location != "Москва" || !msgTurn.Flags["scenario_s3"] {
 			t.Fatalf("turn %+v", msgTurn)
 		}
 		if _, ok := msgTurn.Raw["user_context"].(map[string]any)["flags"]; ok {
@@ -693,7 +693,7 @@ func TestParseToolResult_BoundToProposal_R71(t *testing.T) {
 		{"other proposal", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), p.id, "22222222-2222-4222-8222-222222222222", 1), false},
 		{"other kind", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"kind":"access_request"`, `"kind":"absence_request"`, 1), false},
 		{"other tool", strings.Replace(wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"}`), `"tool":"access.request_access"`, `"tool":"absence.create_request"`, 1), false},
-		{"other resource", wrap(`"result":{"id":"ACC-1","resource_id":"gitlab","status":"granted"}`), false},
+		{"other resource", wrap(`"result":{"id":"ACC-1","resource_id":"bitbucket","status":"granted"}`), false},
 		{"rejected at creation", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"rejected"}`), false},
 		{"not an access id", wrap(`"result":{"id":"ABS-1","resource_id":"jira","status":"granted"}`), false},
 		{"case variant of result", wrap(`"result":{"id":"ACC-1","resource_id":"jira","status":"granted"},"Result":{}`), false},
@@ -716,6 +716,8 @@ func TestParseToolResult_BoundToProposal_R71(t *testing.T) {
 func TestCheckResult_S3_MatchesConfirmedDraft_R71(t *testing.T) {
 	absence := draft{Tool: "absence.create_request", Args: json.RawMessage(`{"type":"day_off","start_date":"2026-11-13","end_date":"2026-11-13","comment":""}`)}
 	decision := draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"approved","comment":""}`)}
+	trip := draft{Tool: "trips.create_request", Args: json.RawMessage(`{"city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","purpose":"Встреча"}`)}
+	consent := draft{Tool: "consents.sign", Args: json.RawMessage(`{"consent_id":"photo"}`)}
 	for _, tc := range []struct {
 		name   string
 		d      draft
@@ -729,6 +731,12 @@ func TestCheckResult_S3_MatchesConfirmedDraft_R71(t *testing.T) {
 		{"decision on another approval", decision, `{"id":"APR-2","status":"approved"}`, false},
 		{"decision reversed", decision, `{"id":"APR-1","status":"rejected"}`, false},
 		{"decision still pending", draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"pending"}`)}, `{"id":"APR-1","status":"pending"}`, false},
+		{"trip as confirmed", trip, `{"id":"TRP-000200","city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","status":"pending_approval"}`, true},
+		{"trip other city", trip, `{"id":"TRP-000200","city":"Москва","start_date":"2026-11-23","end_date":"2026-11-25","status":"pending_approval"}`, false},
+		{"trip approved at creation", trip, `{"id":"TRP-000200","city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","status":"approved"}`, false},
+		{"consent as confirmed", consent, `{"id":"CNS-000300","consent_id":"photo","status":"signed"}`, true},
+		{"consent other type", consent, `{"id":"CNS-000300","consent_id":"surveys","status":"signed"}`, false},
+		{"consent not signed", consent, `{"id":"CNS-000300","consent_id":"photo","status":"not_signed"}`, false},
 		{"unknown tool", draft{Tool: "kb.add_faq", Args: json.RawMessage(`{}`)}, `{"id":"x"}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

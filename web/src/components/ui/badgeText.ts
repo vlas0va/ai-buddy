@@ -1,4 +1,5 @@
 export const TEST_BADGE_TEXT = 'Тестовая инструкция прототипа'
+export const EXTERNAL_BADGE_TEXT = 'Внешний источник'
 
 export const STATUS_LABELS: Record<string, string> = {
   not_started: 'Не начато',

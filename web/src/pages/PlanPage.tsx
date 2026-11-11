@@ -1,43 +1,18 @@
-import { useQuery } from '@tanstack/react-query'
-import { keys } from '@/api/keys'
-import { getPlan } from '@/api/plan'
 import { PageHeader } from '@/components/PageHeader'
-import { QueryState } from '@/components/QueryState'
-import { Badge } from '@/components/ui/Badge'
-import { STATUS_LABELS } from '@/components/ui/badgeText'
-import { Card } from '@/components/ui/Card'
+import { PlanView } from '@/plan/PlanView'
+import { useSession } from '@/store/session'
 
-// Lists periods and tasks with status badges. Task actions come later.
+const HINT: Record<string, string> = {
+  intern: 'Задачи из чек-листа адаптации по этапам. Отмечай выполненное — buddy подскажет следующий шаг.',
+  mentor: 'Твои задачи наставника по чек-листу. Прогресс стажёров — в разделе «Мои стажёры».',
+}
+
 export function PlanPage() {
-  const plan = useQuery({ queryKey: keys.plan(), queryFn: () => getPlan() })
-  const periods = plan.data?.periods ?? []
-
+  const role = useSession((s) => s.user?.role)
   return (
     <section>
-      <PageHeader title="План адаптации" />
-      <QueryState
-        isLoading={plan.isPending}
-        error={plan.error}
-        isEmpty={periods.length === 0}
-        emptyText="План пока пуст."
-        onRetry={() => void plan.refetch()}
-      >
-        {periods.map((p) => (
-          <div key={p.id} className="page-section">
-            <h2>{p.label}</h2>
-            <ul className="list">
-              {p.tasks.map((t) => (
-                <li key={t.id}>
-                  <Card className="list-row">
-                    <span>{t.title}</span>
-                    <Badge variant={t.status}>{STATUS_LABELS[t.status]}</Badge>
-                  </Card>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </QueryState>
+      <PageHeader title={role === 'mentor' ? 'План наставника' : 'План адаптации'} hint={HINT[role ?? 'intern'] ?? HINT.intern} />
+      <PlanView />
     </section>
   )
 }

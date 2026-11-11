@@ -18,7 +18,8 @@ from .auth import User
 from .canonical import args_hash, verify_confirmation_token
 from .config import AgentConfig, Settings
 from .errors import AgentError, BadRequest, Forbidden, LLMError, ToolDenied, ToolError
-from .flows import absence, access, plan, qa, team
+from .flows import absence, access, coach, consents, plan, qa, team, trips
+from .flows import attachments as attachment_flow
 from .flows.common import Turn, items, say
 from .llm.openai_compat import EmbeddingsClient
 from .llm.writer import make_writer
@@ -32,10 +33,11 @@ from .text import normalize, same_person
 from .tools.base import ToolBackend, ToolGateway
 from .tools.inprocess import InProcessServer, MockServices
 from .tools.mcp_client import McpHttpServer
+from .websearch import WebSearch
 
 log = logging.getLogger("agent")
 
-INTENT_ALIAS = {"absence_status": "absence"}
+INTENT_ALIAS = {"absence_status": "absence", "trip_status": "trip"}
 ROLE_DENIED = {
     "absence": "Отгулы через меня в прототипе оформляют стажёры, наставники и руководители. Порядок можно посмотреть в "
     "базе знаний: спроси «как оформить отгул?».",
@@ -46,9 +48,33 @@ ROLE_DENIED = {
     "mentee": "Прогресс стажёров видят их наставник и руководитель.",
     "summary": "Сводку прогресса готовлю для стажёра и наставника.",
     "plan": "У этой роли нет плана адаптации.",
+    "trip": "Командировки через меня оформляют стажёры, наставники и руководители.",
+}
+# A message that clearly starts another scenario ends the quiz instead of being scored as an answer.
+QUIZ_BREAK_INTENTS = {
+    "absence",
+    "absence_status",
+    "access",
+    "channels",
+    "plan",
+    "summary",
+    "approvals",
+    "mentee",
+    "escalate",
+    "trip",
+    "trip_status",
+    "consents",
+    "help",
+    "quiz",
+    "code_review",
+    "troubleshoot",
+    "learning",
+    "benefit",
 }
 SLOT_INTENTS_BLOCKING = {
     "absence_status",
+    "trip_status",
+    "consents",
     "access",
     "channels",
     "approvals",
@@ -72,6 +98,7 @@ class Agent:
         kb: KnowledgeBase | None = None,
         mocks: MockServices | None = None,
         metrics: Metrics | None = None,
+        web: WebSearch | None = None,
     ) -> None:
         self.config = config
         self.settings = settings
@@ -82,6 +109,7 @@ class Agent:
         self.kb = kb
         self.mocks = mocks
         self.metrics = metrics or Metrics()
+        self.web = web
 
     # ------------------------------------------------------------------ chat
     def gateway(self, user: User) -> ToolGateway:
@@ -95,6 +123,7 @@ class Agent:
         message_id: str = "",
         history: list[dict[str, str]] | None = None,
         request_id: str = "",
+        attachments: list[dict[str, Any]] | None = None,
     ) -> Iterator[Event]:
         started = time.perf_counter()
         turn = Turn(
@@ -106,13 +135,24 @@ class Agent:
             writer=self.writer,
             history=list(history or [])[-10:],
             kb=self.kb,
+            web=self.web,
         )
         yield status("thinking")
         route = Route("unknown", 0.0, "none")
         try:
-            route = self._route(turn, message)
-            turn.meta["ranking"] = route.detail.get("ranking", [])
-            yield from self._dispatch(turn, route, message)
+            if attachments:
+                route = self.router.route(message, turn.user.display_name) if message.strip() else route
+                if route.source == "guardrail" and route.intent == "refusal":
+                    yield from self._dispatch(turn, route, message)  # a refused request is not rescued by a file
+                else:
+                    route = Route("attachments", 1.0, "attachments")
+                    yield from attachment_flow.handle(
+                        turn, message, attachments, lambda t: self._route_and_dispatch(turn, t)
+                    )
+            else:
+                route = self._route(turn, message)
+                turn.meta["ranking"] = route.detail.get("ranking", [])
+                yield from self._dispatch(turn, route, message)
         except ToolDenied as exc:
             self.metrics.inc("agent_refusals_total", reason="no_rights")
             yield Event(
@@ -154,6 +194,11 @@ class Agent:
             },
         )
 
+    def _route_and_dispatch(self, turn: Turn, message: str) -> Iterator[Event]:
+        route = self._route(turn, message)
+        turn.meta["ranking"] = route.detail.get("ranking", [])
+        yield from self._dispatch(turn, route, message)
+
     def _finish_metrics(self, route: Route, started: float, error: str | None = None) -> int:
         elapsed = time.perf_counter() - started
         self.metrics.observe("agent_turn_seconds", elapsed)
@@ -173,6 +218,23 @@ class Agent:
             and absence.looks_like_slot_answer(message)
         ):
             return Route("absence", 0.9, "state")
+        trip_state = turn.state().get("trip")
+        if (
+            trip_state
+            and trip_state.get("step") in ("collect", "proposed")
+            and route.source != "guardrail"
+            and route.intent not in SLOT_INTENTS_BLOCKING
+            and not (route.intent == "absence" and route.source == "rule")  # «отгул» said explicitly
+            and route.intent not in ("quiz", "code_review", "troubleshoot", "learning", "benefit")
+            and trips.looks_like_slot_answer(message, trip_state)
+        ):
+            return Route("trip", 0.9, "state")
+        quiz_state = turn.state()
+        if quiz_state.get("quiz"):
+            if route.source != "guardrail" and route.intent not in QUIZ_BREAK_INTENTS:
+                return Route("quiz_answer", 0.9, "state")
+            quiz_state.pop("quiz")
+            turn.save_state(quiz_state)
         if route.intent == "refusal" and route.reason == "no_rights":
             person = route.detail.get("person", "colleague")
             if person != "colleague":
@@ -234,6 +296,15 @@ class Agent:
             "smalltalk": qa.handle_smalltalk,
             "offtopic": qa.handle_offtopic,
             "kb_question": qa.handle_question,
+            "learning": coach.handle_learning,
+            "code_review": coach.handle_code_review,
+            "troubleshoot": coach.handle_troubleshoot,
+            "quiz": coach.handle_quiz,
+            "quiz_answer": coach.handle_quiz_answer,
+            "benefit": coach.handle_benefit,
+            "trip": trips.handle,
+            "trip_status": trips.handle_status,
+            "consents": consents.handle,
         }
         yield from handlers.get(intent, qa.handle_question)(turn, message)
 
@@ -309,6 +380,8 @@ class Agent:
             "absence_request": absence.result_card,
             "access_request": access.result_card,
             "approval_decision": team.result_card,
+            "trip_request": trips.result_card,
+            "consent": consents.result_card,
         }[str(kind)](raw, contacts)
         result = {
             "proposal_id": proposal_id,
@@ -320,8 +393,8 @@ class Agent:
             "result": raw,
         }
         self.store.set(f"result:{proposal_id}", {**result, "_user": user.user_id}, ttl_s=86400)
-        if kind == "absence_request" and reg and reg.get("state_key"):
-            self.store.delete(reg["state_key"])  # the day-off dialogue is finished
+        if kind in ("absence_request", "trip_request") and reg and reg.get("state_key"):
+            self.store.delete(reg["state_key"])  # the day-off or trip dialogue is finished
         self.metrics.inc("agent_actions_total", kind=str(kind), outcome="created")
         self.metrics.observe("agent_execute_seconds", time.perf_counter() - started)
         return result
@@ -383,4 +456,7 @@ def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = N
     model = IntentModel.load(model_path) if model_path.exists() else None
     router = IntentRouter(model, float(config.nlu.get("min_confidence", 0.3)))
     writer = make_writer(config, settings.llm_api_key, client=llm_client)
-    return Agent(config, settings, backends, make_store(settings.redis_url), writer, router, kb=kb, mocks=mocks)
+    web = WebSearch(config.raw.get("web_search") or {}, Path(config.base_dir), client=http_client)
+    return Agent(
+        config, settings, backends, make_store(settings.redis_url), writer, router, kb=kb, mocks=mocks, web=web
+    )

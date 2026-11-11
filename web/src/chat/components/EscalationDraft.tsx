@@ -7,7 +7,8 @@ import { Card } from '@/components/ui/Card'
 import type { EscalationDraftData } from '@/chat/events'
 import { ROLE_TEXT } from '../statusText'
 
-export function EscalationDraft({ draft, sessionId }: { draft: EscalationDraftData; sessionId?: string }) {
+/** `canSend`: core accepts escalations from interns only; other roles get the text to copy into their messenger. */
+export function EscalationDraft({ draft, sessionId, canSend = true }: { draft: EscalationDraftData; sessionId?: string; canSend?: boolean }) {
   const [text, setText] = useState(draft.text)
   const send = useMutation({ mutationFn: () => sendEscalation({ to_role: draft.to_role, text, session_id: sessionId }) })
   return (
@@ -21,7 +22,9 @@ export function EscalationDraft({ draft, sessionId }: { draft: EscalationDraftDa
         rows={4}
         disabled={send.isSuccess}
       />
-      {send.isSuccess ? (
+      {!canSend ? (
+        <p className="hint">Скопируйте текст и отправьте в рабочий мессенджер.</p>
+      ) : send.isSuccess ? (
         <p className="hint">Сообщение отправлено.</p>
       ) : (
         <div className="chat-actions">

@@ -446,3 +446,44 @@ func TestRoundTrip_S3_S4_HTTP_R66_R71(t *testing.T) {
 		}
 	})
 }
+
+func TestDecide_S3_ApprovedDayOffRegisteredByHRAdminAndHRBPNotified(t *testing.T) {
+	e := newEnv(t)
+	absID, itemID := e.seedAbsence("intern.anna", "lead.maria")
+	mustCall[itemOut](e, maria, "decide", confirmed(t, maria, newKey(t), decision(itemID, "approved")))
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND hr_admin_id = 'hradmin.olga'
+AND registered_at IS NOT NULL AND hrbp_id = 'hrbp.elena' AND hrbp_notified_at IS NOT NULL`, absID); n != 1 {
+		t.Fatal("approved day off not registered by the HR admin or HR BP not notified")
+	}
+	other, otherItem := e.seedAbsence("intern.anna", "lead.maria")
+	mustCall[itemOut](e, maria, "decide", confirmed(t, maria, newKey(t), decision(otherItem, "rejected")))
+	if n := e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND registered_at IS NULL AND hrbp_notified_at IS NULL`,
+		other); n != 1 {
+		t.Fatal("a rejected day off must not reach HR")
+	}
+}
+
+func TestDecide_TripPropagatesToTripRequest_R66(t *testing.T) {
+	for _, d := range []string{"approved", "rejected"} {
+		t.Run(d, func(t *testing.T) {
+			e := newEnv(t)
+			tripID := e.str(`INSERT INTO trips.requests (employee_id, city, start_date, end_date, purpose, approver_id, idempotency_key)
+VALUES ('intern.anna', 'Санкт-Петербург', '2026-11-20', '2026-11-21', 'Знакомство с командой', 'lead.maria', gen_random_uuid())
+RETURNING id`)
+			itemID := e.str(`INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('trip_request', $1, 'intern.anna', 'lead.maria', 'Командировка') RETURNING id`, tripID)
+			pending := mustCall[listResult](e, maria, "list_pending", nil)
+			if len(pending.Items) != 1 || pending.Items[0].Kind != "trip_request" {
+				t.Fatalf("pending %+v", pending)
+			}
+			got := mustCall[itemOut](e, maria, "decide", confirmed(t, maria, newKey(t), decision(itemID, d)))
+			if got.Status != d || got.RefID != tripID {
+				t.Fatalf("got %+v", got)
+			}
+			if n := e.count(`SELECT count(*) FROM trips.requests WHERE id = $1 AND status = $2 AND decided_at IS NOT NULL`,
+				tripID, d); n != 1 {
+				t.Fatalf("trip request not %s", d)
+			}
+		})
+	}
+}

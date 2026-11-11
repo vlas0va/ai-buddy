@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { contactRoleSchema, sourceSchema } from '@/api/schemas'
+import { ACTION_KINDS, ACTION_STATUSES, contactRoleSchema, sourceSchema } from '@/api/schemas'
 
 // Event payloads from contracts/agent-stream.md. Every payload is parsed; a bad one becomes a local error event.
 
@@ -15,7 +15,7 @@ export type Draft = z.infer<typeof draftSchema>
 
 export const proposalSchema = z.object({
   proposal_id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
   draft: draftSchema,
   summary: z.string().optional(),
 })
@@ -23,9 +23,9 @@ export type Proposal = z.infer<typeof proposalSchema>
 
 export const resultSchema = z.object({
   action_id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
   external_id: z.string().nullable().optional(),
-  status: z.enum(['pending_approval', 'approved', 'rejected', 'granted', 'created', 'failed']),
+  status: z.enum(ACTION_STATUSES),
   summary: z.string().optional(),
   approver_display_name: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
@@ -40,6 +40,17 @@ export const refusalSchema = z.object({
   redirect_role: z.enum(['hrbp', 'lead', 'mentor', 'curator']).nullable().optional(),
 })
 export type Refusal = z.infer<typeof refusalSchema>
+
+export const nextStepSchema = z.object({
+  task_id: z.string().optional(),
+  checklist_item_id: z.string().nullable().optional(),
+  title: z.string(),
+  period: z.string().nullable().optional(),
+  status: z.string().optional(),
+  human_only: z.boolean().optional(),
+  cta: z.object({ kind: z.string(), label: z.string(), message: z.string() }).optional(),
+})
+export type NextStep = z.infer<typeof nextStepSchema>
 
 export const streamErrorSchema = z.object({
   code: z.string(),
@@ -57,7 +68,10 @@ export type StreamEvent =
   | { type: 'escalation_draft'; data: EscalationDraftData }
   | { type: 'refusal'; data: Refusal }
   | { type: 'error'; data: StreamError }
+  | { type: 'next_step'; data: NextStep }
   | { type: 'done'; data: { message_id?: string } }
+  /** an event this client does not know: contracts/agent-stream.md says new events are additive and must be skipped */
+  | { type: 'ignored'; data: { name: string } }
 
 const payloads = {
   status: z.object({ stage: stageSchema }),
@@ -68,6 +82,7 @@ const payloads = {
   escalation_draft: escalationDraftSchema,
   refusal: refusalSchema,
   error: streamErrorSchema,
+  next_step: nextStepSchema,
   done: z.object({ message_id: z.string().optional() }),
 } as const
 
@@ -81,7 +96,7 @@ export const BAD_EVENT: StreamEvent = {
 }
 
 export function parseEvent(name: string, raw: string): StreamEvent {
-  if (!(name in payloads)) return BAD_EVENT
+  if (!(name in payloads)) return { type: 'ignored', data: { name } }
   let json: unknown
   try {
     json = JSON.parse(raw)

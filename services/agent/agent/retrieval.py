@@ -49,8 +49,13 @@ class Doc:
         for b in raw:
             if b.startswith("#") and "\n" not in b:
                 carry = b.lstrip("# ").strip()
+                if carry.lower() == self.title.lower():
+                    carry = ""
                 continue
-            merged.append(f"{carry}\n{b}" if carry else b)
+            b = re.sub(r"(?m)^#{1,6}\s+(.+)$", r"\1:", b)
+            if b.lower().startswith(self.title.lower() + ":\n"):
+                b = b[len(self.title) + 2 :]
+            merged.append(f"{carry}:\n{b}" if carry else b)
             carry = ""
         return merged
 

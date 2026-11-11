@@ -10,7 +10,7 @@ The agent SHALL list the accesses required in the user's team with statuses and 
 
 #### Scenario: S4-01 List with statuses
 - **WHEN** an intern asks which accesses they need
-- **THEN** each resource has a status, elevated ones are marked and drafts exist for jira, gitlab and the team space only
+- **THEN** each resource has a status, elevated ones are marked and drafts exist for jira, bitbucket and the team space only
 
 #### Scenario: S4-02 Ordinary access
 - **WHEN** the intern requests Jira and confirms

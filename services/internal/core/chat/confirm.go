@@ -566,6 +566,20 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 		if !strings.HasPrefix(id, "ACC-") || (status != actions.StatusPendingApproval && status != actions.StatusGranted) {
 			return fmt.Errorf("new access request %q has status %q", id, status)
 		}
+	case mcpclient.ToolCreateTrip:
+		if err := same("city", "start_date", "end_date"); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(id, "TRP-") || status != actions.StatusPendingApproval {
+			return fmt.Errorf("new trip request %q has status %q", id, status)
+		}
+	case mcpclient.ToolSignConsent:
+		if err := same("consent_id"); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(id, "CNS-") || status != actions.StatusSigned {
+			return fmt.Errorf("new consent signature %q has status %q", id, status)
+		}
 	case mcpclient.ToolDecideApproval:
 		if id == "" || id != str(args, "approval_id") || status != str(args, "decision") || (status != "approved" && status != "rejected") {
 			return fmt.Errorf("decision %q/%q differs from the confirmed %q/%q", id, status, str(args, "approval_id"), str(args, "decision"))

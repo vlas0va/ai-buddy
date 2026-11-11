@@ -233,3 +233,36 @@ def same_person(mention: str, full_name: str) -> bool:
     first = (full_name.split() or [""])[0]
     a, b = name_stem(mention), name_stem(first)
     return bool(a) and bool(b) and (a.startswith(b) or b.startswith(a))
+
+
+# Colloquial words interns actually type → the words the test KB is written with. Replacing (not appending) keeps the
+# coverage check honest: «будет ли у меня рабочий ноут?» must find «Ноутбук и техника», not escalate.
+_SLANG = [
+    (r"ноут\w*|комп|компа|компу|макбук\w*|макбоок|ноутбук\w*", "ноутбук"),
+    (r"впн|vpn", "vpn сеть"),
+    (r"вай-?фай|wi-?fi|wifi|интернет\w*", "сеть"),
+    (r"репа|репу|репе|репы|репо|репка|repo", "репозиторий"),
+    (r"пул+-?реквест\w*|пр|мр|pr|mr|мерж-?реквест\w*|merge-?request\w*", "pull request"),
+    (r"смерж\w*|мерж\w*|влить", "merge"),
+    (r"джир\w*|жир[аеуы]|jira", "jira"),
+    (r"конф[аеуы]|конфлюенс\w*|confluence", "confluence"),
+    (r"битбакет\w*|bitbucket|гитлаб\w*", "bitbucket"),
+    (r"гит|git", "git"),
+    (r"док[аиуе]|докум\w*", "документ"),
+    (r"ревью\w*|ревьюер\w*|ревьювер\w*|review", "ревью"),
+    (r"сикрет\w*|токен\w*|ключ[иейа]?\s+от\s+\w+", "секрет"),
+    (r"дев(-|\s)?стенд\w*|dev-?стенд\w*|стенд(?!ап)\w*", "dev-стенд"),
+    (r"деплой\w*|задепло\w*|выкат\w*|выкладк\w*|релиз\w*", "деплой ci/cd"),
+    (r"мейл\w*|имейл\w*|e-?mail|почт\w*", "почта"),
+    (r"зарплатн\w*\s+карт\w*", "банковская карта"),
+    (r"тимлид\w*|лид[аеу]?", "руководитель"),
+    (r"ментор\w*|бадди|buddy", "наставник"),
+]
+_SLANG_RE = [(re.compile(rf"(?<![\w-])(?:{p})(?![\w-])", re.IGNORECASE), repl) for p, repl in _SLANG]
+
+
+def canonical_query(text: str) -> str:
+    out = normalize(text)
+    for rx, repl in _SLANG_RE:
+        out = rx.sub(repl, out)
+    return out

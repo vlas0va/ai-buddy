@@ -56,7 +56,7 @@ INSERT INTO checklist.items (id, role, period, position, title, description, ste
 INSERT INTO access.resources (id, name, kind, team_id, elevated, purpose, checklist_item_id) VALUES
     ('confluence', 'Confluence', 'tool', NULL, false, 'Вики и документация', 'CL-01'),
     ('jira', 'Jira', 'tool', NULL, false, 'Задачи и доски команды', 'CL-01'),
-    ('gitlab', 'GitLab', 'tool', NULL, false, 'Репозитории и ревью кода', 'CL-01'),
+    ('bitbucket', 'Bitbucket', 'tool', NULL, false, 'Репозитории и ревью кода', 'CL-01'),
     ('space-delivery', 'Пространство кластера «Доставка»', 'space', 'delivery', false, 'Документы и мануалы команды', 'CL-05'),
     ('space-search', 'Пространство кластера «Поиск»', 'space', 'search', false, 'Документы и мануалы команды', 'CL-05'),
     ('space-delivery-incidents', 'Закрытое пространство инцидентов «Доставки»', 'space', 'delivery', true, 'Разборы инцидентов, нужен апрув руководителя', 'CL-05'),

@@ -12,7 +12,7 @@ from ..sse import Event, status
 from ..text import normalize, same_person
 from .common import Turn, items, say
 
-REQ_ID = re.compile(r"\b(abs|acc|apr)-([0-9a-f]+)\b", re.IGNORECASE)
+REQ_ID = re.compile(r"\b(abs|acc|apr|trp)-([0-9a-f]+)\b", re.IGNORECASE)
 REJECT = re.compile(r"отклон|откаж|не\s+согласу|не\s+одобр")
 APPROVE = re.compile(r"согласу|одобр|утверд|подтверд|разреш")
 COMMENT = re.compile(r"(?:потому\s+что|причина:?|комментари\w*:?|так\s+как)\s+(.+)$", re.IGNORECASE)

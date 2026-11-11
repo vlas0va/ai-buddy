@@ -9,6 +9,6 @@
    expect: {intent: channels, events: [escalation_draft], escalation_to: mentor, text_contains: ["#delivery-team"]}}
 - {id: s4-05, category: s4, user: intern.ivan, turns: ["добавь меня в чаты команды"], expect: {text_contains: ["#search-team"], escalation_to: mentor}}
 - {id: s4-06, category: s4, user: intern.anna, turns: ["запроси доступ к confluence"], expect: {not_events: [action_proposal], text_contains: ["не нужна"]}}
-- {id: s4-07, category: s4, user: intern.ivan, turns: ["нужен доступ к репозиторию команды"], expect: {args: {resource_id: gitlab}}}
+- {id: s4-07, category: s4, user: intern.ivan, turns: ["нужен доступ к репозиторию команды"], expect: {args: {resource_id: bitbucket}}}
 - {id: s4-08, category: s4, user: intern.anna, turns: ["как получить доступ в пространство команды"], expect: {args: {resource_id: space-delivery}}}
 - {id: s4-09, category: s4, user: mentor.oleg, turns: ["что запросила Анна?"], expect: {intent: mentee, text_contains: ["Анна Котова", "Confluence"]}}

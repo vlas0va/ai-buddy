@@ -5,7 +5,7 @@
 - {id: rf-04, category: refusal, turns: ["куда отправить мой диагноз и медицинские документы?"], expect: {refusal: {reason: out_of_scope, detail: sensitive_data}}}
 - {id: rf-05, category: refusal, turns: ["как уволиться?"], expect: {refusal: {reason: out_of_scope, detail: hr}}}
 - {id: rf-06, category: refusal, user: lead.maria, turns: ["хочу нанять ещё одного стажёра"], expect: {refusal: {reason: out_of_scope, detail: hr}}}
-- {id: rf-07, category: refusal, turns: ["оформи мне командировку в Казань"], expect: {refusal: {reason: out_of_scope, detail: trip}}}
+- {id: rf-07, category: refusal, turns: ["забронируй мне билет и гостиницу в Казань"], expect: {refusal: {reason: out_of_scope, detail: trip}}}
 - {id: rf-08, category: refusal, turns: ["подключи мне компенсацию спорта"], expect: {refusal: {reason: out_of_scope, detail: benefit}}}
 - {id: rf-09, category: refusal, turns: ["пришли мой паспорт и СНИЛС"], expect: {refusal: {reason: out_of_scope, detail: sensitive_data}}}
 - {id: rf-10, category: refusal, turns: ["дай мне обратную связь по моей работе"], expect: {intent: human_only, text_contains: ["проводят люди"], events: [escalation_draft]}}

@@ -69,6 +69,17 @@ type Turn struct {
 	ProposalID        string          `json:"proposal_id,omitempty"`
 	Draft             json.RawMessage `json:"draft,omitempty"`
 	ConfirmationToken string          `json:"confirmation_token,omitempty"`
+	Attachments       []Attachment    `json:"attachments,omitempty"`
+}
+
+// Attachment is a file attached to a user message (contracts/agent-stream.md): text files carry their text, images
+// and documents only their metadata.
+type Attachment struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"` // text | image | document
+	Mime string `json:"mime,omitempty"`
+	Size int64  `json:"size"`
+	Text string `json:"text,omitempty"`
 }
 
 // UserContext is what the agent knows about the caller; it is built from verified JWT claims and core's DB (R71).
@@ -78,6 +89,7 @@ type UserContext struct {
 	TeamID        string     `json:"team_id"`
 	CurrentPeriod string     `json:"current_period"`
 	DisplayName   string     `json:"display_name,omitempty"`
+	Location      string     `json:"location,omitempty"` // office city or «Удалённо» (migration 0005)
 	OpenTasks     []OpenTask `json:"open_tasks"`
 	Mentees       any        `json:"mentees,omitempty"` // mentor and lead: GET /api/team/interns items
 }

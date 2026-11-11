@@ -21,16 +21,19 @@ func (h *Handler) userContext(ctx context.Context, c authn.Claims) (agentclient.
 	now := h.Now().UTC()
 	uc := agentclient.UserContext{UserID: c.Sub, Role: c.Role, TeamID: c.TeamID, CurrentPeriod: string(period.Week1),
 		OpenTasks: []agentclient.OpenTask{}}
-	var name, cohort, planCohort *string
-	err := h.pool.QueryRow(ctx, `SELECT u.display_name, u.cohort_start::text,
+	var name, cohort, planCohort, location *string
+	err := h.pool.QueryRow(ctx, `SELECT u.display_name, u.cohort_start::text, u.location,
 		(SELECT i.cohort_start::text FROM core.plans p JOIN core.users i ON i.id = p.intern_id
 		 WHERE p.user_id = u.id ORDER BY (p.plan_role = 'intern') DESC, p.created_at, p.id LIMIT 1)
-		FROM core.users u WHERE u.id = $1`, c.Sub).Scan(&name, &cohort, &planCohort)
+		FROM core.users u WHERE u.id = $1`, c.Sub).Scan(&name, &cohort, &location, &planCohort)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return uc, nil, fmt.Errorf("load user: %w", err)
 	}
 	if name != nil {
 		uc.DisplayName = *name
+	}
+	if location != nil {
+		uc.Location = *location
 	}
 	// A mentor follows the periods of the intern of their (first) mentor plan.
 	for _, s := range []*string{&c.CohortStart, cohort, planCohort} {

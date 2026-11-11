@@ -1,0 +1,152 @@
+{
+  "server": "consents",
+  "tools": [
+    {
+      "name": "list",
+      "description": "Согласия сотрудника со статусами: подписанные в кадровом портале при оформлении и добровольные.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead",
+        "hrbp",
+        "alumni"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "consent_id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "signable": {
+                  "type": "boolean"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "signed",
+                    "not_signed"
+                  ]
+                },
+                "signed_via": {
+                  "type": "string",
+                  "enum": [
+                    "hr_portal",
+                    "buddy"
+                  ]
+                },
+                "signed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "consent_id",
+                "title",
+                "signable",
+                "required",
+                "status"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      }
+    },
+    {
+      "name": "sign",
+      "description": "Подписать добровольное согласие от имени пользователя из JWT. Только после подтверждения.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead",
+        "hrbp",
+        "alumni"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "consent_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "consent_id",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^CNS-[0-9]{6}$"
+          },
+          "consent_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "const": "signed"
+          },
+          "signed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "replayed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "consent_id",
+          "title",
+          "status",
+          "signed_at"
+        ]
+      }
+    }
+  ]
+}

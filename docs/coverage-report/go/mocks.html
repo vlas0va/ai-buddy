@@ -1,0 +1,2325 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>absence: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">aibuddy/services/internal/mocks/absence/absence.go (90.9%)</option>
+				
+				<option value="file1">aibuddy/services/internal/mocks/access/access.go (87.2%)</option>
+				
+				<option value="file2">aibuddy/services/internal/mocks/app/app.go (90.9%)</option>
+				
+				<option value="file3">aibuddy/services/internal/mocks/approvals/approvals.go (89.4%)</option>
+				
+				<option value="file4">aibuddy/services/internal/mocks/checklist/checklist.go (86.7%)</option>
+				
+				<option value="file5">aibuddy/services/internal/mocks/consents/consents.go (82.1%)</option>
+				
+				<option value="file6">aibuddy/services/internal/mocks/directory/directory.go (94.6%)</option>
+				
+				<option value="file7">aibuddy/services/internal/mocks/kb/kb.go (86.5%)</option>
+				
+				<option value="file8">aibuddy/services/internal/mocks/kb/loader.go (95.7%)</option>
+				
+				<option value="file9">aibuddy/services/internal/mocks/trips/trips.go (84.1%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Package absence implements the mock "absence" MCP server: day-off policy, validation and requests (S3).
+// Data is synthetic (R68). Identity comes only from the verified JWT (R71); a request is visible only to its author.
+// create_request writes the request and its approval item in one transaction and is idempotent by key (R66, R79).
+package absence
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "strings"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// maxDays is the longest day off in consecutive calendar days.
+const maxDays = 3
+
+// moscow is the business time zone for "tomorrow". Europe/Moscow is UTC+3 without DST since 2014; a fixed zone
+// avoids depending on tzdata in the container image.
+var moscow = time.FixedZone("MSK", 3*60*60)
+
+// Register binds every tool of the absence contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        return register(srv, pool, time.Now)
+}</span>
+
+// register is Register with an injectable clock (tests).
+func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil || now == nil </span><span class="cov8" title="1">{
+                return errors.New("absence: server, pool and clock are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "absence" </span><span class="cov8" title="1">{
+                return fmt.Errorf("absence: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool, now: now}
+        srv.Handle("get_policy", s.getPolicy)
+        srv.Handle("list_my_requests", s.listMyRequests)
+        srv.Handle("validate_request", s.validateRequest)
+        srv.Handle("create_request", s.createRequest)
+        srv.Handle("get_request", s.getRequest)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+        now  func() time.Time
+}
+
+// querier is satisfied by *pgxpool.Pool and pgx.Tx.
+type querier interface {
+        Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+        QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// request is one absence request as returned by the tools.
+type request struct {
+        ID                  string `json:"id"`
+        Type                string `json:"type"`
+        StartDate           string `json:"start_date"`
+        EndDate             string `json:"end_date"`
+        Comment             string `json:"comment,omitempty"`
+        Status              string `json:"status"`
+        ApproverID          string `json:"approver_id"`
+        ApproverDisplayName string `json:"approver_display_name,omitempty"`
+        CreatedAt           string `json:"created_at"`
+        Steps               []step `json:"steps"`
+        Replayed            *bool  `json:"replayed,omitempty"`
+
+        employeeID     string
+        idempotencyKey string
+}
+
+// step is one stage of a day off after it is created (organizers' Q&amp;A 10.11): the lead approves, the HR admin registers
+// the approved day off in the HR system, the HR BP is notified.
+type step struct {
+        Role        string `json:"role"`
+        DisplayName string `json:"display_name,omitempty"`
+        Status      string `json:"status"`
+        At          string `json:"at,omitempty"`
+}
+
+const selectRequest = `
+SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
+       coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
+       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at
+FROM absence.requests r
+LEFT JOIN directory.employees a ON a.id = r.approver_id
+LEFT JOIN directory.employees emp ON emp.id = r.employee_id
+LEFT JOIN directory.employees ha ON ha.id = coalesce(r.hr_admin_id,
+    (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1))
+LEFT JOIN directory.employees hb ON hb.id = coalesce(r.hrbp_id, emp.hrbp_id)`
+
+func scanRequest(row pgx.CollectableRow) (request, error) <span class="cov8" title="1">{
+        var (
+                r                             request
+                start, end                    time.Time
+                created                       time.Time
+                decided, registered, notified *time.Time
+                hrAdmin, hrbp                 string
+        )
+        err := row.Scan(&amp;r.ID, &amp;r.Type, &amp;start, &amp;end, &amp;r.Comment, &amp;r.Status, &amp;r.ApproverID, &amp;r.ApproverDisplayName,
+                &amp;created, &amp;r.employeeID, &amp;r.idempotencyKey, &amp;decided, &amp;hrAdmin, &amp;registered, &amp;hrbp, &amp;notified)
+        r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
+        r.CreatedAt = created.UTC().Format(time.RFC3339)
+        r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, decided, registered, notified)
+        return r, err
+}</span>
+
+// steps derives the stages of a request from its status and HR timestamps.
+func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *time.Time) []step <span class="cov8" title="1">{
+        at := func(t *time.Time) string </span><span class="cov8" title="1">{
+                if t == nil </span><span class="cov8" title="1">{
+                        return ""
+                }</span>
+                <span class="cov8" title="1">return t.UTC().Format(time.RFC3339)</span>
+        }
+        <span class="cov8" title="1">out := []step{{Role: "lead", DisplayName: lead, Status: "waiting"}, {Role: "hr_admin", DisplayName: hrAdmin, Status: "waiting"},
+                {Role: "hrbp", DisplayName: hrbp, Status: "waiting"}}
+        switch status </span>{
+        case "approved":<span class="cov8" title="1">
+                out[0].Status, out[0].At = "approved", at(decided)</span>
+        case "rejected", "cancelled":<span class="cov8" title="1">
+                out[0].Status, out[0].At = "rejected", at(decided)
+                out[1].Status, out[2].Status = "skipped", "skipped"</span>
+        }
+        <span class="cov8" title="1">if registered != nil </span><span class="cov8" title="1">{
+                out[1].Status, out[1].At = "registered", at(registered)
+        }</span>
+        <span class="cov8" title="1">if notified != nil </span><span class="cov8" title="1">{
+                out[2].Status, out[2].At = "notified", at(notified)
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+// findRequest returns the request matching where (a condition on alias r with parameter $1), or ok=false.
+func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) <span class="cov8" title="1">{
+        rows, err := q.Query(ctx, selectRequest+" WHERE "+where, arg)
+        if err != nil </span><span class="cov8" title="1">{
+                return request{}, false, fmt.Errorf("query absence request: %w", err)
+        }</span>
+        <span class="cov8" title="1">r, err := pgx.CollectOneRow(rows, scanRequest)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return request{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return request{}, false, fmt.Errorf("scan absence request: %w", err)
+        }</span>
+        <span class="cov8" title="1">return r, true, nil</span>
+}
+
+func forbiddenRequest() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Forbidden().WithMessage("Заявка недоступна: можно просматривать только свои заявки")
+}</span>
+
+// --- get_policy ---
+
+type policy struct {
+        DocID      string `json:"doc_id"`
+        Title      string `json:"title"`
+        Text       string `json:"text"`
+        SourceType string `json:"source_type"`
+        URL        string `json:"url,omitempty"`
+}
+
+// getPolicy returns the team's test instruction (absence-policy-&lt;team&gt;) or the common one (absence-policy).
+// The KB ACL is applied as in kb.search, so a document the caller may not read is never returned (R71).
+func (s *service) getPolicy(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var p policy
+        err := s.pool.QueryRow(ctx, `
+SELECT doc_id, title, body, source_type, coalesce(url, '')
+FROM kb.documents
+WHERE doc_id IN ($1, 'absence-policy')
+  AND owner_id IS NULL
+  AND acl_roles @&gt; ARRAY[$2::text]
+  AND ('*' = ANY(acl_teams) OR $3 = ANY(acl_teams))
+ORDER BY doc_id = $1 DESC
+LIMIT 1`, "absence-policy-"+c.TeamID, c.Role, c.TeamID).Scan(&amp;p.DocID, &amp;p.Title, &amp;p.Text, &amp;p.SourceType, &amp;p.URL)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.NotFound().WithMessage("Тестовая инструкция по оформлению отгула не найдена в базе знаний")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("load absence policy: %w", err)
+        }</span>
+        <span class="cov8" title="1">return p, nil</span>
+}
+
+// --- list_my_requests / get_request ---
+
+type listOut struct {
+        Items []request `json:"items"`
+}
+
+func (s *service) listMyRequests(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in struct {
+                Status string `json:"status"`
+        }
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">rows, err := s.pool.Query(ctx, selectRequest+`
+WHERE r.employee_id = $1 AND ($2 = '' OR r.status = $2)
+ORDER BY r.start_date DESC, r.id DESC
+LIMIT 100`, c.Sub, in.Status)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list absence requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, scanRequest)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan absence requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []request{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+func (s *service) getRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in struct {
+                ID string `json:"id"`
+        }
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">r, ok, err := findRequest(ctx, s.pool, "r.id = $1", in.ID)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !ok || r.employeeID != c.Sub </span><span class="cov8" title="1">{
+                return nil, forbiddenRequest() // never reveal whether another user's request exists (R71)
+        }</span>
+        <span class="cov8" title="1">return r, nil</span>
+}
+
+// --- validate_request ---
+
+type dates struct {
+        Type      string `json:"type"`
+        StartDate string `json:"start_date"`
+        EndDate   string `json:"end_date"`
+}
+
+type validateOut struct {
+        Valid               bool     `json:"valid"`
+        Problems            []string `json:"problems"`
+        ApproverID          string   `json:"approver_id,omitempty"`
+        ApproverDisplayName string   `json:"approver_display_name,omitempty"`
+}
+
+func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in dates
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return s.validate(ctx, s.pool, c, in)</span>
+}
+
+// validate checks the dates of a new request for c and finds the approver (the employee's lead).
+func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in dates) (validateOut, error) <span class="cov8" title="1">{
+        out := validateOut{Problems: []string{}}
+        start, errStart := time.Parse(time.DateOnly, in.StartDate)
+        end, errEnd := time.Parse(time.DateOnly, in.EndDate)
+        if errStart != nil || errEnd != nil </span><span class="cov8" title="1">{
+                return out, apierr.Validation().WithMessage("Даты должны быть в формате ГГГГ-ММ-ДД")
+        }</span>
+        <span class="cov8" title="1">var leadID, leadName *string
+        err := q.QueryRow(ctx, `
+SELECT e.lead_id, l.display_name
+FROM directory.employees e LEFT JOIN directory.employees l ON l.id = e.lead_id
+WHERE e.id = $1`, c.Sub).Scan(&amp;leadID, &amp;leadName)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return out, apierr.Forbidden().WithMessage("Сотрудник не найден в справочнике")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return out, fmt.Errorf("load employee: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">out.Problems = append(out.Problems, dateProblems(start, end, s.now())...)
+        if !end.Before(start) </span><span class="cov8" title="1">{
+                overlaps, err := overlapProblems(ctx, q, c.Sub, in.StartDate, in.EndDate)
+                if err != nil </span><span class="cov0" title="0">{
+                        return out, err
+                }</span>
+                <span class="cov8" title="1">out.Problems = append(out.Problems, overlaps...)</span>
+        }
+        <span class="cov8" title="1">if leadID == nil </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems,
+                        "Не удалось определить согласующего: в справочнике не указан руководитель. Обратитесь к HR BP")
+        }</span> else<span class="cov8" title="1"> {
+                out.ApproverID, out.ApproverDisplayName = *leadID, deref(leadName)
+        }</span>
+        <span class="cov8" title="1">out.Valid = len(out.Problems) == 0
+        return out, nil</span>
+}
+
+// dateProblems applies the calendar rules: start not before tomorrow (Moscow date of now), end not before start,
+// working days only, at most maxDays consecutive days.
+func dateProblems(start, end, now time.Time) []string <span class="cov8" title="1">{
+        var problems []string
+        y, m, d := now.In(moscow).Date()
+        tomorrow := time.Date(y, m, d+1, 0, 0, 0, 0, time.UTC)
+        if start.Before(tomorrow) </span><span class="cov8" title="1">{
+                problems = append(problems, fmt.Sprintf("Дата начала должна быть не раньше завтрашнего дня (%s)", ru(tomorrow)))
+        }</span>
+        <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                return append(problems, "Дата окончания не может быть раньше даты начала")
+        }</span>
+        <span class="cov8" title="1">days := int(end.Sub(start).Hours()/24) + 1
+        var weekends []string
+        for i := 0; i &lt; days &amp;&amp; i &lt;= 31; i++ </span><span class="cov8" title="1">{
+                day := start.AddDate(0, 0, i)
+                switch day.Weekday() </span>{
+                case time.Saturday:<span class="cov8" title="1">
+                        weekends = append(weekends, ru(day)+" (суббота)")</span>
+                case time.Sunday:<span class="cov8" title="1">
+                        weekends = append(weekends, ru(day)+" (воскресенье)")</span>
+                }
+        }
+        <span class="cov8" title="1">if len(weekends) &gt; 4 </span><span class="cov8" title="1">{
+                weekends = append(weekends[:4], fmt.Sprintf("и ещё %d", len(weekends)-4))
+        }</span>
+        <span class="cov8" title="1">if len(weekends) &gt; 0 </span><span class="cov8" title="1">{
+                problems = append(problems, "Отгул оформляется только на рабочие дни, выходные: "+strings.Join(weekends, ", "))
+        }</span>
+        <span class="cov8" title="1">if days &gt; maxDays </span><span class="cov8" title="1">{
+                problems = append(problems, fmt.Sprintf("Отгул можно оформить не больше чем на %d дня подряд, выбрано %d %s",
+                        maxDays, days, plural(days, "день", "дня", "дней")))
+        }</span>
+        <span class="cov8" title="1">return problems</span>
+}
+
+// overlapProblems reports the caller's pending or approved requests that intersect [start, end].
+func overlapProblems(ctx context.Context, q querier, sub, start, end string) ([]string, error) <span class="cov8" title="1">{
+        rows, err := q.Query(ctx, `
+SELECT id, start_date, end_date, status
+FROM absence.requests
+WHERE employee_id = $1 AND status IN ('pending_approval', 'approved')
+  AND start_date &lt;= $3::date AND end_date &gt;= $2::date
+ORDER BY start_date, id`, sub, start, end)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("query overlapping requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">problems, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (string, error) </span><span class="cov8" title="1">{
+                var (
+                        id, status string
+                        s, e       time.Time
+                )
+                err := row.Scan(&amp;id, &amp;s, &amp;e, &amp;status)
+                label := "согласована"
+                if status == "pending_approval" </span><span class="cov8" title="1">{
+                        label = "на согласовании"
+                }</span>
+                <span class="cov8" title="1">return fmt.Sprintf("Даты пересекаются с заявкой %s на %s (%s)", id, period(s, e), label), err</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan overlapping requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">return problems, nil</span>
+}
+
+// --- create_request ---
+
+type createIn struct {
+        dates
+        Comment        string `json:"comment"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead)
+// and its approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in createIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        // Serialise the caller's writes: the replay lookup and the overlap check must see each other's commits.
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findRequest(ctx, tx, "r.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                return replay(prev, c, in)
+        }</span>
+        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, in.dates)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !check.Valid </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
+        }</span>
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, approver_id, idempotency_key)
+VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid)
+RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict() // the key belongs to another employee's request
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert absence request: %w", err)
+        }</span>
+        <span class="cov8" title="1">start, _ := time.Parse(time.DateOnly, in.StartDate)
+        end, _ := time.Parse(time.DateOnly, in.EndDate)
+        if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, "Отгул "+period(start, end)); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("insert approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">created, _, err := findRequest(ctx, tx, "r.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">created.Replayed = new(bool)
+        return created, nil</span>
+}
+
+// replay returns the stored request for a repeated key, or conflict when the key was used for other arguments.
+func replay(prev request, c mcpx.Caller, in createIn) (any, error) <span class="cov8" title="1">{
+        if prev.employeeID != c.Sub || prev.Type != in.Type || prev.StartDate != in.StartDate ||
+                prev.EndDate != in.EndDate || prev.Comment != in.Comment </span><span class="cov8" title="1">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">replayed := true
+        prev.Replayed = &amp;replayed
+        return prev, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другой заявки, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+
+// --- formatting ---
+
+// ru formats a date as DD.MM.YYYY.
+func ru(t time.Time) string <span class="cov8" title="1">{ return t.Format("02.01.2006") }</span>
+
+// period formats a date range: one date for a single day, otherwise "start–end".
+func period(start, end time.Time) string <span class="cov8" title="1">{
+        if start.Equal(end) </span><span class="cov8" title="1">{
+                return ru(start)
+        }</span>
+        <span class="cov8" title="1">return ru(start) + "–" + ru(end)</span>
+}
+
+// plural picks the Russian plural form for n: 1 день, 2 дня, 5 дней.
+func plural(n int, one, few, many string) string <span class="cov8" title="1">{
+        switch n10, n100 := n%10, n%100; </span>{
+        case n10 == 1 &amp;&amp; n100 != 11:<span class="cov8" title="1">
+                return one</span>
+        case n10 &gt;= 2 &amp;&amp; n10 &lt;= 4 &amp;&amp; (n100 &lt; 12 || n100 &gt; 14):<span class="cov8" title="1">
+                return few</span>
+        default:<span class="cov8" title="1">
+                return many</span>
+        }
+}
+
+func deref(s *string) string <span class="cov8" title="1">{
+        if s == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov8" title="1">return *s</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Package access implements the mock "access" MCP server: required accesses, team channels and access requests (S4).
+// Data is synthetic (R68). Identity and team come only from the verified JWT (R71): a caller sees and requests only
+// resources of their own team or of every team. Elevated resources go to the caller's lead for approval; requests are
+// idempotent by key (R79).
+package access
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Register binds every tool of the access contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("access: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "access" </span><span class="cov8" title="1">{
+                return fmt.Errorf("access: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool}
+        srv.Handle("list_required", s.listRequired)
+        srv.Handle("list_my_access", s.listMyAccess)
+        srv.Handle("list_team_channels", s.listTeamChannels)
+        srv.Handle("request_access", s.requestAccess)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+}
+
+// latestStatus is a LATERAL subquery: the caller's ($1) most recent request for resource r.
+const latestStatus = `
+LATERAL (SELECT q.status FROM access.requests q
+         WHERE q.resource_id = r.id AND q.employee_id = $1
+         ORDER BY q.created_at DESC, q.id DESC LIMIT 1) q`
+
+// resourceStatus is a resource with the caller's status for it.
+type resourceStatus struct {
+        ResourceID      string `json:"resource_id"`
+        Name            string `json:"name"`
+        Kind            string `json:"kind"`
+        Elevated        bool   `json:"elevated"`
+        Status          string `json:"status"`
+        ChecklistItemID string `json:"checklist_item_id,omitempty"`
+}
+
+type listOut struct {
+        Items []resourceStatus `json:"items"`
+}
+
+func (s *service) listResources(ctx context.Context, sql string, args ...any) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, sql, args...)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list access resources: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (resourceStatus, error) </span><span class="cov8" title="1">{
+                var r resourceStatus
+                err := row.Scan(&amp;r.ResourceID, &amp;r.Name, &amp;r.Kind, &amp;r.Elevated, &amp;r.Status, &amp;r.ChecklistItemID)
+                return r, err
+        }</span>)
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan access resources: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []resourceStatus{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+// listRequired returns the tools and spaces required for the caller's team with the caller's status.
+func (s *service) listRequired(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        return s.listResources(ctx, `
+SELECT r.id, r.name, r.kind, r.elevated, coalesce(q.status, 'not_requested'), coalesce(r.checklist_item_id, '')
+FROM access.resources r
+LEFT JOIN `+latestStatus+` ON true
+WHERE r.kind IN ('tool', 'space') AND (r.team_id IS NULL OR r.team_id = $2)
+ORDER BY r.kind DESC, r.team_id NULLS FIRST, r.id`, c.Sub, c.TeamID)
+}</span>
+
+// listMyAccess returns every resource the caller has requested, with the latest status.
+func (s *service) listMyAccess(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        return s.listResources(ctx, `
+SELECT r.id, r.name, r.kind, r.elevated, q.status, coalesce(r.checklist_item_id, '')
+FROM access.resources r
+JOIN `+latestStatus+` ON true
+ORDER BY r.kind DESC, r.team_id NULLS FIRST, r.id`, c.Sub)
+}</span>
+
+type channel struct {
+        Name    string `json:"name"`
+        Purpose string `json:"purpose,omitempty"`
+        Closed  bool   `json:"closed"`
+}
+
+type channelsOut struct {
+        Items []channel `json:"items"`
+}
+
+// listTeamChannels returns the channels of the caller's team and of every team: name, purpose, closed only.
+func (s *service) listTeamChannels(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, `
+SELECT name, coalesce(purpose, ''), elevated
+FROM access.resources
+WHERE kind = 'channel' AND (team_id IS NULL OR team_id = $1)
+ORDER BY team_id NULLS FIRST, elevated, name`, c.TeamID)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list channels: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (channel, error) </span><span class="cov8" title="1">{
+                var ch channel
+                err := row.Scan(&amp;ch.Name, &amp;ch.Purpose, &amp;ch.Closed)
+                return ch, err
+        }</span>)
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan channels: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []channel{}
+        }</span>
+        <span class="cov8" title="1">return channelsOut{Items: items}, nil</span>
+}
+
+// --- request_access ---
+
+type requestIn struct {
+        ResourceID     string `json:"resource_id"`
+        Reason         string `json:"reason"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+type requestOut struct {
+        ID              string  `json:"id"`
+        ResourceID      string  `json:"resource_id"`
+        ResourceName    string  `json:"resource_name"`
+        Status          string  `json:"status"`
+        ApproverID      *string `json:"approver_id"`
+        ChecklistItemID *string `json:"checklist_item_id"`
+        CreatedAt       string  `json:"created_at"`
+        Replayed        bool    `json:"replayed"`
+
+        employeeID string
+        reason     string
+}
+
+// querier is satisfied by pgx.Tx and *pgxpool.Pool.
+type querier interface {
+        Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
+// findRequest returns the access request matching where (a condition on alias q with parameters $1, $2), or ok=false.
+func findRequest(ctx context.Context, db querier, where string, args ...any) (requestOut, bool, error) <span class="cov8" title="1">{
+        rows, err := db.Query(ctx, `
+SELECT q.id, q.resource_id, r.name, q.status, q.approver_id, r.checklist_item_id, q.created_at, q.employee_id,
+       coalesce(q.reason, '')
+FROM access.requests q JOIN access.resources r ON r.id = q.resource_id
+WHERE `+where+`
+ORDER BY q.created_at DESC, q.id DESC LIMIT 1`, args...)
+        if err != nil </span><span class="cov0" title="0">{
+                return requestOut{}, false, fmt.Errorf("query access request: %w", err)
+        }</span>
+        <span class="cov8" title="1">out, err := pgx.CollectOneRow(rows, func(row pgx.CollectableRow) (requestOut, error) </span><span class="cov8" title="1">{
+                var (
+                        o       requestOut
+                        created time.Time
+                )
+                err := row.Scan(&amp;o.ID, &amp;o.ResourceID, &amp;o.ResourceName, &amp;o.Status, &amp;o.ApproverID, &amp;o.ChecklistItemID, &amp;created,
+                        &amp;o.employeeID, &amp;o.reason)
+                o.CreatedAt = created.UTC().Format(time.RFC3339)
+                return o, err
+        }</span>)
+        <span class="cov8" title="1">if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return requestOut{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return requestOut{}, false, fmt.Errorf("scan access request: %w", err)
+        }</span>
+        <span class="cov8" title="1">return out, true, nil</span>
+}
+
+// requestAccess creates an access request for the caller. A resource outside the caller's team is forbidden;
+// a plain resource is granted at once; an elevated one waits for the caller's lead (approvals item). A repeated
+// idempotency_key returns the stored request with replayed=true.
+func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in requestIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        // Serialise the caller's writes so that the replay lookup and the duplicate check see each other's commits.
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "access:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findRequest(ctx, tx, "q.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.ResourceID != in.ResourceID || prev.reason != in.Reason </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">prev.Replayed = true
+                return prev, nil</span>
+        }
+
+        <span class="cov8" title="1">var (
+                name     string
+                elevated bool
+        )
+        err = tx.QueryRow(ctx, `
+SELECT name, elevated FROM access.resources WHERE id = $1 AND (team_id IS NULL OR team_id = $2)`,
+                in.ResourceID, c.TeamID).Scan(&amp;name, &amp;elevated)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                // Unknown resources and other teams' resources look the same (R71).
+                return nil, apierr.Forbidden().WithMessage("Ресурс недоступен для запроса из вашей команды")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("load resource: %w", err)
+        }</span>
+        <span class="cov8" title="1">last, found, err := findRequest(ctx, tx, "q.employee_id = $1 AND q.resource_id = $2", c.Sub, in.ResourceID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found &amp;&amp; last.Status == "granted" </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage(fmt.Sprintf("Доступ к ресурсу «%s» уже выдан (заявка %s)", name, last.ID))
+        }</span>
+        <span class="cov8" title="1">if found &amp;&amp; last.Status == "pending_approval" </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage(
+                        fmt.Sprintf("Заявка на доступ к ресурсу «%s» уже на согласовании (%s)", name, last.ID))
+        }</span>
+
+        <span class="cov8" title="1">var lead *string
+        err = tx.QueryRow(ctx, `SELECT lead_id FROM directory.employees WHERE id = $1`, c.Sub).Scan(&amp;lead)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.Forbidden().WithMessage("Сотрудник не найден в справочнике")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("load employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">status, approver := "granted", (*string)(nil)
+        if elevated </span><span class="cov8" title="1">{
+                if lead == nil </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage(
+                                "Не удалось определить согласующего: в справочнике не указан руководитель. Обратитесь к наставнику")
+                }</span>
+                <span class="cov8" title="1">status, approver = "pending_approval", lead</span>
+        }
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO access.requests (employee_id, resource_id, reason, status, approver_id, idempotency_key, decided_at)
+VALUES ($1, $2, nullif($3, ''), $4, $5, $6::uuid, CASE WHEN $4 = 'granted' THEN now() END)
+RETURNING id`, c.Sub, in.ResourceID, in.Reason, status, approver, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict() // the key belongs to another employee's request
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("insert access request: %w", err)
+        }</span>
+        <span class="cov8" title="1">if elevated </span><span class="cov8" title="1">{
+                if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('access_request', $1, $2, $3, $4)`, id, c.Sub, *approver, "Доступ: "+name); err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("insert approval item: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">created, _, err := findRequest(ctx, tx, "q.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">return created, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другой заявки, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Package app wires mcp-mocks: eight independent mock Avito MCP servers served by one binary at /mcp/&lt;server&gt;
+// (absence, approvals, access, directory, checklist, kb, trips, consents). Each server owns its DB schema and tool set, so it can be
+// moved to its own process or replaced by a real Avito API by changing a URL in the agent config (R23, R56).
+package app
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "log/slog"
+        "net/http"
+        "time"
+
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/mocks/absence"
+        "aibuddy/services/internal/mocks/access"
+        "aibuddy/services/internal/mocks/approvals"
+        "aibuddy/services/internal/mocks/checklist"
+        "aibuddy/services/internal/mocks/consents"
+        "aibuddy/services/internal/mocks/directory"
+        "aibuddy/services/internal/mocks/kb"
+        "aibuddy/services/internal/mocks/trips"
+        "aibuddy/services/internal/platform/config"
+        "aibuddy/services/internal/platform/httpx"
+        "aibuddy/services/internal/platform/mcpx"
+        "aibuddy/services/internal/platform/pg"
+)
+
+// Config holds mcp-mocks settings (docs/backend/IMPLEMENTATION.md §7).
+type Config struct {
+        Port               int
+        PostgresURL        string
+        JWTSecret          string
+        ConfirmationSecret string
+        KBDir              string
+}
+
+// LoadConfig reads configuration from getenv; Validate reports missing secrets.
+func LoadConfig(getenv func(string) string) Config <span class="cov8" title="1">{
+        env := config.New(getenv)
+        return Config{
+                Port:               env.Int("MCP_MOCKS_PORT", 8100),
+                PostgresURL:        env.String("POSTGRES_URL", "postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable"),
+                JWTSecret:          env.String("JWT_SECRET", ""),
+                ConfirmationSecret: env.String("CONFIRMATION_HMAC_SECRET", ""),
+                KBDir:              env.String("KB_DIR", "/app/data/kb"),
+        }
+}</span>
+
+// Validate fails when a required secret is missing: the service must not start with empty secrets.
+func (c Config) Validate() error <span class="cov8" title="1">{
+        var missing []string
+        if c.JWTSecret == "" </span><span class="cov8" title="1">{
+                missing = append(missing, "JWT_SECRET")
+        }</span>
+        <span class="cov8" title="1">if c.ConfirmationSecret == "" </span><span class="cov8" title="1">{
+                missing = append(missing, "CONFIRMATION_HMAC_SECRET")
+        }</span>
+        <span class="cov8" title="1">if len(missing) &gt; 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("missing required environment variables: %v", missing)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// registrars lists every mock server and its registration function, in a stable order.
+var registrars = []struct {
+        name     string
+        register func(*mcpx.Server, *pgxpool.Pool) error
+}{
+        {"absence", absence.Register},
+        {"approvals", approvals.Register},
+        {"access", access.Register},
+        {"directory", directory.Register},
+        {"checklist", checklist.Register},
+        {"kb", kb.Register},
+        {"trips", trips.Register},
+        {"consents", consents.Register},
+}
+
+// NewHandler builds the HTTP handler: /healthz plus /mcp/&lt;server&gt; for all eight servers.
+func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler, error) <span class="cov8" title="1">{
+        if err := cfg.Validate(); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">mux := http.NewServeMux()
+        mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+                defer cancel()
+                if err := pool.Ping(ctx); err != nil </span><span class="cov8" title="1">{
+                        httpx.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded", "service": "mcp-mocks"})
+                        return
+                }</span>
+                <span class="cov8" title="1">httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "mcp-mocks"})</span>
+        })
+        <span class="cov8" title="1">mcfg := mcpx.Config{JWTSecret: []byte(cfg.JWTSecret), ConfirmationSecret: []byte(cfg.ConfirmationSecret), Logger: log}
+        servers := make([]*mcpx.Server, 0, len(registrars))
+        for _, r := range registrars </span><span class="cov8" title="1">{
+                srv, err := mcpx.NewServer(r.name, mcfg)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("mcp server %s: %w", r.name, err)
+                }</span>
+                <span class="cov8" title="1">if err := r.register(srv, pool); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("register %s: %w", r.name, err)
+                }</span>
+                <span class="cov8" title="1">servers = append(servers, srv)</span>
+        }
+        <span class="cov8" title="1">if err := mcpx.Mount(mux, servers...); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return httpx.Chain(httpx.RequestID, httpx.Recover(log), httpx.AccessLog(log))(mux), nil</span>
+}
+
+// Run connects to Postgres, loads the knowledge base from KB_DIR and serves until ctx is cancelled.
+func Run(ctx context.Context, cfg Config, log *slog.Logger) error <span class="cov8" title="1">{
+        if err := cfg.Validate(); err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">pool, err := pg.Open(ctx, cfg.PostgresURL, pg.Options{})
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">defer pool.Close()
+        n, err := kb.LoadDir(ctx, pool, cfg.KBDir)
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("load knowledge base from %s: %w", cfg.KBDir, err)
+        }</span>
+        <span class="cov8" title="1">log.Info("knowledge base loaded", "dir", cfg.KBDir, "documents", n)
+        h, err := NewHandler(cfg, pool, log)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">return serve(ctx, fmt.Sprintf(":%d", cfg.Port), h, log)</span>
+}
+
+func serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) error <span class="cov8" title="1">{
+        srv := &amp;http.Server{Addr: addr, Handler: h, ReadHeaderTimeout: 5 * time.Second}
+        errc := make(chan error, 1)
+        go func() </span><span class="cov8" title="1">{ errc &lt;- srv.ListenAndServe() }</span>()
+        <span class="cov8" title="1">log.Info("listening", "addr", addr)
+        select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+                defer cancel()
+                return srv.Shutdown(shutdownCtx)</span>
+        case err := &lt;-errc:<span class="cov8" title="1">
+                if errors.Is(err, http.ErrServerClosed) </span><span class="cov0" title="0">{
+                        return nil
+                }</span>
+                <span class="cov8" title="1">return err</span>
+        }
+}
+
+// Healthcheck performs GET url and fails on a non-200 answer (Docker HEALTHCHECK via `-healthcheck`).
+func Healthcheck(url string) error <span class="cov8" title="1">{
+        client := &amp;http.Client{Timeout: 3 * time.Second}
+        resp, err := client.Get(url)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+        <span class="cov8" title="1">defer resp.Body.Close()
+        if resp.StatusCode != http.StatusOK </span><span class="cov8" title="1">{
+                return fmt.Errorf("healthcheck: status %d", resp.StatusCode)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Package approvals implements the mock "approvals" MCP server («Согласия»), shared by S3 (day off) and S4 (access).
+// Data is synthetic (R68). Only the approver named on an item sees and decides it (R71); a decision updates the item
+// and the underlying absence or access request in one transaction and is idempotent by key (R79).
+package approvals
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Register binds every tool of the approvals contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("approvals: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "approvals" </span><span class="cov8" title="1">{
+                return fmt.Errorf("approvals: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool}
+        srv.Handle("list_pending", s.listPending)
+        srv.Handle("decide", s.decide)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+}
+
+// item is one approval item as returned by the tools.
+type item struct {
+        ID                   string `json:"id"`
+        Kind                 string `json:"kind"`
+        RefID                string `json:"ref_id"`
+        RequesterID          string `json:"requester_id"`
+        RequesterDisplayName string `json:"requester_display_name,omitempty"`
+        Summary              string `json:"summary"`
+        Status               string `json:"status"`
+        Comment              string `json:"comment,omitempty"`
+        CreatedAt            string `json:"created_at"`
+        Replayed             *bool  `json:"replayed,omitempty"`
+
+        approverID     string
+        idempotencyKey string
+}
+
+const selectItem = `
+SELECT i.id, i.kind, i.ref_id, i.requester_id, coalesce(e.display_name, ''), i.summary, i.status,
+       coalesce(i.comment, ''), i.created_at, i.approver_id, coalesce(i.idempotency_key::text, '')
+FROM approvals.items i
+LEFT JOIN directory.employees e ON e.id = i.requester_id`
+
+func scanItem(row pgx.CollectableRow) (item, error) <span class="cov8" title="1">{
+        var (
+                it      item
+                created time.Time
+        )
+        err := row.Scan(&amp;it.ID, &amp;it.Kind, &amp;it.RefID, &amp;it.RequesterID, &amp;it.RequesterDisplayName, &amp;it.Summary, &amp;it.Status,
+                &amp;it.Comment, &amp;created, &amp;it.approverID, &amp;it.idempotencyKey)
+        it.CreatedAt = created.UTC().Format(time.RFC3339)
+        return it, err
+}</span>
+
+type listOut struct {
+        Items []item `json:"items"`
+}
+
+// listPending returns the pending items whose approver is the caller, oldest first.
+func (s *service) listPending(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, selectItem+`
+WHERE i.approver_id = $1 AND i.status = 'pending'
+ORDER BY i.created_at, i.id
+LIMIT 200`, c.Sub)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("list pending approvals: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, scanItem)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan pending approvals: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []item{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+type decideIn struct {
+        ApprovalID     string `json:"approval_id"`
+        Decision       string `json:"decision"`
+        Comment        string `json:"comment"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// underlying maps an item kind and decision to the request table and its new status.
+var underlying = map[string]struct {
+        table    string
+        statuses map[string]string
+}{
+        "absence_request": {"absence.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
+        "access_request":  {"access.requests", map[string]string{"approved": "granted", "rejected": "rejected"}},
+        "trip_request":    {"trips.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
+}
+
+// decide approves or rejects one of the caller's pending items and propagates the decision to the request.
+func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in decideIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+
+        <span class="cov8" title="1">rows, err := tx.Query(ctx, selectItem+" WHERE i.id = $1 FOR UPDATE OF i", in.ApprovalID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("query approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">it, err := pgx.CollectOneRow(rows, scanItem)
+        if errors.Is(err, pgx.ErrNoRows) || (err == nil &amp;&amp; it.approverID != c.Sub) </span><span class="cov8" title="1">{
+                // Other teams' items and unknown ids look the same (R71).
+                return nil, apierr.Forbidden().WithMessage("Запрос недоступен: решение принимает только назначенный согласующий")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">if it.idempotencyKey != "" &amp;&amp; it.idempotencyKey == in.IdempotencyKey </span><span class="cov8" title="1">{
+                if it.Status != in.Decision || it.Comment != in.Comment </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                it.Replayed = &amp;replayed
+                return it, nil</span>
+        }
+        <span class="cov8" title="1">if it.Status != "pending" </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Запрос уже рассмотрен, решение изменить нельзя")
+        }</span>
+
+        <span class="cov8" title="1">_, err = tx.Exec(ctx, `
+UPDATE approvals.items SET status = $2, comment = nullif($3, ''), idempotency_key = $4::uuid, decided_at = now()
+WHERE id = $1`, it.ID, in.Decision, in.Comment, in.IdempotencyKey)
+        if isUniqueViolation(err) </span><span class="cov8" title="1">{
+                return nil, keyConflict() // the key was already used for another decision
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("update approval item: %w", err)
+        }</span>
+        // kind is limited by a CHECK constraint to the keys of underlying; the table name never comes from input.
+        <span class="cov8" title="1">target := underlying[it.Kind]
+        tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
+WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Decision])
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("update %s: %w", target.table, err)
+        }</span>
+        <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
+        }</span>
+        <span class="cov8" title="1">if it.Kind == "absence_request" &amp;&amp; in.Decision == "approved" </span><span class="cov8" title="1">{
+                // The HR admin registers the approved day off in the HR system and the HR BP of the employee is notified
+                // (organizers' Q&amp;A 10.11: a day off involves the lead, the HR admin and the HR BP). In this imitation both
+                // happen at once; a real HR system would report them asynchronously.
+                if _, err := tx.Exec(ctx, `
+UPDATE absence.requests r SET
+    hr_admin_id = (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1),
+    registered_at = now(),
+    hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
+    hrbp_notified_at = now()
+WHERE r.id = $1`, it.RefID); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("register absence: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">it.Status, it.Comment, it.Replayed = in.Decision, in.Comment, new(bool)
+        return it, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другого решения, повторите действие")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Package checklist implements the mock "checklist" MCP server: the Avito intern checklist template (S1).
+package checklist
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/mcpx"
+        "aibuddy/services/internal/platform/period"
+)
+
+// Register binds every tool of the checklist contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("checklist: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">srv.Handle("get_plan_template", func(ctx context.Context, _ mcpx.Caller, args json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                var in struct {
+                        Role string `json:"role"`
+                }
+                if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">return template(ctx, pool, in.Role)</span>
+        })
+        <span class="cov8" title="1">return nil</span>
+}
+
+type periodOut struct {
+        ID    string `json:"id"`
+        Label string `json:"label"`
+}
+
+type itemOut struct {
+        ID          string          `json:"id"`
+        Role        string          `json:"role"`
+        Period      string          `json:"period"`
+        Title       string          `json:"title"`
+        Description string          `json:"description,omitempty"`
+        Steps       json.RawMessage `json:"steps"`
+        Scenarios   []string        `json:"scenarios"`
+        HumanOnly   bool            `json:"human_only"`
+}
+
+func template(ctx context.Context, pool *pgxpool.Pool, role string) (any, error) <span class="cov8" title="1">{
+        rows, err := pool.Query(ctx, `
+                SELECT id, role, period, title, coalesce(description, ''), steps, scenarios, human_only
+                FROM checklist.items WHERE role IN ($1, 'both') ORDER BY position, id`, role)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("loading checklist items: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer rows.Close()
+        items := []itemOut{}
+        for rows.Next() </span><span class="cov8" title="1">{
+                var it itemOut
+                var steps []byte
+                if err := rows.Scan(&amp;it.ID, &amp;it.Role, &amp;it.Period, &amp;it.Title, &amp;it.Description, &amp;steps, &amp;it.Scenarios, &amp;it.HumanOnly); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("scanning checklist item: %w", err)
+                }</span>
+                <span class="cov8" title="1">if len(steps) == 0 || string(steps) == "null" </span><span class="cov8" title="1">{
+                        steps = []byte("[]")
+                }</span>
+                <span class="cov8" title="1">it.Steps = steps
+                if it.Scenarios == nil </span><span class="cov0" title="0">{
+                        it.Scenarios = []string{}
+                }</span>
+                <span class="cov8" title="1">items = append(items, it)</span>
+        }
+        <span class="cov8" title="1">if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("reading checklist items: %w", err)
+        }</span>
+        <span class="cov8" title="1">periods := []periodOut{}
+        for _, p := range period.All() </span><span class="cov8" title="1">{
+                periods = append(periods, periodOut{ID: string(p), Label: period.Label(p)})
+        }</span>
+        <span class="cov8" title="1">return map[string]any{"periods": periods, "items": items}, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">// Package consents implements the mock "consents" MCP server: an employee's consents with their statuses (case
+// «Пространство решений»: согласия). Data is synthetic (R68). Consents signed in the HR portal at hire (personal data,
+// NDA) are only shown; voluntary ones (photo and video, surveys) can be signed by the employee from the JWT after
+// explicit confirmation (R71). Signing is idempotent by key (R79).
+package consents
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Register binds every tool of the consents contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("consents: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "consents" </span><span class="cov8" title="1">{
+                return fmt.Errorf("consents: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool}
+        srv.Handle("list", s.list)
+        srv.Handle("sign", s.sign)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+}
+
+type consent struct {
+        ConsentID   string `json:"consent_id"`
+        Title       string `json:"title"`
+        Description string `json:"description,omitempty"`
+        Signable    bool   `json:"signable"`
+        Required    bool   `json:"required"`
+        Status      string `json:"status"`
+        SignedVia   string `json:"signed_via,omitempty"`
+        SignedAt    string `json:"signed_at,omitempty"`
+}
+
+type listOut struct {
+        Items []consent `json:"items"`
+}
+
+// list returns every consent type with the caller's status.
+func (s *service) list(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, `
+SELECT t.id, t.title, t.description, t.signable, t.required, g.via, g.signed_at
+FROM consents.types t
+LEFT JOIN consents.signatures g ON g.consent_id = t.id AND g.employee_id = $1
+ORDER BY t.position, t.id`, c.Sub)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list consents: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (consent, error) </span><span class="cov8" title="1">{
+                var (
+                        it  consent
+                        via *string
+                        at  *time.Time
+                )
+                err := row.Scan(&amp;it.ConsentID, &amp;it.Title, &amp;it.Description, &amp;it.Signable, &amp;it.Required, &amp;via, &amp;at)
+                it.Status = "not_signed"
+                if at != nil </span><span class="cov8" title="1">{
+                        it.Status, it.SignedVia, it.SignedAt = "signed", *via, at.UTC().Format(time.RFC3339)
+                }</span>
+                <span class="cov8" title="1">return it, err</span>
+        })
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan consents: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []consent{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+type signIn struct {
+        ConsentID      string `json:"consent_id"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+type signature struct {
+        ID        string `json:"id"`
+        ConsentID string `json:"consent_id"`
+        Title     string `json:"title"`
+        Status    string `json:"status"`
+        SignedAt  string `json:"signed_at"`
+        Replayed  *bool  `json:"replayed,omitempty"`
+
+        employeeID string
+        key        string
+}
+
+func findSignature(ctx context.Context, q pgx.Tx, where string, args ...any) (signature, bool, error) <span class="cov8" title="1">{
+        var (
+                g  signature
+                at time.Time
+        )
+        err := q.QueryRow(ctx, `
+SELECT g.id, g.consent_id, t.title, g.signed_at, g.employee_id, coalesce(g.idempotency_key::text, '')
+FROM consents.signatures g JOIN consents.types t ON t.id = g.consent_id
+WHERE `+where, args...).Scan(&amp;g.ID, &amp;g.ConsentID, &amp;g.Title, &amp;at, &amp;g.employeeID, &amp;g.key)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return signature{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return signature{}, false, fmt.Errorf("query signature: %w", err)
+        }</span>
+        <span class="cov8" title="1">g.Status, g.SignedAt = "signed", at.UTC().Format(time.RFC3339)
+        return g, true, nil</span>
+}
+
+// sign records the caller's voluntary consent. Consents signed only in the HR portal are refused; a consent signed
+// before is a conflict; the same key returns the stored signature with replayed=true.
+func (s *service) sign(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in signIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "consents:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findSignature(ctx, tx, "g.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.ConsentID != in.ConsentID </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                prev.Replayed = &amp;replayed
+                return prev, nil</span>
+        }
+        <span class="cov8" title="1">var (
+                title    string
+                signable bool
+        )
+        err = tx.QueryRow(ctx, `SELECT title, signable FROM consents.types WHERE id = $1`, in.ConsentID).Scan(&amp;title, &amp;signable)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.NotFound().WithMessage("Такого согласия нет")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("load consent: %w", err)
+        }</span>
+        <span class="cov8" title="1">if !signable </span><span class="cov8" title="1">{
+                return nil, apierr.Forbidden().WithMessage("«" + title + "» подписывается только в кадровом портале при оформлении")
+        }</span>
+        <span class="cov8" title="1">if done, ok, err := findSignature(ctx, tx, "g.employee_id = $1 AND g.consent_id = $2", c.Sub, in.ConsentID); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span> else<span class="cov8" title="1"> if ok </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Согласие «" + title + "» уже подписано (" + done.ID + ")")
+        }</span>
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO consents.signatures (employee_id, consent_id, via, idempotency_key)
+VALUES ($1, $2, 'buddy', $3::uuid) RETURNING id`, c.Sub, in.ConsentID, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert signature: %w", err)
+        }</span>
+        <span class="cov8" title="1">out, _, err := findSignature(ctx, tx, "g.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">out.Replayed = new(bool)
+        return out, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">// Package directory implements the mock "directory" MCP server: who the caller is and whom to ask (S2, CL-02, CL-03).
+// Data is synthetic (R68). Identity comes only from the verified JWT (R71).
+package directory
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+        "aibuddy/services/internal/platform/period"
+)
+
+// askAbout holds the fixed Russian topics to raise with each kind of contact.
+var askAbout = map[string][]string{
+        "mentor":  {"задачи и код-ревью", "доступы и инструменты команды", "план адаптации"},
+        "lead":    {"отгул и отсутствия", "цели стажировки"},
+        "hrbp":    {"кадровые вопросы"},
+        "curator": {"методичка наставника", "экватор и выпускной", "документы для вуза"},
+}
+
+// Register binds every tool of the directory contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        return register(srv, pool, time.Now)
+}</span>
+
+// register is Register with an injectable clock (tests).
+func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("directory: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">srv.Handle("whoami", func(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                return whoami(ctx, pool, c, now())
+        }</span>)
+        <span class="cov8" title="1">srv.Handle("get_my_contacts", func(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                return contacts(ctx, pool, c)
+        }</span>)
+        <span class="cov8" title="1">return nil</span>
+}
+
+type whoamiOut struct {
+        EmployeeID    string `json:"employee_id"`
+        DisplayName   string `json:"display_name"`
+        Role          string `json:"role"`
+        TeamID        string `json:"team_id"`
+        TeamName      string `json:"team_name,omitempty"`
+        CohortStart   string `json:"cohort_start,omitempty"`
+        CurrentPeriod string `json:"current_period,omitempty"`
+}
+
+func whoami(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, now time.Time) (any, error) <span class="cov8" title="1">{
+        var (
+                out   whoamiOut
+                start *time.Time
+        )
+        err := pool.QueryRow(ctx, `
+                SELECT e.id, e.display_name, e.role, e.team_id, coalesce(t.name, ''), e.cohort_start
+                FROM directory.employees e LEFT JOIN directory.teams t ON t.id = e.team_id
+                WHERE e.id = $1`, c.Sub).Scan(&amp;out.EmployeeID, &amp;out.DisplayName, &amp;out.Role, &amp;out.TeamID, &amp;out.TeamName, &amp;start)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.Forbidden()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("loading employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">var cohort time.Time
+        switch </span>{
+        case start != nil:<span class="cov8" title="1">
+                cohort = *start</span>
+        case c.CohortStart != "":<span class="cov8" title="1">
+                if d, perr := period.ParseDate(c.CohortStart); perr == nil </span><span class="cov8" title="1">{
+                        cohort = d
+                }</span>
+        }
+        <span class="cov8" title="1">if !cohort.IsZero() </span><span class="cov8" title="1">{
+                out.CohortStart = cohort.Format("2006-01-02")
+                out.CurrentPeriod = string(period.Current(cohort, now))
+        }</span>
+        <span class="cov8" title="1">return out, nil</span>
+}
+
+type contact struct {
+        Role        string   `json:"role"`
+        EmployeeID  string   `json:"employee_id"`
+        DisplayName string   `json:"display_name"`
+        Channel     string   `json:"channel,omitempty"`
+        AskAbout    []string `json:"ask_about"`
+}
+
+func contacts(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller) (any, error) <span class="cov8" title="1">{
+        rows, err := pool.Query(ctx, `
+                SELECT r.role, p.id, p.display_name, coalesce(p.channel, '')
+                FROM directory.employees e
+                CROSS JOIN LATERAL (VALUES (1, 'mentor', e.mentor_id), (2, 'lead', e.lead_id),
+                        (3, 'hrbp', e.hrbp_id), (4, 'curator', e.curator_id)) AS r(ord, role, pid)
+                JOIN directory.employees p ON p.id = r.pid
+                WHERE e.id = $1
+                ORDER BY r.ord`, c.Sub)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("loading contacts: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer rows.Close()
+        items := []contact{}
+        for rows.Next() </span><span class="cov8" title="1">{
+                var ct contact
+                if err := rows.Scan(&amp;ct.Role, &amp;ct.EmployeeID, &amp;ct.DisplayName, &amp;ct.Channel); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("scanning contact: %w", err)
+                }</span>
+                <span class="cov8" title="1">ct.AskAbout = askAbout[ct.Role]
+                items = append(items, ct)</span>
+        }
+        <span class="cov8" title="1">if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("reading contacts: %w", err)
+        }</span>
+        <span class="cov8" title="1">return map[string]any{"items": items}, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">// Package kb implements the mock "kb" MCP server: the synthetic knowledge base with ACL applied before anything
+// reaches the LLM (R71). Every document is a test instruction of the prototype (R69).
+package kb
+
+import (
+        "context"
+        "crypto/rand"
+        "encoding/hex"
+        "encoding/json"
+        "errors"
+        "fmt"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+const (
+        defaultK   = 5
+        maxSnippet = 300
+)
+
+// Register binds every tool of the kb contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil </span><span class="cov8" title="1">{
+                return errors.New("kb: server and pool are required")
+        }</span>
+        <span class="cov8" title="1">srv.Handle("search", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                var in struct {
+                        Query string `json:"query"`
+                        K     int    `json:"k"`
+                }
+                if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if in.K &lt;= 0 </span><span class="cov0" title="0">{
+                        in.K = defaultK
+                }</span>
+                <span class="cov8" title="1">return search(ctx, pool, c, in.Query, in.K)</span>
+        })
+        <span class="cov8" title="1">srv.Handle("add_faq", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                var in struct {
+                        Title string `json:"title"`
+                        Body  string `json:"body"`
+                        Key   string `json:"idempotency_key"`
+                }
+                if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">return addFAQ(ctx, pool, c, in.Title, in.Body, in.Key)</span>
+        })
+        <span class="cov8" title="1">return nil</span>
+}
+
+type hit struct {
+        DocID      string  `json:"doc_id"`
+        Title      string  `json:"title"`
+        Snippet    string  `json:"snippet"`
+        SourceType string  `json:"source_type"`
+        URL        string  `json:"url"`
+        Score      float64 `json:"score"`
+}
+
+// search returns documents the caller may see: role and team ACL, and private notes of the caller only.
+func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string, k int) (any, error) <span class="cov8" title="1">{
+        rows, err := pool.Query(ctx, `
+                SELECT d.doc_id, d.title, d.source_type, coalesce(d.url, ''),
+                       ts_headline('russian', d.body, q.q, 'StartSel="", StopSel="", MinWords=12, MaxWords=35, ShortWord=2'),
+                       ts_rank(d.tsv, q.q)::float8
+                FROM kb.documents d, websearch_to_tsquery('russian', $1) AS q(q)
+                WHERE d.tsv @@ q.q
+                  AND $2 = ANY(d.acl_roles)
+                  AND ('*' = ANY(d.acl_teams) OR $3 = ANY(d.acl_teams))
+                  AND (d.owner_id IS NULL OR d.owner_id = $4)
+                ORDER BY 6 DESC, d.doc_id
+                LIMIT $5`, query, c.Role, c.TeamID, c.Sub, k)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("searching knowledge base: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer rows.Close()
+        items := []hit{}
+        for rows.Next() </span><span class="cov8" title="1">{
+                var h hit
+                if err := rows.Scan(&amp;h.DocID, &amp;h.Title, &amp;h.SourceType, &amp;h.URL, &amp;h.Snippet, &amp;h.Score); err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("scanning search hit: %w", err)
+                }</span>
+                <span class="cov8" title="1">h.Snippet = truncateRunes(h.Snippet, maxSnippet)
+                items = append(items, h)</span>
+        }
+        <span class="cov8" title="1">if err := rows.Err(); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("reading search hits: %w", err)
+        }</span>
+        <span class="cov8" title="1">return map[string]any{"items": items}, nil</span>
+}
+
+func truncateRunes(s string, n int) string <span class="cov8" title="1">{
+        r := []rune(s)
+        if len(r) &lt;= n </span><span class="cov8" title="1">{
+                return s
+        }</span>
+        <span class="cov8" title="1">return string(r[:n-1]) + "…"</span>
+}
+
+type faqOut struct {
+        DocID      string `json:"doc_id"`
+        Title      string `json:"title"`
+        SourceType string `json:"source_type"`
+        Replayed   bool   `json:"replayed"`
+}
+
+// addFAQ stores a mentor answer as an FAQ document of the mentor's team; idempotent by key (R79).
+func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key string) (any, error) <span class="cov8" title="1">{
+        suffix := make([]byte, 4)
+        if _, err := rand.Read(suffix); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("generating doc id: %w", err)
+        }</span>
+        <span class="cov8" title="1">docID := fmt.Sprintf("faq-%s-%s", c.TeamID, hex.EncodeToString(suffix))
+        var out faqOut
+        err := pool.QueryRow(ctx, `
+                INSERT INTO kb.documents (doc_id, title, body, source_type, acl_roles, acl_teams, kind, created_by, idempotency_key)
+                VALUES ($1, $2, $3, 'test', ARRAY['intern','mentor','lead'], ARRAY[$4::text], 'faq', $5, $6)
+                ON CONFLICT (idempotency_key) DO NOTHING
+                RETURNING doc_id, title, source_type`, docID, title, body, c.TeamID, c.Sub, key).
+                Scan(&amp;out.DocID, &amp;out.Title, &amp;out.SourceType)
+        if err == nil </span><span class="cov8" title="1">{
+                return out, nil
+        }</span>
+        <span class="cov8" title="1">if !errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("inserting faq: %w", err)
+        }</span>
+        // The key was used before: replay the stored result when it is the same request, otherwise conflict.
+        <span class="cov8" title="1">var createdBy, storedBody string
+        err = pool.QueryRow(ctx, `SELECT doc_id, title, body, coalesce(created_by, '') FROM kb.documents WHERE idempotency_key = $1`, key).
+                Scan(&amp;out.DocID, &amp;out.Title, &amp;storedBody, &amp;createdBy)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("loading stored faq: %w", err)
+        }</span>
+        <span class="cov8" title="1">if createdBy != c.Sub || out.Title != title || storedBody != body </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Этот ключ идемпотентности уже использован с другими данными")
+        }</span>
+        <span class="cov8" title="1">out.SourceType = "test"
+        out.Replayed = true
+        return out, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package kb
+
+import (
+        "bytes"
+        "context"
+        "errors"
+        "fmt"
+        "os"
+        "path/filepath"
+        "regexp"
+        "slices"
+        "strings"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgxpool"
+        "gopkg.in/yaml.v3"
+)
+
+var (
+        docIDRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+        itemIDRe = regexp.MustCompile(`^CL-[0-9]{2}$`)
+        known    = []string{"intern", "mentor", "lead", "hrbp", "alumni"}
+)
+
+type frontmatter struct {
+        DocID  string `yaml:"doc_id"`
+        Title  string `yaml:"title"`
+        Source string `yaml:"source_type"`
+        ACL    struct {
+                Roles []string `yaml:"roles"`
+                Teams []string `yaml:"teams"`
+        } `yaml:"acl"`
+        ChecklistItemID string    `yaml:"checklist_item_id"`
+        URL             string    `yaml:"url"`
+        Updated         yaml.Node `yaml:"updated"` // any scalar; only a YYYY-MM-DD date is used
+}
+
+type document struct {
+        frontmatter
+        body    string
+        updated *time.Time
+}
+
+// LoadDir upserts every *.md file of dir (except README.md) into kb.documents (kind doc, no owner) and returns how
+// many were loaded. Files need YAML frontmatter with doc_id, title, source_type: test (R69) and acl {roles, teams};
+// checklist_item_id is optional; other frontmatter fields (checklist, tags, updated, origin, ...) are ignored, except
+// that a valid YYYY-MM-DD `updated` becomes the document date. Any invalid file fails the whole load with an error
+// naming it, and nothing is written. Other files are ignored. A missing dir returns 0 and no error.
+func LoadDir(ctx context.Context, pool *pgxpool.Pool, dir string) (int, error) <span class="cov8" title="1">{
+        entries, err := os.ReadDir(dir)
+        if errors.Is(err, os.ErrNotExist) </span><span class="cov8" title="1">{
+                return 0, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
+                return 0, fmt.Errorf("reading kb dir %s: %w", dir, err)
+        }</span>
+        <span class="cov8" title="1">var docs []document
+        seen := map[string]string{}
+        for _, e := range entries </span><span class="cov8" title="1">{
+                if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".md") || strings.EqualFold(e.Name(), "README.md") </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+                if err != nil </span><span class="cov0" title="0">{
+                        return 0, fmt.Errorf("reading %s: %w", e.Name(), err)
+                }</span>
+                <span class="cov8" title="1">d, err := parseDoc(raw)
+                if err != nil </span><span class="cov8" title="1">{
+                        return 0, fmt.Errorf("kb file %s: %w", e.Name(), err)
+                }</span>
+                <span class="cov8" title="1">if prev, dup := seen[d.DocID]; dup </span><span class="cov8" title="1">{
+                        return 0, fmt.Errorf("kb file %s: doc_id %q already used by %s", e.Name(), d.DocID, prev)
+                }</span>
+                <span class="cov8" title="1">seen[d.DocID] = e.Name()
+                docs = append(docs, d)</span>
+        }
+        <span class="cov8" title="1">if len(docs) == 0 </span><span class="cov8" title="1">{
+                return 0, nil
+        }</span>
+        <span class="cov8" title="1">tx, err := pool.Begin(ctx)
+        if err != nil </span><span class="cov8" title="1">{
+                return 0, fmt.Errorf("starting kb load: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(ctx) }</span>()
+        <span class="cov8" title="1">for _, d := range docs </span><span class="cov8" title="1">{
+                if err := upsert(ctx, tx, d); err != nil </span><span class="cov8" title="1">{
+                        return 0, fmt.Errorf("kb file %s: %w", seen[d.DocID], err)
+                }</span>
+        }
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return 0, fmt.Errorf("committing kb load: %w", err)
+        }</span>
+        <span class="cov8" title="1">return len(docs), nil</span>
+}
+
+func upsert(ctx context.Context, tx pgx.Tx, d document) error <span class="cov8" title="1">{
+        tag, err := tx.Exec(ctx, `
+                INSERT INTO kb.documents (doc_id, title, body, source_type, acl_roles, acl_teams, kind, checklist_item_id, url, updated)
+                VALUES ($1, $2, $3, 'test', $4, $5, 'doc', nullif($6, ''), nullif($7, ''), coalesce($8::date, current_date))
+                ON CONFLICT (doc_id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body,
+                        acl_roles = EXCLUDED.acl_roles, acl_teams = EXCLUDED.acl_teams,
+                        checklist_item_id = EXCLUDED.checklist_item_id, url = EXCLUDED.url, updated = EXCLUDED.updated
+                WHERE kb.documents.kind = 'doc' AND kb.documents.owner_id IS NULL`,
+                d.DocID, d.Title, d.body, d.ACL.Roles, d.ACL.Teams, d.ChecklistItemID, d.URL, d.updated)
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("upserting %s: %w", d.DocID, err)
+        }</span>
+        <span class="cov8" title="1">if tag.RowsAffected() == 0 </span><span class="cov8" title="1">{
+                return fmt.Errorf("doc_id %q belongs to a non-document record", d.DocID)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func parseDoc(raw []byte) (document, error) <span class="cov8" title="1">{
+        var d document
+        raw = bytes.ReplaceAll(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")), []byte("\r\n"), []byte("\n"))
+        if !bytes.HasPrefix(raw, []byte("---\n")) </span><span class="cov8" title="1">{
+                return d, errors.New("no YAML frontmatter (file must start with ---)")
+        }</span>
+        <span class="cov8" title="1">rest := raw[4:]
+        end := bytes.Index(rest, []byte("\n---"))
+        if end &lt; 0 </span><span class="cov8" title="1">{
+                return d, errors.New("frontmatter is not closed with ---")
+        }</span>
+        <span class="cov8" title="1">if err := yaml.Unmarshal(rest[:end], &amp;d.frontmatter); err != nil </span><span class="cov8" title="1">{
+                return d, fmt.Errorf("invalid frontmatter: %w", err)
+        }</span>
+        <span class="cov8" title="1">d.body = strings.TrimSpace(string(rest[end+4:]))
+        var missing []string
+        for name, empty := range map[string]bool{
+                "doc_id": d.DocID == "", "title": strings.TrimSpace(d.Title) == "", "source_type": d.Source == "",
+                "acl.roles": len(d.ACL.Roles) == 0, "acl.teams": len(d.ACL.Teams) == 0, "body": d.body == "",
+        } </span><span class="cov8" title="1">{
+                if empty </span><span class="cov8" title="1">{
+                        missing = append(missing, name)
+                }</span>
+        }
+        <span class="cov8" title="1">if len(missing) &gt; 0 </span><span class="cov8" title="1">{
+                slices.Sort(missing)
+                return d, fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
+        }</span>
+        <span class="cov8" title="1">if d.Source != "test" </span><span class="cov8" title="1">{
+                return d, fmt.Errorf("source_type must be \"test\", got %q (R69)", d.Source)
+        }</span>
+        <span class="cov8" title="1">if !docIDRe.MatchString(d.DocID) </span><span class="cov8" title="1">{
+                return d, fmt.Errorf("invalid doc_id %q", d.DocID)
+        }</span>
+        <span class="cov8" title="1">for _, r := range d.ACL.Roles </span><span class="cov8" title="1">{
+                if !slices.Contains(known, r) </span><span class="cov8" title="1">{
+                        return d, fmt.Errorf("unknown role %q in acl.roles", r)
+                }</span>
+        }
+        <span class="cov8" title="1">if d.ChecklistItemID != "" &amp;&amp; !itemIDRe.MatchString(d.ChecklistItemID) </span><span class="cov8" title="1">{
+                return d, fmt.Errorf("invalid checklist_item_id %q", d.ChecklistItemID)
+        }</span>
+        <span class="cov8" title="1">if d.Updated.Kind == yaml.ScalarNode </span><span class="cov8" title="1">{
+                if t, err := time.Parse("2006-01-02", strings.TrimSpace(d.Updated.Value)); err == nil </span><span class="cov8" title="1">{
+                        d.updated = &amp;t
+                }</span>
+        }
+        <span class="cov8" title="1">return d, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">// Package trips implements the mock "trips" MCP server: business trips between Avito offices (case «Пространство
+// решений»: командировки). Data is synthetic (R68). Identity comes only from the verified JWT (R71): a caller sees and
+// creates only own requests; the approver is the caller's lead, who decides through approvals.decide. Requests are
+// idempotent by key (R79).
+package trips
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "slices"
+        "strings"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgconn"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/mcpx"
+)
+
+// Offices where a trip can go (test data of the prototype).
+var Offices = []string{"Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"}
+
+const (
+        minNoticeDays = 5  // a trip is requested at least this many days ahead
+        maxDays       = 14 // the longest trip in calendar days
+)
+
+// moscow is the business time zone (UTC+3, no DST), as in the absence mock.
+var moscow = time.FixedZone("MSK", 3*60*60)
+
+// Register binds every tool of the trips contract to srv.
+func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
+        return register(srv, pool, time.Now)
+}</span>
+
+func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
+        if srv == nil || pool == nil || now == nil </span><span class="cov8" title="1">{
+                return errors.New("trips: server, pool and clock are required")
+        }</span>
+        <span class="cov8" title="1">if srv.Name() != "trips" </span><span class="cov8" title="1">{
+                return fmt.Errorf("trips: cannot register on server %q", srv.Name())
+        }</span>
+        <span class="cov8" title="1">s := &amp;service{pool: pool, now: now}
+        srv.Handle("get_policy", s.getPolicy)
+        srv.Handle("list_my_requests", s.listMyRequests)
+        srv.Handle("validate_request", s.validateRequest)
+        srv.Handle("create_request", s.createRequest)
+        return nil</span>
+}
+
+type service struct {
+        pool *pgxpool.Pool
+        now  func() time.Time
+}
+
+type querier interface {
+        Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+        QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+type request struct {
+        ID                  string `json:"id"`
+        City                string `json:"city"`
+        StartDate           string `json:"start_date"`
+        EndDate             string `json:"end_date"`
+        Purpose             string `json:"purpose"`
+        Status              string `json:"status"`
+        ApproverID          string `json:"approver_id"`
+        ApproverDisplayName string `json:"approver_display_name,omitempty"`
+        CreatedAt           string `json:"created_at"`
+        Replayed            *bool  `json:"replayed,omitempty"`
+
+        employeeID string
+}
+
+const selectRequest = `
+SELECT r.id, r.city, r.start_date, r.end_date, r.purpose, r.status, r.approver_id, coalesce(a.display_name, ''),
+       r.created_at, r.employee_id
+FROM trips.requests r
+LEFT JOIN directory.employees a ON a.id = r.approver_id`
+
+func scanRequest(row pgx.CollectableRow) (request, error) <span class="cov8" title="1">{
+        var (
+                r          request
+                start, end time.Time
+                created    time.Time
+        )
+        err := row.Scan(&amp;r.ID, &amp;r.City, &amp;start, &amp;end, &amp;r.Purpose, &amp;r.Status, &amp;r.ApproverID, &amp;r.ApproverDisplayName,
+                &amp;created, &amp;r.employeeID)
+        r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
+        r.CreatedAt = created.UTC().Format(time.RFC3339)
+        return r, err
+}</span>
+
+func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) <span class="cov8" title="1">{
+        rows, err := q.Query(ctx, selectRequest+" WHERE "+where, arg)
+        if err != nil </span><span class="cov0" title="0">{
+                return request{}, false, fmt.Errorf("query trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">r, err := pgx.CollectOneRow(rows, scanRequest)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return request{}, false, nil
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return request{}, false, fmt.Errorf("scan trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">return r, true, nil</span>
+}
+
+// --- get_policy ---
+
+type policy struct {
+        Offices       []string `json:"offices"`
+        MinNoticeDays int      `json:"min_notice_days"`
+        MaxDays       int      `json:"max_days"`
+        Text          string   `json:"text"`
+}
+
+func (s *service) getPolicy(context.Context, mcpx.Caller, json.RawMessage) (any, error) <span class="cov8" title="1">{
+        return policy{Offices: Offices, MinNoticeDays: minNoticeDays, MaxDays: maxDays, Text: fmt.Sprintf(
+                "Командировка в другой офис Авито согласуется руководителем. Подать заявку нужно не позже чем за %d дней, "+
+                        "длительность — до %d дней. Билеты и гостиницу после согласования бронирует служба командировок "+
+                        "(тестовые правила прототипа).", minNoticeDays, maxDays)}, nil
+}</span>
+
+// --- list_my_requests ---
+
+type listOut struct {
+        Items []request `json:"items"`
+}
+
+func (s *service) listMyRequests(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, selectRequest+`
+WHERE r.employee_id = $1
+ORDER BY r.start_date DESC, r.id DESC
+LIMIT 100`, c.Sub)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("list trip requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">items, err := pgx.CollectRows(rows, scanRequest)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("scan trip requests: %w", err)
+        }</span>
+        <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
+                items = []request{}
+        }</span>
+        <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+// --- validate_request ---
+
+type tripIn struct {
+        City      string `json:"city"`
+        StartDate string `json:"start_date"`
+        EndDate   string `json:"end_date"`
+        Purpose   string `json:"purpose"`
+}
+
+type validateOut struct {
+        Valid               bool     `json:"valid"`
+        Problems            []string `json:"problems"`
+        ApproverID          string   `json:"approver_id,omitempty"`
+        ApproverDisplayName string   `json:"approver_display_name,omitempty"`
+}
+
+func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in tripIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return s.validate(ctx, s.pool, c, in)</span>
+}
+
+// validate checks a new trip of c: a known office other than the employee's own city, dates, notice, length, no
+// overlap with another trip; the approver is the employee's lead.
+func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in tripIn) (validateOut, error) <span class="cov8" title="1">{
+        out := validateOut{Problems: []string{}}
+        start, errStart := time.Parse(time.DateOnly, in.StartDate)
+        end, errEnd := time.Parse(time.DateOnly, in.EndDate)
+        if errStart != nil || errEnd != nil </span><span class="cov0" title="0">{
+                return out, apierr.Validation().WithMessage("Даты должны быть в формате ГГГГ-ММ-ДД")
+        }</span>
+        <span class="cov8" title="1">var leadID, leadName, home *string
+        err := q.QueryRow(ctx, `
+SELECT e.lead_id, l.display_name, e.location
+FROM directory.employees e LEFT JOIN directory.employees l ON l.id = e.lead_id
+WHERE e.id = $1`, c.Sub).Scan(&amp;leadID, &amp;leadName, &amp;home)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                return out, apierr.Forbidden().WithMessage("Сотрудник не найден в справочнике")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return out, fmt.Errorf("load employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">city := strings.TrimSpace(in.City)
+        switch </span>{
+        case !slices.Contains(Offices, city):<span class="cov8" title="1">
+                out.Problems = append(out.Problems, "Офиса в этом городе нет. Доступно: "+strings.Join(Offices, ", "))</span>
+        case home != nil &amp;&amp; *home == city:<span class="cov8" title="1">
+                out.Problems = append(out.Problems, "Это ваш город: командировка оформляется только в другой офис")</span>
+        }
+        <span class="cov8" title="1">y, m, d := s.now().In(moscow).Date()
+        earliest := time.Date(y, m, d+minNoticeDays, 0, 0, 0, 0, time.UTC)
+        if start.Before(earliest) </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, fmt.Sprintf("Заявку подают не позже чем за %d дней: начало не раньше %s",
+                        minNoticeDays, earliest.Format("02.01.2006")))
+        }</span>
+        <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Дата окончания не может быть раньше даты начала")
+        }</span> else<span class="cov8" title="1"> {
+                if days := int(end.Sub(start).Hours()/24) + 1; days &gt; maxDays </span><span class="cov8" title="1">{
+                        out.Problems = append(out.Problems, fmt.Sprintf("Командировка длится не больше %d дней, у вас %d", maxDays, days))
+                }</span>
+                <span class="cov8" title="1">var other string
+                err := q.QueryRow(ctx, `
+SELECT id FROM trips.requests
+WHERE employee_id = $1 AND status IN ('pending_approval', 'approved') AND start_date &lt;= $3::date AND end_date &gt;= $2::date
+ORDER BY start_date LIMIT 1`, c.Sub, in.StartDate, in.EndDate).Scan(&amp;other)
+                if err == nil </span><span class="cov8" title="1">{
+                        out.Problems = append(out.Problems, "Даты пересекаются с другой командировкой ("+other+")")
+                }</span> else<span class="cov8" title="1"> if !errors.Is(err, pgx.ErrNoRows) </span><span class="cov0" title="0">{
+                        return out, fmt.Errorf("check overlap: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">if strings.TrimSpace(in.Purpose) == "" </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Укажите цель командировки")
+        }</span>
+        <span class="cov8" title="1">if leadID == nil </span><span class="cov8" title="1">{
+                out.Problems = append(out.Problems, "Не удалось определить согласующего: в справочнике не указан руководитель")
+        }</span> else<span class="cov8" title="1"> {
+                out.ApproverID, out.ApproverDisplayName = *leadID, deref(leadName)
+        }</span>
+        <span class="cov8" title="1">out.Valid = len(out.Problems) == 0
+        return out, nil</span>
+}
+
+// --- create_request ---
+
+type createIn struct {
+        tripIn
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead) and its
+// approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in createIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "trips:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">prev, found, err := findRequest(ctx, tx, "r.idempotency_key = $1::uuid", in.IdempotencyKey)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.City != strings.TrimSpace(in.City) || prev.StartDate != in.StartDate ||
+                        prev.EndDate != in.EndDate || prev.Purpose != strings.TrimSpace(in.Purpose) </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                prev.Replayed = &amp;replayed
+                return prev, nil</span>
+        }
+        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, in.tripIn)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !check.Valid </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
+        }</span>
+        <span class="cov8" title="1">var id string
+        err = tx.QueryRow(ctx, `
+INSERT INTO trips.requests (employee_id, city, start_date, end_date, purpose, approver_id, idempotency_key)
+VALUES ($1, $2, $3::date, $4::date, $5, $6, $7::uuid)
+RETURNING id`, c.Sub, strings.TrimSpace(in.City), in.StartDate, in.EndDate, strings.TrimSpace(in.Purpose),
+                check.ApproverID, in.IdempotencyKey).Scan(&amp;id)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert trip request: %w", err)
+        }</span>
+        <span class="cov8" title="1">start, _ := time.Parse(time.DateOnly, in.StartDate)
+        end, _ := time.Parse(time.DateOnly, in.EndDate)
+        summary := fmt.Sprintf("Командировка: %s, %s", strings.TrimSpace(in.City), period(start, end))
+        if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('trip_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, summary); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">created, _, err := findRequest(ctx, tx, "r.id = $1", id)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">created.Replayed = new(bool)
+        return created, nil</span>
+}
+
+func keyConflict() *apierr.Error <span class="cov8" title="1">{
+        return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другой заявки, подтвердите действие ещё раз")
+}</span>
+
+func isUniqueViolation(err error) bool <span class="cov8" title="1">{
+        var pgErr *pgconn.PgError
+        return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
+}</span>
+
+func period(start, end time.Time) string <span class="cov8" title="1">{
+        if start.Equal(end) </span><span class="cov8" title="1">{
+                return start.Format("02.01.2006")
+        }</span>
+        <span class="cov8" title="1">return start.Format("02.01.2006") + "–" + end.Format("02.01.2006")</span>
+}
+
+func deref(s *string) string <span class="cov8" title="1">{
+        if s == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov8" title="1">return *s</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

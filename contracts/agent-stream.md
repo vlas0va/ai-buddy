@@ -25,7 +25,7 @@ closes). The agent emits its first `status` within ~100 ms, so the UI never wait
 |---|---|---|---|
 | `status` | `{"stage": "thinking" \| "searching_kb" \| "calling_service" \| "saving"}` → `text` (Russian label) | agent | Waiting text (R78) |
 | `token` | `{"text": "..."}` | agent | Append to the current answer |
-| `sources` | `{"items": [{"doc_id","title","source_type":"test","url"}]}` → `items[].badge` = «Тестовая инструкция прототипа» | agent | Source chips + badge (R69) |
+| `sources` | `{"items": [{"doc_id","title","source_type":"test","url"}]}` → `items[].badge` = «Тестовая инструкция прототипа»; web search results use `source_type: "external"` with the page `url` and badge «Внешний источник» | agent | Source chips + badge (R69) |
 | `action_proposal` | `{"proposal_id","kind","draft":{...},"summary"}` → `title`, `requires_approval`, `task_checklist_item_id`, `expires_at`, `args_hash` | agent; core persists to `core.proposals` | Draft card with «Отправить» / «Отмена» |
 | `action_result` | `{"action_id","kind","external_id","status","summary","approver_display_name","task_id"}` | core (after the MCP write succeeds and `core.actions` is saved) | Result card; invalidate `plan` and `actions` queries (R66) |
 | `escalation_draft` | `{"to_role":"mentor"\|"lead"\|"curator"\|"hrbp","text"}` → `to_user_id`, `to_name`, `topic` | agent | Editable draft + «Отправить» → `POST /api/escalations` |
@@ -68,9 +68,11 @@ closes). The agent emits its first `status` within ~100 ms, so the UI never wait
 ```
 Optional, all additive: `message_id`; `user_context.display_name`; `open_tasks[].status|due_at|period|human_only|task_id`;
 `user_context.plan.tasks` (full plan, same item shape — preferred when available, gives «готово N из M»);
-`user_context.mentees` (mentor and lead: what core returns from `GET /api/team/interns`); `flags` (runtime feature flags of the
+`user_context.location` (office city: «Москва», «Санкт-Петербург» or «Удалённо» — picks the matching KB section); `user_context.mentees` (mentor and lead: what core returns from `GET /api/team/interns`); `flags` (runtime feature flags of the
 user's team, R55 — a disabled scenario answers «пилот выключен»); `today` (ISO date, honoured only with
-`AGENT_ALLOW_CLOCK_OVERRIDE=true`, for demo and e2e).
+`AGENT_ALLOW_CLOCK_OVERRIDE=true`, for demo and e2e); `turn.attachments` (up to 3 files attached to the message:
+`{"name","kind":"text|image|document","mime","size","text"}`, `text` only for kind `text`, ≤ 32 KB; `turn.text` may then
+be empty). The agent masks secrets in attached text before any use; images and documents carry metadata only.
 Headers: `Authorization: Bearer <user JWT>` (the agent verifies it with `JWT_SECRET` and forwards it to MCP servers unchanged),
 `X-Request-Id` (echoed back and put into `done.request_id`), optional `X-Service-Token` (`AGENT_SERVICE_TOKEN`).
 The agent takes `user_id`, `role`, `team_id` from JWT claims; a `user_context` that disagrees → `403 context_mismatch`.

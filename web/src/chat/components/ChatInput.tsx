@@ -1,10 +1,11 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { SendIcon, SuggestIcon } from '@/components/ui/icons'
+import { ClipIcon, SendIcon, SuggestIcon } from '@/components/ui/icons'
+import { ACCEPT, KIND_TEXT, MAX_ATTACHMENTS, type OutgoingAttachment, formatSize, readAttachment } from '../attachments'
 import { filterSuggestions } from '../suggestions'
 
 interface Props {
   disabled: boolean
-  onSend: (text: string) => void
+  onSend: (text: string, attachments: OutgoingAttachment[]) => void
 }
 
 // The only input of the chat: auto-growing field with an autocomplete list of suggestions (combobox pattern).
@@ -12,6 +13,9 @@ export function ChatInput({ disabled, onSend }: Props) {
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
+  const [files, setFiles] = useState<OutgoingAttachment[]>([])
+  const [fileError, setFileError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const wrapRef = useRef<HTMLFormElement>(null)
   const listId = useId()
@@ -37,11 +41,27 @@ export function ChatInput({ disabled, onSend }: Props) {
   }, [])
 
   const send = (value: string) => {
-    if (disabled || !value.trim()) return
-    onSend(value)
+    if (disabled || (!value.trim() && files.length === 0)) return
+    onSend(value, files)
     setText('')
+    setFiles([])
+    setFileError('')
     setOpen(false)
     setActive(-1)
+  }
+
+  const attach = async (list: FileList | null) => {
+    const picked = Array.from(list ?? [])
+    if (fileRef.current) fileRef.current.value = ''
+    if (picked.length === 0) return
+    const errors: string[] = []
+    const room = MAX_ATTACHMENTS - files.length
+    if (picked.length > room) errors.push(`Можно прикрепить не больше ${MAX_ATTACHMENTS} файлов.`)
+    const read = await Promise.all(picked.slice(0, Math.max(room, 0)).map(readAttachment))
+    const ok = read.filter((r): r is OutgoingAttachment => typeof r !== 'string')
+    errors.push(...read.filter((r): r is string => typeof r === 'string'))
+    setFiles((prev) => [...prev, ...ok].slice(0, MAX_ATTACHMENTS))
+    setFileError(errors.join(' '))
   }
 
   const move = (delta: number) => {
@@ -105,7 +125,43 @@ export function ChatInput({ disabled, onSend }: Props) {
           ))}
         </div>
       )}
+      {files.length > 0 && (
+        <div className="chat-input-attachments" aria-label="Прикреплённые файлы">
+          {files.map((f, i) => (
+            <span key={`${f.name}-${i}`} className="chat-attachment">
+              {f.name} · {KIND_TEXT[f.kind]}, {formatSize(f.size)}
+              <button type="button" aria-label={`Убрать ${f.name}`} onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {fileError && (
+        <p className="chat-input-error" role="alert">
+          {fileError}
+        </p>
+      )}
       <div className="chat-field">
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept={ACCEPT}
+          hidden
+          data-testid="chat-file-input"
+          onChange={(e) => void attach(e.target.files)}
+        />
+        <button
+          type="button"
+          className="chat-icon-btn"
+          aria-label="Прикрепить файл"
+          title="Лог, конфиг, код, скриншот или документ (до 3 файлов). Скриншоты и документы не читаются, текст логов проверяется на секреты."
+          disabled={disabled || files.length >= MAX_ATTACHMENTS}
+          onClick={() => fileRef.current?.click()}
+        >
+          <ClipIcon />
+        </button>
         <button
           type="button"
           className="chat-icon-btn"
@@ -139,7 +195,7 @@ export function ChatInput({ disabled, onSend }: Props) {
           }}
           onKeyDown={onKeyDown}
         />
-        <button type="submit" className="chat-icon-btn chat-send" aria-label="Отправить" disabled={disabled || !text.trim()}>
+        <button type="submit" className="chat-icon-btn chat-send" aria-label="Отправить" disabled={disabled || (!text.trim() && files.length === 0)}>
           <SendIcon />
         </button>
       </div>

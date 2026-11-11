@@ -4,7 +4,8 @@ import { keys } from '@/api/keys'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
 import type { ActionResult } from '@/chat/events'
-import { ACTION_STATUS_TEXT, ACTION_STATUS_VARIANT, withoutApprover } from '../statusText'
+import { ACTION_STATUS_TEXT, ACTION_STATUS_VARIANT, absenceSteps, withoutApprover } from '../statusText'
+import { Steps } from './Steps'
 
 export function ActionResultCard({ result }: { result: ActionResult }) {
   // the card is a snapshot from the stream; the live status (approved/rejected) comes from the actions list (refetched on focus)
@@ -19,6 +20,7 @@ export function ActionResultCard({ result }: { result: ActionResult }) {
       </h3>
       {result.summary && <p>{withoutApprover(result.summary)}</p>}
       {result.approver_display_name && <p className="hint">Согласующий: {result.approver_display_name}</p>}
+      {result.kind === 'absence_request' && <Steps steps={absenceSteps(status)} />}
       <p className="hint">Сохранено в журнале действий</p>
     </Card>
   )

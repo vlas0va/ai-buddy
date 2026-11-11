@@ -1,0 +1,2747 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>apierr: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">aibuddy/services/internal/platform/apierr/apierr.go (100.0%)</option>
+				
+				<option value="file1">aibuddy/services/internal/platform/authn/authn.go (98.8%)</option>
+				
+				<option value="file2">aibuddy/services/internal/platform/canonjson/canonjson.go (97.1%)</option>
+				
+				<option value="file3">aibuddy/services/internal/platform/config/config.go (100.0%)</option>
+				
+				<option value="file4">aibuddy/services/internal/platform/confirm/confirm.go (98.5%)</option>
+				
+				<option value="file5">aibuddy/services/internal/platform/httpx/json.go (100.0%)</option>
+				
+				<option value="file6">aibuddy/services/internal/platform/httpx/middleware.go (100.0%)</option>
+				
+				<option value="file7">aibuddy/services/internal/platform/httpx/sse.go (97.8%)</option>
+				
+				<option value="file8">aibuddy/services/internal/platform/mcpx/client.go (98.5%)</option>
+				
+				<option value="file9">aibuddy/services/internal/platform/mcpx/http.go (100.0%)</option>
+				
+				<option value="file10">aibuddy/services/internal/platform/mcpx/schema.go (95.8%)</option>
+				
+				<option value="file11">aibuddy/services/internal/platform/mcpx/server.go (95.9%)</option>
+				
+				<option value="file12">aibuddy/services/internal/platform/period/period.go (96.6%)</option>
+				
+				<option value="file13">aibuddy/services/internal/platform/pg/pg.go (100.0%)</option>
+				
+				<option value="file14">aibuddy/services/internal/platform/pgtest/pgtest.go (88.5%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">// Package apierr is the error type shared by the HTTP API (contracts/openapi.yaml, schema Error) and the MCP tool
+// results (contracts/mcp-tools.md, "Errors"). Messages are Russian, user-facing, neutral; they never reveal whether
+// a foreign resource exists (R71).
+package apierr
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "log/slog"
+        "net/http"
+)
+
+// Code is a machine-readable error code.
+type Code string
+
+// Codes of the HTTP API (openapi Error.code).
+const (
+        CodeUnauthorized        Code = "unauthorized"
+        CodeForbidden           Code = "forbidden"
+        CodeNotFound            Code = "not_found"
+        CodeValidation          Code = "validation_error"
+        CodeConflict            Code = "conflict"
+        CodeExpired             Code = "expired"
+        CodeRateLimited         Code = "rate_limited"
+        CodeUpstreamUnavailable Code = "upstream_unavailable"
+        CodeInternal            Code = "internal"
+)
+
+// Codes that exist only in MCP tool results (forbidden, not_found, validation_error and conflict are shared).
+const (
+        CodeInvalidConfirmation Code = "invalid_confirmation"
+        CodeUnavailable         Code = "unavailable"
+)
+
+// Error is an API or tool error. Status is the HTTP status used by WriteJSON; it is not serialised.
+type Error struct {
+        Code      Code   `json:"code"`
+        Message   string `json:"message"`
+        Retryable bool   `json:"retryable"`
+        Status    int    `json:"-"`
+}
+
+type spec struct {
+        status    int
+        retryable bool
+        message   string
+}
+
+var specs = map[Code]spec{
+        CodeUnauthorized:        {http.StatusUnauthorized, false, "Требуется вход в систему"},
+        CodeForbidden:           {http.StatusForbidden, false, "Недостаточно прав для этого действия"},
+        CodeNotFound:            {http.StatusNotFound, false, "Не найдено"},
+        CodeValidation:          {http.StatusBadRequest, false, "Проверьте введённые данные"},
+        CodeConflict:            {http.StatusConflict, false, "Действие уже выполнено или недоступно в текущем состоянии"},
+        CodeExpired:             {http.StatusConflict, false, "Срок действия истёк, повторите действие"},
+        CodeRateLimited:         {http.StatusTooManyRequests, true, "Слишком много запросов, попробуйте чуть позже"},
+        CodeUpstreamUnavailable: {http.StatusBadGateway, true, "Сервис временно недоступен, попробуйте ещё раз"},
+        CodeInternal:            {http.StatusInternalServerError, false, "Внутренняя ошибка, попробуйте позже"},
+        CodeInvalidConfirmation: {http.StatusForbidden, false, "Подтверждение недействительно или устарело, подтвердите действие ещё раз"},
+        CodeUnavailable:         {http.StatusServiceUnavailable, true, "Сервис временно недоступен, попробуйте ещё раз"},
+}
+
+// New returns an error with the given code; an empty message means the default Russian message of the code.
+// Status and Retryable come from the code (unknown codes: 500, not retryable).
+func New(code Code, message string) *Error <span class="cov8" title="1">{
+        s, ok := specs[code]
+        if !ok </span><span class="cov8" title="1">{
+                s = spec{status: http.StatusInternalServerError, message: specs[CodeInternal].message}
+        }</span>
+        <span class="cov8" title="1">if message == "" </span><span class="cov8" title="1">{
+                message = s.message
+        }</span>
+        <span class="cov8" title="1">return &amp;Error{Code: code, Message: message, Retryable: s.retryable, Status: s.status}</span>
+}
+
+// Unauthorized returns the error for a missing or invalid JWT (401).
+func Unauthorized() *Error <span class="cov8" title="1">{ return New(CodeUnauthorized, "") }</span>
+
+// Forbidden returns the error for an action or resource the caller may not access, including other users' data (403).
+func Forbidden() *Error <span class="cov8" title="1">{ return New(CodeForbidden, "") }</span>
+
+// NotFound returns the error for a missing resource of the caller (404).
+func NotFound() *Error <span class="cov8" title="1">{ return New(CodeNotFound, "") }</span>
+
+// Validation returns the error for invalid request data or tool arguments (400); usually followed by WithMessage.
+func Validation() *Error <span class="cov8" title="1">{ return New(CodeValidation, "") }</span>
+
+// Conflict returns the error for a state conflict, e.g. an already decided approval (409).
+func Conflict() *Error <span class="cov8" title="1">{ return New(CodeConflict, "") }</span>
+
+// Expired returns the error for an expired or cancelled proposal (409).
+func Expired() *Error <span class="cov8" title="1">{ return New(CodeExpired, "") }</span>
+
+// RateLimited returns the error for too many requests (429, retryable).
+func RateLimited() *Error <span class="cov8" title="1">{ return New(CodeRateLimited, "") }</span>
+
+// UpstreamUnavailable returns the error for an agent or MCP server that did not answer (502, retryable).
+func UpstreamUnavailable() *Error <span class="cov8" title="1">{ return New(CodeUpstreamUnavailable, "") }</span>
+
+// Internal returns the error for an unexpected server failure (500).
+func Internal() *Error <span class="cov8" title="1">{ return New(CodeInternal, "") }</span>
+
+// InvalidConfirmation returns the tool error for a write without a valid confirmation token (403 if sent over HTTP).
+func InvalidConfirmation() *Error <span class="cov8" title="1">{ return New(CodeInvalidConfirmation, "") }</span>
+
+// Unavailable returns the tool error for an MCP server whose dependency is down (503 if sent over HTTP, retryable).
+func Unavailable() *Error <span class="cov8" title="1">{ return New(CodeUnavailable, "") }</span>
+
+// Error implements error.
+func (e *Error) Error() string <span class="cov8" title="1">{ return fmt.Sprintf("%s: %s", e.Code, e.Message) }</span>
+
+// Is reports whether target is an *Error with the same code, so errors.Is(err, apierr.Forbidden()) works.
+func (e *Error) Is(target error) bool <span class="cov8" title="1">{
+        t, ok := target.(*Error)
+        return ok &amp;&amp; t.Code == e.Code
+}</span>
+
+// WithMessage returns a copy of e with a different user-facing message.
+func (e *Error) WithMessage(msg string) *Error <span class="cov8" title="1">{
+        c := *e
+        c.Message = msg
+        return &amp;c
+}</span>
+
+// As returns the *Error in err's chain, if any.
+func As(err error) (*Error, bool) <span class="cov8" title="1">{
+        var e *Error
+        if errors.As(err, &amp;e) &amp;&amp; e != nil </span><span class="cov8" title="1">{
+                return e, true
+        }</span>
+        <span class="cov8" title="1">return nil, false</span>
+}
+
+// From converts any error to an *Error: an *Error in the chain is returned as is, context deadline or
+// cancellation becomes UpstreamUnavailable, anything else becomes Internal. From(nil) is nil.
+func From(err error) *Error <span class="cov8" title="1">{
+        if err == nil </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">if e, ok := As(err); ok </span><span class="cov8" title="1">{
+                return e
+        }</span>
+        <span class="cov8" title="1">if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) </span><span class="cov8" title="1">{
+                return UpstreamUnavailable()
+        }</span>
+        <span class="cov8" title="1">return Internal()</span>
+}
+
+// HasCode reports whether err is (or wraps) an *Error with the given code.
+func HasCode(err error, code Code) bool <span class="cov8" title="1">{
+        e, ok := As(err)
+        return ok &amp;&amp; e.Code == code
+}</span>
+
+// ToAPI maps MCP-only codes onto openapi Error.code values, keeping message and retryable:
+// unavailable → upstream_unavailable (502), invalid_confirmation → expired (409). Other errors are returned as is.
+func ToAPI(e *Error) *Error <span class="cov8" title="1">{
+        switch e.Code </span>{
+        case CodeUnavailable:<span class="cov8" title="1">
+                return remap(e, CodeUpstreamUnavailable)</span>
+        case CodeInvalidConfirmation:<span class="cov8" title="1">
+                return remap(e, CodeExpired)</span>
+        }
+        <span class="cov8" title="1">if _, ok := specs[e.Code]; !ok </span><span class="cov8" title="1">{
+                return Internal()
+        }</span>
+        <span class="cov8" title="1">return e</span>
+}
+
+// ToMCP maps API-only codes onto MCP tool error codes, keeping message and retryable:
+// unauthorized → forbidden, expired → invalid_confirmation, rate_limited/upstream_unavailable/internal and
+// unknown codes → unavailable. Shared codes are returned as is.
+func ToMCP(e *Error) *Error <span class="cov8" title="1">{
+        switch e.Code </span>{
+        case CodeForbidden, CodeNotFound, CodeValidation, CodeConflict, CodeInvalidConfirmation, CodeUnavailable:<span class="cov8" title="1">
+                return e</span>
+        case CodeUnauthorized:<span class="cov8" title="1">
+                return remap(e, CodeForbidden)</span>
+        case CodeExpired:<span class="cov8" title="1">
+                return remap(e, CodeInvalidConfirmation)</span>
+        default:<span class="cov8" title="1">
+                return remap(e, CodeUnavailable)</span>
+        }
+}
+
+func remap(e *Error, code Code) *Error <span class="cov8" title="1">{
+        c := *e
+        c.Code = code
+        c.Status = specs[code].status
+        return &amp;c
+}</span>
+
+// WriteJSON writes err as the openapi Error body with its HTTP status (MCP-only codes mapped by ToAPI).
+// Errors that are not *Error are logged with slog and answered as Internal, so details never leak to clients.
+func WriteJSON(w http.ResponseWriter, err error) <span class="cov8" title="1">{
+        e, ok := As(err)
+        if !ok </span><span class="cov8" title="1">{
+                e = From(err)
+                if err != nil &amp;&amp; e.Code == CodeInternal </span><span class="cov8" title="1">{
+                        slog.Default().Error("internal error", "err", err)
+                }</span>
+        }
+        <span class="cov8" title="1">if e == nil </span><span class="cov8" title="1">{
+                e = Internal()
+        }</span>
+        <span class="cov8" title="1">e = ToAPI(e)
+        status := e.Status
+        if status == 0 </span><span class="cov8" title="1">{
+                status = New(e.Code, "").Status
+        }</span>
+        <span class="cov8" title="1">body, _ := json.Marshal(e) // fields are strings and a bool: cannot fail
+        w.Header().Set("Content-Type", "application/json; charset=utf-8")
+        w.Header().Set("X-Content-Type-Options", "nosniff")
+        w.WriteHeader(status)
+        _, _ = w.Write(body)</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">// Package authn issues and verifies the HS256 JWTs of the mock IdP and puts verified claims into the request
+// context. Identity used anywhere in the backend comes only from these claims (R71).
+//
+// Token: base64url (no padding) of header {"alg":"HS256","typ":"JWT"}, payload Claims and the HMAC-SHA256 of
+// "&lt;header&gt;.&lt;payload&gt;" with JWT_SECRET. Verification is strict: exactly HS256 and typ JWT (alg "none" and every
+// other algorithm are rejected, as is a "crit" header), constant-time MAC comparison, exp required,
+// sub and role required, iat not in the future.
+package authn
+
+import (
+        "context"
+        "crypto/hmac"
+        "crypto/sha256"
+        "encoding/base64"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "log/slog"
+        "net/http"
+        "strings"
+        "time"
+
+        "aibuddy/services/internal/platform/apierr"
+)
+
+// DefaultLeeway is the clock skew tolerated for exp and iat by Verify and NewVerifier.
+const DefaultLeeway = 30 * time.Second
+
+// Claims are the JWT claims of a user. Times are Unix seconds.
+type Claims struct {
+        Sub         string `json:"sub"`
+        Role        string `json:"role"`
+        TeamID      string `json:"team_id"`
+        CohortStart string `json:"cohort_start,omitempty"` // YYYY-MM-DD, empty for users without a cohort
+        Iat         int64  `json:"iat,omitempty"`
+        Exp         int64  `json:"exp"`
+}
+
+// Verification errors. Middleware answers all of them with the same 401 and does not tell the client which one.
+var (
+        ErrNoSecret      = errors.New("authn: empty secret")
+        ErrMalformed     = errors.New("authn: malformed token")
+        ErrAlgorithm     = errors.New("authn: unsupported token header")
+        ErrSignature     = errors.New("authn: invalid signature")
+        ErrExpired       = errors.New("authn: token expired")
+        ErrNotYetValid   = errors.New("authn: token issued in the future")
+        ErrMissingClaims = errors.New("authn: required claim missing")
+)
+
+var (
+        b64        = base64.RawURLEncoding
+        b64Strict  = base64.RawURLEncoding.Strict()
+        headerPart = b64.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+)
+
+// Issue signs c with Iat = now and Exp = now + ttl. ttl must be positive.
+func Issue(secret []byte, c Claims, ttl time.Duration) (string, error) <span class="cov8" title="1">{
+        if ttl &lt;= 0 </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("authn: issue: ttl must be positive, got %s", ttl)
+        }</span>
+        <span class="cov8" title="1">now := time.Now()
+        c.Iat = now.Unix()
+        c.Exp = now.Add(ttl).Unix()
+        return Sign(secret, c)</span>
+}
+
+// Sign signs c exactly as given (tests use it to build expired tokens). Sub, Role and Exp are required.
+func Sign(secret []byte, c Claims) (string, error) <span class="cov8" title="1">{
+        if len(secret) == 0 </span><span class="cov8" title="1">{
+                return "", ErrNoSecret
+        }</span>
+        <span class="cov8" title="1">if c.Sub == "" || c.Role == "" || c.Exp == 0 </span><span class="cov8" title="1">{
+                return "", ErrMissingClaims
+        }</span>
+        <span class="cov8" title="1">payload, err := json.Marshal(c)
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("authn: marshal claims: %w", err)
+        }</span>
+        <span class="cov8" title="1">signingInput := headerPart + "." + b64.EncodeToString(payload)
+        return signingInput + "." + b64.EncodeToString(mac(secret, signingInput)), nil</span>
+}
+
+// Verify checks token at time now with DefaultLeeway and returns its claims.
+func Verify(secret []byte, token string, now time.Time) (Claims, error) <span class="cov8" title="1">{
+        return verify(secret, token, now, DefaultLeeway)
+}</span>
+
+func verify(secret []byte, token string, now time.Time, leeway time.Duration) (Claims, error) <span class="cov8" title="1">{
+        if len(secret) == 0 </span><span class="cov8" title="1">{
+                return Claims{}, ErrNoSecret
+        }</span>
+        <span class="cov8" title="1">parts := strings.Split(token, ".")
+        if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" </span><span class="cov8" title="1">{
+                return Claims{}, ErrMalformed
+        }</span>
+        // A map, not a struct: encoding/json matches struct fields case-insensitively ("ALG" would pass).
+        <span class="cov8" title="1">var h map[string]any
+        if err := decodePart(parts[0], &amp;h); err != nil </span><span class="cov8" title="1">{
+                return Claims{}, err
+        }</span>
+        <span class="cov8" title="1">if _, crit := h["crit"]; h["alg"] != "HS256" || h["typ"] != "JWT" || crit </span><span class="cov8" title="1">{
+                return Claims{}, ErrAlgorithm
+        }</span>
+        <span class="cov8" title="1">sig, err := b64Strict.DecodeString(parts[2])
+        if err != nil </span><span class="cov8" title="1">{
+                return Claims{}, ErrMalformed
+        }</span>
+        <span class="cov8" title="1">if !hmac.Equal(sig, mac(secret, parts[0]+"."+parts[1])) </span><span class="cov8" title="1">{
+                return Claims{}, ErrSignature
+        }</span>
+        <span class="cov8" title="1">var c Claims
+        if err := decodePart(parts[1], &amp;c); err != nil </span><span class="cov8" title="1">{
+                return Claims{}, err
+        }</span>
+        <span class="cov8" title="1">if c.Sub == "" || c.Role == "" || c.Exp == 0 </span><span class="cov8" title="1">{
+                return Claims{}, ErrMissingClaims
+        }</span>
+        <span class="cov8" title="1">if !now.Before(time.Unix(c.Exp, 0).Add(leeway)) </span><span class="cov8" title="1">{
+                return Claims{}, ErrExpired
+        }</span>
+        <span class="cov8" title="1">if c.Iat != 0 &amp;&amp; time.Unix(c.Iat, 0).After(now.Add(leeway)) </span><span class="cov8" title="1">{
+                return Claims{}, ErrNotYetValid
+        }</span>
+        <span class="cov8" title="1">return c, nil</span>
+}
+
+func decodePart(part string, dst any) error <span class="cov8" title="1">{
+        raw, err := b64Strict.DecodeString(part)
+        if err != nil </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">if err := json.Unmarshal(raw, dst); err != nil </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+func mac(secret []byte, signingInput string) []byte <span class="cov8" title="1">{
+        m := hmac.New(sha256.New, secret)
+        m.Write([]byte(signingInput))
+        return m.Sum(nil)
+}</span>
+
+// Verifier verifies tokens with a fixed secret, leeway and clock; it is safe for concurrent use.
+type Verifier struct {
+        Secret []byte
+        Leeway time.Duration    // tolerated clock skew; NewVerifier sets DefaultLeeway
+        Now    func() time.Time // nil means time.Now
+}
+
+// NewVerifier returns a Verifier with DefaultLeeway and the system clock.
+func NewVerifier(secret []byte) *Verifier <span class="cov8" title="1">{
+        return &amp;Verifier{Secret: secret, Leeway: DefaultLeeway, Now: time.Now}
+}</span>
+
+// Verify checks token and returns its claims.
+func (v *Verifier) Verify(token string) (Claims, error) <span class="cov8" title="1">{
+        now := time.Now
+        if v.Now != nil </span><span class="cov8" title="1">{
+                now = v.Now
+        }</span>
+        <span class="cov8" title="1">return verify(v.Secret, token, now(), v.Leeway)</span>
+}
+
+// Middleware requires a valid `Authorization: Bearer &lt;JWT&gt;`; on success it stores the claims and the raw token
+// in the request context (FromContext, TokenFromContext), otherwise it answers apierr 401 with
+// `WWW-Authenticate: Bearer`.
+func (v *Verifier) Middleware(next http.Handler) http.Handler <span class="cov8" title="1">{
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                token, ok := BearerToken(r)
+                if !ok </span><span class="cov8" title="1">{
+                        unauthorized(w)
+                        return
+                }</span>
+                <span class="cov8" title="1">c, err := v.Verify(token)
+                if err != nil </span><span class="cov8" title="1">{
+                        slog.Default().DebugContext(r.Context(), "jwt rejected", "err", err)
+                        unauthorized(w)
+                        return
+                }</span>
+                <span class="cov8" title="1">next.ServeHTTP(w, r.WithContext(WithToken(NewContext(r.Context(), c), token)))</span>
+        })
+}
+
+// Middleware is NewVerifier(secret).Middleware.
+func Middleware(secret []byte) func(http.Handler) http.Handler <span class="cov8" title="1">{
+        return NewVerifier(secret).Middleware
+}</span>
+
+func unauthorized(w http.ResponseWriter) <span class="cov8" title="1">{
+        w.Header().Set("WWW-Authenticate", "Bearer")
+        apierr.WriteJSON(w, apierr.Unauthorized())
+}</span>
+
+// BearerToken returns the token of an `Authorization: Bearer &lt;token&gt;` header (scheme case-insensitive).
+func BearerToken(r *http.Request) (string, bool) <span class="cov8" title="1">{
+        scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+        if !ok || !strings.EqualFold(scheme, "Bearer") </span><span class="cov8" title="1">{
+                return "", false
+        }</span>
+        <span class="cov8" title="1">token = strings.TrimSpace(token)
+        return token, token != ""</span>
+}
+
+type claimsKey struct{}
+
+type tokenKey struct{}
+
+// NewContext returns ctx carrying c (Middleware does this; tests of handlers may call it directly).
+func NewContext(ctx context.Context, c Claims) context.Context <span class="cov8" title="1">{
+        return context.WithValue(ctx, claimsKey{}, c)
+}</span>
+
+// FromContext returns the verified claims stored by Middleware or NewContext.
+func FromContext(ctx context.Context) (Claims, bool) <span class="cov8" title="1">{
+        c, ok := ctx.Value(claimsKey{}).(Claims)
+        return c, ok
+}</span>
+
+// TokenFromContext returns the raw bearer token accepted by Middleware, for forwarding to the agent and MCP servers.
+func TokenFromContext(ctx context.Context) (string, bool) <span class="cov8" title="1">{
+        t, ok := ctx.Value(tokenKey{}).(string)
+        return t, ok &amp;&amp; t != ""
+}</span>
+
+// WithToken returns ctx carrying a raw bearer token, for code paths that call MCP without an HTTP request
+// (e.g. tests or core acting on behalf of a user with a token it issued).
+func WithToken(ctx context.Context, token string) context.Context <span class="cov8" title="1">{
+        return context.WithValue(ctx, tokenKey{}, token)
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">// Package canonjson produces canonical JSON: the byte-exact form that core, the MCP servers and the Python agent
+// hash and sign (contracts/mcp-tools.md: "keys sorted, no whitespace, UTF-8").
+//
+// The output is identical to Python's
+//
+//        json.dumps(json.loads(text), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+//
+// for every value made of objects, arrays, strings, integers, booleans and null:
+//   - object keys are sorted by Unicode code point (byte order of UTF-8, which is the same order);
+//     duplicate keys in JSON text keep the last value, like Python;
+//   - no whitespace between tokens;
+//   - strings are raw UTF-8; only '"', '\\' and control characters U+0000–U+001F are escaped:
+//     \b \f \n \r \t use the short form, the rest \u00XX with lowercase hex; '/', '&lt;', '&gt;', '&amp;', U+007F,
+//     U+2028 and U+2029 are written as is;
+//   - invalid UTF-8 in Go strings is replaced by U+FFFD (as encoding/json does).
+//
+// Numbers: number text is preserved as given (json.Number, json.RawMessage) or as encoding/json formats Go
+// numbers. Integers therefore match Python exactly (any size); the only rewrite is "-0" → "0", as in Python.
+// Non-integer numbers are NOT normalised: Python re-formats floats with repr ("1.0", "1e+16", 1e2 → "100.0"),
+// Go keeps "1", "1e2" or whatever the producer wrote. Do not put non-integer numbers into signed arguments;
+// the current write-tool schemas contain none.
+//
+// Invariant: Marshal(v) == Marshal(json.RawMessage(json.Marshal(v))) for every v encoding/json accepts.
+package canonjson
+
+import (
+        "bytes"
+        "crypto/sha256"
+        "encoding/hex"
+        "encoding/json"
+        "fmt"
+        "slices"
+)
+
+// Marshal returns the canonical JSON encoding of v. v may be any value accepted by encoding/json (maps, structs
+// with json tags, slices, json.Marshaler implementations, json.RawMessage, json.Number). A []byte is encoded as a
+// base64 string, as encoding/json does; wrap JSON text in json.RawMessage instead.
+func Marshal(v any) ([]byte, error) <span class="cov8" title="1">{
+        raw, err := json.Marshal(v)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("canonjson: marshal: %w", err)
+        }</span>
+        <span class="cov8" title="1">dec := json.NewDecoder(bytes.NewReader(raw))
+        dec.UseNumber()
+        var tree any
+        if err := dec.Decode(&amp;tree); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("canonjson: decode: %w", err)
+        }</span>
+        <span class="cov8" title="1">var buf bytes.Buffer
+        buf.Grow(len(raw))
+        if err := encode(&amp;buf, tree); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return buf.Bytes(), nil</span>
+}
+
+// SHA256Hex returns the lowercase hex SHA-256 of Marshal(v), the form of `args_hash` and `draft_hash`.
+func SHA256Hex(v any) (string, error) <span class="cov8" title="1">{
+        b, err := Marshal(v)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", err
+        }</span>
+        <span class="cov8" title="1">sum := sha256.Sum256(b)
+        return hex.EncodeToString(sum[:]), nil</span>
+}
+
+func encode(buf *bytes.Buffer, v any) error <span class="cov8" title="1">{
+        switch x := v.(type) </span>{
+        case nil:<span class="cov8" title="1">
+                buf.WriteString("null")</span>
+        case bool:<span class="cov8" title="1">
+                if x </span><span class="cov8" title="1">{
+                        buf.WriteString("true")
+                }</span> else<span class="cov8" title="1"> {
+                        buf.WriteString("false")
+                }</span>
+        case json.Number:<span class="cov8" title="1">
+                if x == "-0" </span><span class="cov8" title="1">{
+                        x = "0"
+                }</span>
+                <span class="cov8" title="1">buf.WriteString(string(x))</span>
+        case string:<span class="cov8" title="1">
+                writeString(buf, x)</span>
+        case []any:<span class="cov8" title="1">
+                buf.WriteByte('[')
+                for i, e := range x </span><span class="cov8" title="1">{
+                        if i &gt; 0 </span><span class="cov8" title="1">{
+                                buf.WriteByte(',')
+                        }</span>
+                        <span class="cov8" title="1">if err := encode(buf, e); err != nil </span><span class="cov8" title="1">{
+                                return err
+                        }</span>
+                }
+                <span class="cov8" title="1">buf.WriteByte(']')</span>
+        case map[string]any:<span class="cov8" title="1">
+                keys := make([]string, 0, len(x))
+                for k := range x </span><span class="cov8" title="1">{
+                        keys = append(keys, k)
+                }</span>
+                <span class="cov8" title="1">slices.Sort(keys)
+                buf.WriteByte('{')
+                for i, k := range keys </span><span class="cov8" title="1">{
+                        if i &gt; 0 </span><span class="cov8" title="1">{
+                                buf.WriteByte(',')
+                        }</span>
+                        <span class="cov8" title="1">writeString(buf, k)
+                        buf.WriteByte(':')
+                        if err := encode(buf, x[k]); err != nil </span><span class="cov8" title="1">{
+                                return err
+                        }</span>
+                }
+                <span class="cov8" title="1">buf.WriteByte('}')</span>
+        default:<span class="cov8" title="1">
+                return fmt.Errorf("canonjson: unexpected decoded type %T", v)</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+const hexDigits = "0123456789abcdef"
+
+// writeString writes s as a JSON string. s is valid UTF-8 (it comes from encoding/json), and every byte of a
+// multi-byte sequence is &gt;= 0x80, so escaping byte by byte is safe.
+func writeString(buf *bytes.Buffer, s string) <span class="cov8" title="1">{
+        buf.WriteByte('"')
+        start := 0
+        for i := 0; i &lt; len(s); i++ </span><span class="cov8" title="1">{
+                c := s[i]
+                if c &gt;= 0x20 &amp;&amp; c != '"' &amp;&amp; c != '\\' </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">buf.WriteString(s[start:i])
+                switch c </span>{
+                case '"':<span class="cov8" title="1">
+                        buf.WriteString(`\"`)</span>
+                case '\\':<span class="cov8" title="1">
+                        buf.WriteString(`\\`)</span>
+                case '\b':<span class="cov8" title="1">
+                        buf.WriteString(`\b`)</span>
+                case '\f':<span class="cov8" title="1">
+                        buf.WriteString(`\f`)</span>
+                case '\n':<span class="cov8" title="1">
+                        buf.WriteString(`\n`)</span>
+                case '\r':<span class="cov8" title="1">
+                        buf.WriteString(`\r`)</span>
+                case '\t':<span class="cov8" title="1">
+                        buf.WriteString(`\t`)</span>
+                default:<span class="cov8" title="1">
+                        buf.WriteString(`\u00`)
+                        buf.WriteByte(hexDigits[c&gt;&gt;4])
+                        buf.WriteByte(hexDigits[c&amp;0xf])</span>
+                }
+                <span class="cov8" title="1">start = i + 1</span>
+        }
+        <span class="cov8" title="1">buf.WriteString(s[start:])
+        buf.WriteByte('"')</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">// Package config reads service settings from environment variables. An Env collects every missing or invalid
+// variable, so a service reports all configuration problems at once and refuses to start (docs/backend §7).
+//
+//        env := config.New(os.Getenv)
+//        cfg := Config{Port: env.Int("CORE_PORT", 8080), JWTSecret: env.Required("JWT_SECRET")}
+//        if err := env.Err(); err != nil { return err }
+//
+// Values are trimmed; an empty value counts as unset (compose often passes VAR= ).
+package config
+
+import (
+        "fmt"
+        "os"
+        "strconv"
+        "strings"
+        "time"
+)
+
+// Env reads variables through a getenv function and records problems for Err. Not safe for concurrent use.
+type Env struct {
+        getenv  func(string) string
+        missing []string
+        invalid []string
+}
+
+// New returns an Env over getenv; nil means os.Getenv.
+func New(getenv func(string) string) *Env <span class="cov8" title="1">{
+        if getenv == nil </span><span class="cov8" title="1">{
+                getenv = os.Getenv
+        }</span>
+        <span class="cov8" title="1">return &amp;Env{getenv: getenv}</span>
+}
+
+func (e *Env) get(key string) string <span class="cov8" title="1">{ return strings.TrimSpace(e.getenv(key)) }</span>
+
+// String returns the value of key, or def when it is unset.
+func (e *Env) String(key, def string) string <span class="cov8" title="1">{
+        if v := e.get(key); v != "" </span><span class="cov8" title="1">{
+                return v
+        }</span>
+        <span class="cov8" title="1">return def</span>
+}
+
+// Required returns the value of key; when it is unset the key is recorded as missing and "" is returned.
+func (e *Env) Required(key string) string <span class="cov8" title="1">{
+        v := e.get(key)
+        if v == "" </span><span class="cov8" title="1">{
+                e.missing = append(e.missing, key)
+        }</span>
+        <span class="cov8" title="1">return v</span>
+}
+
+// Int returns key as a decimal integer, def when unset; an unparsable value is recorded as invalid (def returned).
+func (e *Env) Int(key string, def int) int <span class="cov8" title="1">{
+        v := e.get(key)
+        if v == "" </span><span class="cov8" title="1">{
+                return def
+        }</span>
+        <span class="cov8" title="1">n, err := strconv.Atoi(v)
+        if err != nil </span><span class="cov8" title="1">{
+                e.invalid = append(e.invalid, fmt.Sprintf("%s=%q (want an integer)", key, v))
+                return def
+        }</span>
+        <span class="cov8" title="1">return n</span>
+}
+
+// Duration returns key as a Go duration ("24h", "90s") or a bare number of seconds ("30"), def when unset;
+// an unparsable or negative value is recorded as invalid (def returned).
+func (e *Env) Duration(key string, def time.Duration) time.Duration <span class="cov8" title="1">{
+        v := e.get(key)
+        if v == "" </span><span class="cov8" title="1">{
+                return def
+        }</span>
+        <span class="cov8" title="1">d, err := time.ParseDuration(v)
+        if err != nil </span><span class="cov8" title="1">{
+                secs, aerr := strconv.Atoi(v)
+                if aerr != nil </span><span class="cov8" title="1">{
+                        e.invalid = append(e.invalid, fmt.Sprintf("%s=%q (want a duration like 30s or 24h)", key, v))
+                        return def
+                }</span>
+                <span class="cov8" title="1">d = time.Duration(secs) * time.Second</span>
+        }
+        <span class="cov8" title="1">if d &lt; 0 </span><span class="cov8" title="1">{
+                e.invalid = append(e.invalid, fmt.Sprintf("%s=%q (must not be negative)", key, v))
+                return def
+        }</span>
+        <span class="cov8" title="1">return d</span>
+}
+
+// List returns key split on commas with blanks dropped (e.g. CORS_ORIGINS), def when unset or empty.
+func (e *Env) List(key string, def []string) []string <span class="cov8" title="1">{
+        var out []string
+        for _, part := range strings.Split(e.get(key), ",") </span><span class="cov8" title="1">{
+                if p := strings.TrimSpace(part); p != "" </span><span class="cov8" title="1">{
+                        out = append(out, p)
+                }</span>
+        }
+        <span class="cov8" title="1">if len(out) == 0 </span><span class="cov8" title="1">{
+                return def
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+// Err returns nil, or one error listing every missing required variable and every invalid value read so far.
+func (e *Env) Err() error <span class="cov8" title="1">{
+        var parts []string
+        if len(e.missing) &gt; 0 </span><span class="cov8" title="1">{
+                parts = append(parts, "missing required environment variables: "+strings.Join(e.missing, ", "))
+        }</span>
+        <span class="cov8" title="1">if len(e.invalid) &gt; 0 </span><span class="cov8" title="1">{
+                parts = append(parts, "invalid values: "+strings.Join(e.invalid, ", "))
+        }</span>
+        <span class="cov8" title="1">if len(parts) == 0 </span><span class="cov8" title="1">{
+                return nil
+        }</span>
+        <span class="cov8" title="1">return fmt.Errorf("config: %s", strings.Join(parts, "; "))</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Package confirm issues and verifies confirmation tokens for MCP write tools (contracts/mcp-tools.md, R71, R79).
+//
+// Token = P + "." + S, where
+//
+//        P = base64url(payload JSON), S = base64url(HMAC-SHA256(CONFIRMATION_HMAC_SECRET, P))
+//
+// base64url is RFC 4648 §5 WITHOUT padding; the MAC is computed over the ASCII bytes of P (not the decoded JSON).
+// The payload is the canonical JSON (canonjson, keys sorted) of {"args_hash","exp","key","sub"}: exp is Unix
+// seconds, args_hash is the lowercase hex SHA-256 of the canonical arguments (ArgsHash). Python produces the same P
+// with json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).
+package confirm
+
+import (
+        "bytes"
+        "crypto/hmac"
+        "crypto/sha256"
+        "encoding/base64"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "strings"
+        "time"
+
+        "aibuddy/services/internal/platform/canonjson"
+)
+
+// Argument keys excluded from the hash: they are not part of what the user confirmed.
+const (
+        KeyIdempotency  = "idempotency_key"
+        KeyConfirmation = "confirmation_token"
+)
+
+// ErrInvalid is wrapped by every verification failure; MCP servers answer all of them with invalid_confirmation.
+var ErrInvalid = errors.New("confirm: invalid confirmation token")
+
+// Specific verification failures; each satisfies errors.Is(err, ErrInvalid).
+var (
+        ErrMalformed = fmt.Errorf("%w: malformed", ErrInvalid)
+        ErrSignature = fmt.Errorf("%w: bad signature", ErrInvalid)
+        ErrExpired   = fmt.Errorf("%w: expired", ErrInvalid)
+        ErrSubject   = fmt.Errorf("%w: subject mismatch", ErrInvalid)
+        ErrKey       = fmt.Errorf("%w: idempotency key mismatch", ErrInvalid)
+        ErrArgsHash  = fmt.Errorf("%w: arguments mismatch", ErrInvalid)
+)
+
+// ErrNoSecret is a configuration error (empty secret), deliberately not wrapping ErrInvalid.
+var ErrNoSecret = errors.New("confirm: empty secret")
+
+type payload struct {
+        ArgsHash string `json:"args_hash"`
+        Exp      int64  `json:"exp"`
+        Key      string `json:"key"`
+        Sub      string `json:"sub"`
+}
+
+var b64 = base64.RawURLEncoding.Strict()
+
+// Issue returns a token for sub (JWT subject), key (idempotency_key) and argsHash (from ArgsHash) that expires
+// ttl from now. ttl must be positive.
+func Issue(secret []byte, sub, key, argsHash string, ttl time.Duration) (string, error) <span class="cov8" title="1">{
+        if ttl &lt;= 0 </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("confirm: issue: ttl must be positive, got %s", ttl)
+        }</span>
+        <span class="cov8" title="1">return IssueUntil(secret, sub, key, argsHash, time.Now().Add(ttl))</span>
+}
+
+// IssueUntil is Issue with an absolute expiry (truncated to seconds); tests use it for expired tokens.
+func IssueUntil(secret []byte, sub, key, argsHash string, exp time.Time) (string, error) <span class="cov8" title="1">{
+        if len(secret) == 0 </span><span class="cov8" title="1">{
+                return "", ErrNoSecret
+        }</span>
+        <span class="cov8" title="1">if sub == "" || key == "" </span><span class="cov8" title="1">{
+                return "", errors.New("confirm: issue: sub and key are required")
+        }</span>
+        <span class="cov8" title="1">if !isHexSHA256(argsHash) </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("confirm: issue: args hash must be 64 lowercase hex chars, got %q", argsHash)
+        }</span>
+        <span class="cov8" title="1">body, err := canonjson.Marshal(payload{ArgsHash: argsHash, Exp: exp.Unix(), Key: key, Sub: sub})
+        if err != nil </span><span class="cov0" title="0">{
+                return "", fmt.Errorf("confirm: issue: %w", err)
+        }</span>
+        <span class="cov8" title="1">p := base64.RawURLEncoding.EncodeToString(body)
+        return p + "." + base64.RawURLEncoding.EncodeToString(sign(secret, p)), nil</span>
+}
+
+// Verify checks token against the caller's JWT subject, the idempotency_key of the call and the arguments the
+// server actually received (idempotency_key and confirmation_token are ignored, see ArgsHash), at time now.
+// Checks run in order signature, exp, sub, key, args; the first failure is returned.
+func Verify(secret []byte, token, sub, key string, args any, now time.Time) error <span class="cov8" title="1">{
+        if len(secret) == 0 </span><span class="cov8" title="1">{
+                return ErrNoSecret
+        }</span>
+        <span class="cov8" title="1">p, s, ok := strings.Cut(token, ".")
+        if !ok || p == "" || s == "" || strings.Contains(s, ".") </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">sig, err := b64.DecodeString(s)
+        if err != nil </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">if !hmac.Equal(sig, sign(secret, p)) </span><span class="cov8" title="1">{
+                return ErrSignature
+        }</span>
+        <span class="cov8" title="1">raw, err := b64.DecodeString(p)
+        if err != nil </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">var pl payload
+        dec := json.NewDecoder(bytes.NewReader(raw))
+        dec.DisallowUnknownFields()
+        if err := dec.Decode(&amp;pl); err != nil || pl.Sub == "" || pl.Key == "" || pl.Exp == 0 || pl.ArgsHash == "" </span><span class="cov8" title="1">{
+                return ErrMalformed
+        }</span>
+        <span class="cov8" title="1">if !now.Before(time.Unix(pl.Exp, 0)) </span><span class="cov8" title="1">{
+                return ErrExpired
+        }</span>
+        <span class="cov8" title="1">if pl.Sub != sub </span><span class="cov8" title="1">{
+                return ErrSubject
+        }</span>
+        <span class="cov8" title="1">if pl.Key != key </span><span class="cov8" title="1">{
+                return ErrKey
+        }</span>
+        <span class="cov8" title="1">h, err := ArgsHash(args)
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("%w: %v", ErrArgsHash, err)
+        }</span>
+        <span class="cov8" title="1">if !hmac.Equal([]byte(h), []byte(pl.ArgsHash)) </span><span class="cov8" title="1">{
+                return ErrArgsHash
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// ArgsHash returns the lowercase hex SHA-256 of the canonical JSON of args (a JSON object: map, struct or
+// json.RawMessage) after removing the top-level keys idempotency_key and confirmation_token.
+// It equals canonjson.SHA256Hex(draft.args) for the draft the user confirmed.
+func ArgsHash(args any) (string, error) <span class="cov8" title="1">{
+        raw, err := json.Marshal(args)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("confirm: args: %w", err)
+        }</span>
+        <span class="cov8" title="1">dec := json.NewDecoder(bytes.NewReader(raw))
+        dec.UseNumber()
+        var obj map[string]any
+        if err := dec.Decode(&amp;obj); err != nil || obj == nil </span><span class="cov8" title="1">{
+                return "", errors.New("confirm: args must be a JSON object")
+        }</span>
+        <span class="cov8" title="1">delete(obj, KeyIdempotency)
+        delete(obj, KeyConfirmation)
+        return canonjson.SHA256Hex(obj)</span>
+}
+
+func sign(secret []byte, p string) []byte <span class="cov8" title="1">{
+        m := hmac.New(sha256.New, secret)
+        m.Write([]byte(p))
+        return m.Sum(nil)
+}</span>
+
+func isHexSHA256(s string) bool <span class="cov8" title="1">{
+        if len(s) != 64 </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">for i := 0; i &lt; len(s); i++ </span><span class="cov8" title="1">{
+                c := s[i]
+                if (c &lt; '0' || c &gt; '9') &amp;&amp; (c &lt; 'a' || c &gt; 'f') </span><span class="cov8" title="1">{
+                        return false
+                }</span>
+        }
+        <span class="cov8" title="1">return true</span>
+}
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">// Package httpx holds HTTP helpers shared by core and mcp-mocks: JSON request/response bodies, middleware
+// (request id, panic recovery, access log, CORS) and Server-Sent Events writing and reading (contracts/agent-stream.md).
+package httpx
+
+import (
+        "encoding/json"
+        "errors"
+        "fmt"
+        "io"
+        "net/http"
+        "strings"
+
+        "aibuddy/services/internal/platform/apierr"
+)
+
+// DefaultMaxBody is the request body limit of ReadJSON (1 MiB).
+const DefaultMaxBody int64 = 1 &lt;&lt; 20
+
+// ReadJSON decodes the request body into dst with DefaultMaxBody; see ReadJSONLimit.
+func ReadJSON(w http.ResponseWriter, r *http.Request, dst any) error <span class="cov8" title="1">{
+        return ReadJSONLimit(w, r, dst, DefaultMaxBody)
+}</span>
+
+// ReadJSONLimit decodes exactly one JSON value from the request body into dst. Unknown object fields, trailing
+// data, an empty body and a body over limit bytes are rejected. Every failure is an *apierr.Error with code
+// validation_error and a Russian message.
+func ReadJSONLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) error <span class="cov8" title="1">{
+        if r.Body == nil </span><span class="cov8" title="1">{
+                return apierr.Validation().WithMessage("Пустое тело запроса")
+        }</span>
+        <span class="cov8" title="1">dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
+        dec.DisallowUnknownFields()
+        if err := dec.Decode(dst); err != nil </span><span class="cov8" title="1">{
+                return decodeError(err)
+        }</span>
+        <span class="cov8" title="1">if err := dec.Decode(&amp;struct{}{}); !errors.Is(err, io.EOF) </span><span class="cov8" title="1">{
+                var tooBig *http.MaxBytesError
+                if errors.As(err, &amp;tooBig) </span><span class="cov8" title="1">{
+                        return decodeError(err)
+                }</span>
+                <span class="cov8" title="1">return apierr.Validation().WithMessage("Лишние данные после JSON в теле запроса")</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func decodeError(err error) *apierr.Error <span class="cov8" title="1">{
+        var (
+                tooBig  *http.MaxBytesError
+                typeErr *json.UnmarshalTypeError
+        )
+        switch </span>{
+        case errors.Is(err, io.EOF):<span class="cov8" title="1">
+                return apierr.Validation().WithMessage("Пустое тело запроса")</span>
+        case errors.As(err, &amp;tooBig):<span class="cov8" title="1">
+                return apierr.Validation().WithMessage("Слишком большой запрос")</span>
+        case errors.As(err, &amp;typeErr):<span class="cov8" title="1">
+                if typeErr.Field != "" </span><span class="cov8" title="1">{
+                        return apierr.Validation().WithMessage(fmt.Sprintf("Неверный тип поля %q", typeErr.Field))
+                }</span>
+                <span class="cov8" title="1">return apierr.Validation().WithMessage("Неверный тип данных в теле запроса")</span>
+        case strings.HasPrefix(err.Error(), "json: unknown field "):<span class="cov8" title="1">
+                field := strings.TrimPrefix(err.Error(), "json: unknown field ")
+                return apierr.Validation().WithMessage("Неизвестное поле " + field)</span>
+        default:<span class="cov8" title="1">
+                return apierr.Validation().WithMessage("Некорректный JSON в теле запроса")</span>
+        }
+}
+
+// WriteJSON writes v as JSON with the given status. If v cannot be encoded, an internal error is written instead.
+func WriteJSON(w http.ResponseWriter, status int, v any) <span class="cov8" title="1">{
+        body, err := json.Marshal(v)
+        if err != nil </span><span class="cov8" title="1">{
+                apierr.WriteJSON(w, fmt.Errorf("httpx: encode response: %w", err))
+                return
+        }</span>
+        <span class="cov8" title="1">w.Header().Set("Content-Type", "application/json; charset=utf-8")
+        w.WriteHeader(status)
+        _, _ = w.Write(body)</span>
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package httpx
+
+import (
+        "context"
+        "crypto/rand"
+        "fmt"
+        "log/slog"
+        "net/http"
+        "runtime/debug"
+        "strconv"
+        "strings"
+        "time"
+
+        "aibuddy/services/internal/platform/apierr"
+)
+
+// HeaderRequestID is the request id header, accepted from clients and forwarded to the agent.
+const HeaderRequestID = "X-Request-Id"
+
+// Middleware wraps an http.Handler.
+type Middleware = func(http.Handler) http.Handler
+
+// Chain composes middleware; the first one is the outermost: Chain(a, b)(h) == a(b(h)).
+func Chain(mws ...Middleware) Middleware <span class="cov8" title="1">{
+        return func(h http.Handler) http.Handler </span><span class="cov8" title="1">{
+                for i := len(mws) - 1; i &gt;= 0; i-- </span><span class="cov8" title="1">{
+                        h = mws[i](h)
+                }</span>
+                <span class="cov8" title="1">return h</span>
+        }
+}
+
+type requestIDKey struct{}
+
+// RequestID keeps a well-formed incoming X-Request-Id (1–128 chars of [A-Za-z0-9._:-]) or generates a UUID v4,
+// stores it in the context (RequestIDFromContext), on the request header and on the response header.
+func RequestID(next http.Handler) http.Handler <span class="cov8" title="1">{
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                id := r.Header.Get(HeaderRequestID)
+                if !validRequestID(id) </span><span class="cov8" title="1">{
+                        id = newUUID()
+                }</span>
+                <span class="cov8" title="1">r.Header.Set(HeaderRequestID, id)
+                w.Header().Set(HeaderRequestID, id)
+                next.ServeHTTP(w, r.WithContext(WithRequestID(r.Context(), id)))</span>
+        })
+}
+
+// WithRequestID returns ctx carrying id (RequestID does this for incoming requests).
+func WithRequestID(ctx context.Context, id string) context.Context <span class="cov8" title="1">{
+        return context.WithValue(ctx, requestIDKey{}, id)
+}</span>
+
+// RequestIDFromContext returns the request id stored by RequestID, or "".
+func RequestIDFromContext(ctx context.Context) string <span class="cov8" title="1">{
+        id, _ := ctx.Value(requestIDKey{}).(string)
+        return id
+}</span>
+
+func validRequestID(id string) bool <span class="cov8" title="1">{
+        if id == "" || len(id) &gt; 128 </span><span class="cov8" title="1">{
+                return false
+        }</span>
+        <span class="cov8" title="1">for i := 0; i &lt; len(id); i++ </span><span class="cov8" title="1">{
+                c := id[i]
+                ok := c &gt;= 'a' &amp;&amp; c &lt;= 'z' || c &gt;= 'A' &amp;&amp; c &lt;= 'Z' || c &gt;= '0' &amp;&amp; c &lt;= '9' || strings.IndexByte("._:-", c) &gt;= 0
+                if !ok </span><span class="cov8" title="1">{
+                        return false
+                }</span>
+        }
+        <span class="cov8" title="1">return true</span>
+}
+
+func newUUID() string <span class="cov8" title="1">{
+        var b [16]byte
+        _, _ = rand.Read(b[:]) // crypto/rand.Read never fails on supported platforms
+        b[6] = b[6]&amp;0x0f | 0x40
+        b[8] = b[8]&amp;0x3f | 0x80
+        return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}</span>
+
+// Recover turns a panic into an apierr internal response (if nothing was written yet) and logs it with the stack.
+// http.ErrAbortHandler is re-panicked, as net/http expects. A nil log means slog.Default().
+func Recover(log *slog.Logger) Middleware <span class="cov8" title="1">{
+        if log == nil </span><span class="cov8" title="1">{
+                log = slog.Default()
+        }</span>
+        <span class="cov8" title="1">return func(next http.Handler) http.Handler </span><span class="cov8" title="1">{
+                return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                        sw := wrap(w)
+                        defer func() </span><span class="cov8" title="1">{
+                                v := recover()
+                                if v == nil </span><span class="cov8" title="1">{
+                                        return
+                                }</span>
+                                <span class="cov8" title="1">if v == http.ErrAbortHandler </span><span class="cov8" title="1">{
+                                        panic(v)</span>
+                                }
+                                <span class="cov8" title="1">log.ErrorContext(r.Context(), "panic in handler", "panic", fmt.Sprint(v),
+                                        "request_id", RequestIDFromContext(r.Context()), "stack", string(debug.Stack()))
+                                if !sw.wroteHeader </span><span class="cov8" title="1">{
+                                        apierr.WriteJSON(sw, apierr.Internal())
+                                }</span>
+                        }()
+                        <span class="cov8" title="1">next.ServeHTTP(sw, r)</span>
+                })
+        }
+}
+
+// AccessLog logs one line per request: method, path, status, bytes, duration_ms, request_id.
+// GET /healthz is logged at debug level to keep container health checks out of the log. A nil log means slog.Default().
+func AccessLog(log *slog.Logger) Middleware <span class="cov8" title="1">{
+        if log == nil </span><span class="cov8" title="1">{
+                log = slog.Default()
+        }</span>
+        <span class="cov8" title="1">return func(next http.Handler) http.Handler </span><span class="cov8" title="1">{
+                return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                        start := time.Now()
+                        sw := wrap(w)
+                        next.ServeHTTP(sw, r)
+                        level := slog.LevelInfo
+                        if r.URL.Path == "/healthz" </span><span class="cov8" title="1">{
+                                level = slog.LevelDebug
+                        }</span>
+                        <span class="cov8" title="1">log.Log(r.Context(), level, "http request",
+                                "method", r.Method, "path", r.URL.Path, "status", sw.statusCode(), "bytes", sw.bytes,
+                                "duration_ms", time.Since(start).Milliseconds(), "request_id", RequestIDFromContext(r.Context()))</span>
+                })
+        }
+}
+
+// statusWriter records the status and size of a response. It keeps flushing working for SSE
+// (Flush, FlushError and Unwrap for http.ResponseController).
+type statusWriter struct {
+        http.ResponseWriter
+        status      int
+        bytes       int64
+        wroteHeader bool
+}
+
+func wrap(w http.ResponseWriter) *statusWriter <span class="cov8" title="1">{
+        if sw, ok := w.(*statusWriter); ok </span><span class="cov8" title="1">{
+                return sw
+        }</span>
+        <span class="cov8" title="1">return &amp;statusWriter{ResponseWriter: w}</span>
+}
+
+func (s *statusWriter) WriteHeader(code int) <span class="cov8" title="1">{
+        if !s.wroteHeader &amp;&amp; code &gt;= 200 </span><span class="cov8" title="1">{
+                s.status, s.wroteHeader = code, true
+        }</span>
+        <span class="cov8" title="1">s.ResponseWriter.WriteHeader(code)</span>
+}
+
+func (s *statusWriter) Write(b []byte) (int, error) <span class="cov8" title="1">{
+        if !s.wroteHeader </span><span class="cov8" title="1">{
+                s.status, s.wroteHeader = http.StatusOK, true
+        }</span>
+        <span class="cov8" title="1">n, err := s.ResponseWriter.Write(b)
+        s.bytes += int64(n)
+        return n, err</span>
+}
+
+// FlushError flushes the underlying writer, reporting http.ErrNotSupported when it cannot flush.
+func (s *statusWriter) FlushError() error <span class="cov8" title="1">{
+        err := http.NewResponseController(s.ResponseWriter).Flush()
+        if err == nil &amp;&amp; !s.wroteHeader </span><span class="cov8" title="1">{
+                s.status, s.wroteHeader = http.StatusOK, true // flushing sends an implicit 200
+        }</span>
+        <span class="cov8" title="1">return err</span>
+}
+
+// Flush implements http.Flusher.
+func (s *statusWriter) Flush() <span class="cov8" title="1">{ _ = s.FlushError() }</span>
+
+// Unwrap exposes the underlying writer to http.ResponseController.
+func (s *statusWriter) Unwrap() http.ResponseWriter <span class="cov8" title="1">{ return s.ResponseWriter }</span>
+
+func (s *statusWriter) statusCode() int <span class="cov8" title="1">{
+        if s.status == 0 </span><span class="cov8" title="1">{
+                return http.StatusOK
+        }</span>
+        <span class="cov8" title="1">return s.status</span>
+}
+
+// CORS headers sent for allowed origins.
+const (
+        corsMethods = "GET, POST, PUT, PATCH, DELETE"
+        corsHeaders = "Authorization, Content-Type, Idempotency-Key, X-Request-Id, Last-Event-ID"
+        corsMaxAge  = 600
+)
+
+// CORS allows cross-origin requests from the exact origins listed (scheme://host[:port], trailing "/" ignored;
+// "*" allows any origin). Credentials are never allowed: the API uses bearer tokens, not cookies.
+// Preflight requests (OPTIONS with Access-Control-Request-Method) are answered here: 204 for allowed
+// origins, apierr forbidden otherwise. Requests without Origin pass through untouched.
+func CORS(origins []string) Middleware <span class="cov8" title="1">{
+        allowed := make(map[string]bool, len(origins))
+        anyOrigin := false
+        for _, o := range origins </span><span class="cov8" title="1">{
+                o = strings.TrimRight(strings.TrimSpace(o), "/")
+                switch o </span>{
+                case "":<span class="cov8" title="1"></span>
+                case "*":<span class="cov8" title="1">
+                        anyOrigin = true</span>
+                default:<span class="cov8" title="1">
+                        allowed[o] = true</span>
+                }
+        }
+        <span class="cov8" title="1">return func(next http.Handler) http.Handler </span><span class="cov8" title="1">{
+                return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                        origin := r.Header.Get("Origin")
+                        if origin == "" </span><span class="cov8" title="1">{
+                                next.ServeHTTP(w, r)
+                                return
+                        }</span>
+                        <span class="cov8" title="1">h := w.Header()
+                        h.Add("Vary", "Origin")
+                        ok := anyOrigin || allowed[origin]
+                        if r.Method == http.MethodOptions &amp;&amp; r.Header.Get("Access-Control-Request-Method") != "" </span><span class="cov8" title="1">{
+                                h.Add("Vary", "Access-Control-Request-Method")
+                                h.Add("Vary", "Access-Control-Request-Headers")
+                                if !ok </span><span class="cov8" title="1">{
+                                        apierr.WriteJSON(w, apierr.Forbidden())
+                                        return
+                                }</span>
+                                <span class="cov8" title="1">setAllowOrigin(h, origin, anyOrigin)
+                                h.Set("Access-Control-Allow-Methods", corsMethods)
+                                h.Set("Access-Control-Allow-Headers", corsHeaders)
+                                h.Set("Access-Control-Max-Age", strconv.Itoa(corsMaxAge))
+                                w.WriteHeader(http.StatusNoContent)
+                                return</span>
+                        }
+                        <span class="cov8" title="1">if ok </span><span class="cov8" title="1">{
+                                setAllowOrigin(h, origin, anyOrigin)
+                                h.Set("Access-Control-Expose-Headers", HeaderRequestID)
+                        }</span>
+                        <span class="cov8" title="1">next.ServeHTTP(w, r)</span>
+                })
+        }
+}
+
+func setAllowOrigin(h http.Header, origin string, anyOrigin bool) <span class="cov8" title="1">{
+        if anyOrigin </span><span class="cov8" title="1">{
+                h.Set("Access-Control-Allow-Origin", "*")
+                return
+        }</span>
+        <span class="cov8" title="1">h.Set("Access-Control-Allow-Origin", origin)</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package httpx
+
+import (
+        "bufio"
+        "bytes"
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "io"
+        "net/http"
+        "strconv"
+        "strings"
+        "sync"
+        "time"
+)
+
+// DefaultKeepAlive is the interval of `: ping` comments on an SSE stream (contracts/agent-stream.md).
+const DefaultKeepAlive = 15 * time.Second
+
+// ErrSSEClosed is returned by SSEWriter.Send after Close.
+var ErrSSEClosed = errors.New("httpx: sse stream closed")
+
+// SSEWriter writes Server-Sent Events (R78): every event gets an incrementing `id:` (from 1), an `event:` line and
+// one `data:` line of compact JSON, and is flushed immediately. A goroutine writes `: ping` comments every
+// keep-alive interval until Close or until the context is done. All methods are safe for concurrent use.
+// Always `defer sse.Close()` in the handler: the ping goroutine must stop before the handler returns.
+type SSEWriter struct {
+        ctx    context.Context
+        w      http.ResponseWriter
+        rc     *http.ResponseController
+        mu     sync.Mutex
+        id     int64
+        err    error
+        closed bool
+        stop   chan struct{}
+        wg     sync.WaitGroup
+}
+
+// NewSSEWriter sets the SSE headers, sends the 200 status, flushes and starts the keep-alive goroutine
+// (keepAlive &lt;= 0 means DefaultKeepAlive). ctx is normally r.Context(). It fails, without writing anything,
+// when w cannot flush. The server's write deadline is cleared for the stream when the writer supports it.
+func NewSSEWriter(ctx context.Context, w http.ResponseWriter, keepAlive time.Duration) (*SSEWriter, error) <span class="cov8" title="1">{
+        if keepAlive &lt;= 0 </span><span class="cov8" title="1">{
+                keepAlive = DefaultKeepAlive
+        }</span>
+        <span class="cov8" title="1">rc := http.NewResponseController(w)
+        h := w.Header()
+        h.Set("Content-Type", "text/event-stream; charset=utf-8")
+        h.Set("Cache-Control", "no-cache")
+        h.Set("X-Accel-Buffering", "no")
+        if err := rc.Flush(); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("httpx: sse: response writer cannot flush: %w", err)
+        }</span>
+        <span class="cov8" title="1">_ = rc.SetWriteDeadline(time.Time{}) // long-lived stream; ErrNotSupported is fine
+        s := &amp;SSEWriter{ctx: ctx, w: w, rc: rc, stop: make(chan struct{})}
+        s.wg.Add(1)
+        go s.keepAlive(keepAlive)
+        return s, nil</span>
+}
+
+func (s *SSEWriter) keepAlive(every time.Duration) <span class="cov8" title="1">{
+        defer s.wg.Done()
+        t := time.NewTicker(every)
+        defer t.Stop()
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case &lt;-s.ctx.Done():<span class="cov0" title="0">
+                        return</span>
+                case &lt;-s.stop:<span class="cov8" title="1">
+                        return</span>
+                case &lt;-t.C:<span class="cov8" title="1">
+                        if err := s.write(func(b *bytes.Buffer) </span><span class="cov8" title="1">{ b.WriteString(": ping\n\n") }</span>); err != nil <span class="cov0" title="0">{
+                                return
+                        }</span>
+                }
+        }
+}
+
+// Send writes one event with the given name and data encoded as single-line JSON (HTML characters are not
+// escaped; json.RawMessage is compacted, so relayed agent events keep their meaning). It returns the first
+// write error of the stream, ctx.Err() once the context is done, or ErrSSEClosed after Close.
+func (s *SSEWriter) Send(event string, data any) error <span class="cov8" title="1">{
+        if event == "" || strings.ContainsAny(event, "\r\n") </span><span class="cov8" title="1">{
+                return fmt.Errorf("httpx: sse: invalid event name %q", event)
+        }</span>
+        <span class="cov8" title="1">var payload bytes.Buffer
+        enc := json.NewEncoder(&amp;payload)
+        enc.SetEscapeHTML(false)
+        if err := enc.Encode(data); err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("httpx: sse: encode %s: %w", event, err)
+        }</span>
+        <span class="cov8" title="1">line := bytes.TrimRight(payload.Bytes(), "\n")
+        return s.write(func(b *bytes.Buffer) </span><span class="cov8" title="1">{
+                s.id++
+                b.WriteString("id: ")
+                b.WriteString(strconv.FormatInt(s.id, 10))
+                b.WriteString("\nevent: ")
+                b.WriteString(event)
+                b.WriteString("\ndata: ")
+                b.Write(line)
+                b.WriteString("\n\n")
+        }</span>)
+}
+
+// write builds a frame under the lock (so ids are assigned in write order), writes and flushes it.
+func (s *SSEWriter) write(frame func(*bytes.Buffer)) error <span class="cov8" title="1">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+        switch </span>{
+        case s.closed:<span class="cov8" title="1">
+                return ErrSSEClosed</span>
+        case s.err != nil:<span class="cov8" title="1">
+                return s.err</span>
+        case s.ctx.Err() != nil:<span class="cov8" title="1">
+                return s.ctx.Err()</span>
+        }
+        <span class="cov8" title="1">var b bytes.Buffer
+        frame(&amp;b)
+        if _, err := s.w.Write(b.Bytes()); err != nil </span><span class="cov8" title="1">{
+                s.err = fmt.Errorf("httpx: sse: write: %w", err)
+                return s.err
+        }</span>
+        <span class="cov8" title="1">if err := s.rc.Flush(); err != nil </span><span class="cov8" title="1">{
+                s.err = fmt.Errorf("httpx: sse: flush: %w", err)
+                return s.err
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// LastID returns the id of the last event sent (0 before the first one).
+func (s *SSEWriter) LastID() int64 <span class="cov8" title="1">{
+        s.mu.Lock()
+        defer s.mu.Unlock()
+        return s.id
+}</span>
+
+// Close stops the keep-alive goroutine and waits for it; later Sends return ErrSSEClosed. It is idempotent and
+// does not close the underlying connection (the handler returning does).
+func (s *SSEWriter) Close() error <span class="cov8" title="1">{
+        s.mu.Lock()
+        if s.closed </span><span class="cov8" title="1">{
+                s.mu.Unlock()
+                return nil
+        }</span>
+        <span class="cov8" title="1">s.closed = true
+        close(s.stop)
+        s.mu.Unlock()
+        s.wg.Wait()
+        return nil</span>
+}
+
+// MaxSSELine is the longest line SSEReader accepts (1 MiB).
+const MaxSSELine = 1 &lt;&lt; 20
+
+// ErrSSEData marks an event whose data is not valid JSON; the reader can continue with the next event.
+var ErrSSEData = errors.New("httpx: sse: event data is not valid JSON")
+
+// ErrSSETooLarge marks a line longer than MaxSSELine or an event over the reader's limit (NewSSEReaderLimit).
+// The stream cannot be read further.
+var ErrSSETooLarge = errors.New("httpx: sse: event too large")
+
+// Event is one Server-Sent Event. Name defaults to "message"; ID is the last id seen on the stream (the SSE
+// "last event ID"), so it persists across events that carry no id line.
+type Event struct {
+        ID   string
+        Name string
+        Data json.RawMessage
+}
+
+// SSEReader parses a text/event-stream (WHATWG rules): LF, CR and CRLF line ends, a leading BOM, comment lines,
+// `field:value` with one optional space, several data lines joined with "\n", unknown fields and retry ignored.
+// Unlike the browser, a final event that is not followed by a blank line is still delivered.
+type SSEReader struct {
+        sc       *bufio.Scanner
+        lastID   string
+        started  bool
+        maxEvent int // bytes of data per event; 0 = no limit beyond MaxSSELine per line
+        failed   error
+}
+
+// NewSSEReader returns a reader over r (typically an HTTP response body).
+func NewSSEReader(r io.Reader) *SSEReader <span class="cov8" title="1">{
+        return NewSSEReaderLimit(r, 0)
+}</span>
+
+// sseLineSlack is room for the field name ("data: ") on a line of a limited reader.
+const sseLineSlack = 64
+
+// NewSSEReaderLimit is NewSSEReader with a limit of maxEvent bytes on the data of one event (all its data lines
+// together) and on one line (plus room for the field name), for streams from less trusted peers; maxEvent &lt;= 0
+// means no event limit. A larger event makes Next return ErrSSETooLarge and stop.
+func NewSSEReaderLimit(r io.Reader, maxEvent int) *SSEReader <span class="cov8" title="1">{
+        maxLine := MaxSSELine
+        if maxEvent &gt; 0 &amp;&amp; maxEvent+sseLineSlack &lt; maxLine </span><span class="cov8" title="1">{
+                maxLine = maxEvent + sseLineSlack
+        }</span> else<span class="cov8" title="1"> if maxEvent &lt; 0 </span><span class="cov8" title="1">{
+                maxEvent = 0
+        }</span>
+        <span class="cov8" title="1">sc := bufio.NewScanner(r)
+        sc.Buffer(make([]byte, 0, min(4096, maxLine)), maxLine)
+        sc.Split(splitLines)
+        return &amp;SSEReader{sc: sc, maxEvent: maxEvent}</span>
+}
+
+// Next returns the next event, io.EOF at the end of the stream, a read error, or the event together with an
+// error wrapping ErrSSEData when its data is not valid JSON (Next may be called again after that).
+func (r *SSEReader) Next() (Event, error) <span class="cov8" title="1">{
+        if r.failed != nil </span><span class="cov8" title="1">{
+                return Event{}, r.failed
+        }</span>
+        <span class="cov8" title="1">var (
+                name    string
+                data    []byte
+                hasData bool
+        )
+        for r.sc.Scan() </span><span class="cov8" title="1">{
+                line := r.sc.Bytes()
+                if !r.started </span><span class="cov8" title="1">{
+                        r.started = true
+                        line = bytes.TrimPrefix(line, []byte("\xef\xbb\xbf"))
+                }</span>
+                <span class="cov8" title="1">if len(line) == 0 </span><span class="cov8" title="1">{
+                        if !hasData </span><span class="cov8" title="1">{
+                                name = ""
+                                continue</span>
+                        }
+                        <span class="cov8" title="1">return r.dispatch(name, data)</span>
+                }
+                <span class="cov8" title="1">if line[0] == ':' </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">field, value, _ := bytes.Cut(line, []byte(":"))
+                value = bytes.TrimPrefix(value, []byte(" "))
+                switch string(field) </span>{
+                case "event":<span class="cov8" title="1">
+                        name = string(value)</span>
+                case "data":<span class="cov8" title="1">
+                        if r.maxEvent &gt; 0 &amp;&amp; len(data)+1+len(value) &gt; r.maxEvent </span><span class="cov8" title="1">{
+                                r.failed = fmt.Errorf("%w: more than %d bytes of data", ErrSSETooLarge, r.maxEvent)
+                                return Event{}, r.failed
+                        }</span>
+                        <span class="cov8" title="1">if hasData </span><span class="cov8" title="1">{
+                                data = append(data, '\n')
+                        }</span>
+                        <span class="cov8" title="1">data = append(data, value...)
+                        hasData = true</span>
+                case "id":<span class="cov8" title="1">
+                        if bytes.IndexByte(value, 0) &lt; 0 </span><span class="cov8" title="1">{
+                                r.lastID = string(value)
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">if err := r.sc.Err(); err != nil </span><span class="cov8" title="1">{
+                if errors.Is(err, bufio.ErrTooLong) </span><span class="cov8" title="1">{
+                        r.failed = fmt.Errorf("%w: line too long", ErrSSETooLarge)
+                        return Event{}, r.failed
+                }</span>
+                <span class="cov0" title="0">return Event{}, fmt.Errorf("httpx: sse: read: %w", err)</span>
+        }
+        <span class="cov8" title="1">if hasData </span><span class="cov8" title="1">{
+                return r.dispatch(name, data)
+        }</span>
+        <span class="cov8" title="1">return Event{}, io.EOF</span>
+}
+
+func (r *SSEReader) dispatch(name string, data []byte) (Event, error) <span class="cov8" title="1">{
+        if name == "" </span><span class="cov8" title="1">{
+                name = "message"
+        }</span>
+        <span class="cov8" title="1">ev := Event{ID: r.lastID, Name: name, Data: json.RawMessage(data)}
+        if !json.Valid(data) </span><span class="cov8" title="1">{
+                return ev, fmt.Errorf("%w: event %q", ErrSSEData, name)
+        }</span>
+        <span class="cov8" title="1">return ev, nil</span>
+}
+
+// splitLines is a bufio.SplitFunc for SSE line ends: "\r\n", "\n" or "\r".
+func splitLines(data []byte, atEOF bool) (int, []byte, error) <span class="cov8" title="1">{
+        if atEOF &amp;&amp; len(data) == 0 </span><span class="cov8" title="1">{
+                return 0, nil, nil
+        }</span>
+        <span class="cov8" title="1">if i := bytes.IndexAny(data, "\r\n"); i &gt;= 0 </span><span class="cov8" title="1">{
+                if data[i] == '\n' </span><span class="cov8" title="1">{
+                        return i + 1, data[:i], nil
+                }</span>
+                <span class="cov8" title="1">if i+1 &lt; len(data) </span><span class="cov8" title="1">{
+                        if data[i+1] == '\n' </span><span class="cov8" title="1">{
+                                return i + 2, data[:i], nil
+                        }</span>
+                        <span class="cov8" title="1">return i + 1, data[:i], nil</span>
+                }
+                <span class="cov8" title="1">if !atEOF </span><span class="cov8" title="1">{
+                        return 0, nil, nil // a "\n" may follow in the next read
+                }</span>
+                <span class="cov8" title="1">return i + 1, data[:i], nil</span>
+        }
+        <span class="cov8" title="1">if atEOF </span><span class="cov8" title="1">{
+                return len(data), data, nil
+        }</span>
+        <span class="cov8" title="1">return 0, nil, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file8" style="display: none">package mcpx
+
+import (
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "net/http"
+        "strings"
+        "sync"
+
+        "github.com/modelcontextprotocol/go-sdk/mcp"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/httpx"
+)
+
+// Client calls tools of the mock MCP servers on behalf of a user (core: approvals.*, kb.add_faq; tests).
+// The zero value is not usable: set BaseURL. Safe for concurrent use.
+type Client struct {
+        BaseURL    string       // e.g. http://mcp-mocks:8100/mcp; the server name is appended as /&lt;server&gt;
+        HTTPClient *http.Client // nil means a client with http.DefaultTransport and no timeout (use ctx deadlines)
+}
+
+// Call opens a session to BaseURL/&lt;server&gt; with `Authorization: Bearer userToken`, calls tool with args (any
+// JSON-object value; nil means {}), closes the session and returns exactly one of:
+//   - the structured result (JSON object) on success;
+//   - a tool error (*apierr.Error with an MCP code: forbidden, not_found, validation_error, conflict,
+//     invalid_confirmation, unavailable);
+//   - an error for transport and protocol failures. That error wraps an *apierr.Error (find it with apierr.As):
+//     unauthorized when the server rejected the token, internal for protocol errors (e.g. unknown tool),
+//     upstream_unavailable otherwise. It also wraps the cause (context errors keep working with errors.Is).
+//
+// X-Request-Id from httpx.RequestIDFromContext(ctx) is forwarded.
+func (c *Client) Call(ctx context.Context, userToken, server, tool string, args any) (json.RawMessage, *apierr.Error, error) <span class="cov8" title="1">{
+        rt := &amp;bearerTransport{token: userToken, base: http.DefaultTransport}
+        hc := &amp;http.Client{Transport: rt}
+        if c.HTTPClient != nil </span><span class="cov8" title="1">{
+                if c.HTTPClient.Transport != nil </span><span class="cov8" title="1">{
+                        rt.base = c.HTTPClient.Transport
+                }</span>
+                <span class="cov8" title="1">hc.Timeout = c.HTTPClient.Timeout</span>
+        }
+        <span class="cov8" title="1">transport := &amp;mcp.StreamableClientTransport{
+                Endpoint:   strings.TrimRight(c.BaseURL, "/") + "/" + server,
+                HTTPClient: hc,
+                MaxRetries: -1,
+        }
+        client := mcp.NewClient(&amp;mcp.Implementation{Name: "aibuddy-core", Version: version}, nil)
+        cs, err := client.Connect(ctx, transport, nil)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, nil, rt.wrap(ctx, fmt.Sprintf("connect %s", server), err)
+        }</span>
+        <span class="cov8" title="1">defer cs.Close()
+        res, err := cs.CallTool(ctx, &amp;mcp.CallToolParams{Name: tool, Arguments: args})
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, nil, rt.wrap(ctx, fmt.Sprintf("call %s.%s", server, tool), err)
+        }</span>
+        <span class="cov8" title="1">if res.IsError </span><span class="cov8" title="1">{
+                return nil, toolError(res), nil
+        }</span>
+        <span class="cov8" title="1">out, err := structured(res)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, nil, fmt.Errorf("mcpx: call %s.%s: %w: %w", server, tool, apierr.Internal(), err)
+        }</span>
+        <span class="cov8" title="1">return out, nil, nil</span>
+}
+
+// structured returns the structured content of a successful result, falling back to JSON text content.
+func structured(res *mcp.CallToolResult) (json.RawMessage, error) <span class="cov8" title="1">{
+        if res.StructuredContent != nil </span><span class="cov8" title="1">{
+                raw, err := json.Marshal(res.StructuredContent)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("encode structured content: %w", err)
+                }</span>
+                <span class="cov8" title="1">return raw, nil</span>
+        }
+        <span class="cov8" title="1">if text := firstText(res); json.Valid([]byte(text)) &amp;&amp; strings.HasPrefix(strings.TrimSpace(text), "{") </span><span class="cov8" title="1">{
+                return json.RawMessage(text), nil
+        }</span>
+        <span class="cov8" title="1">return nil, errors.New("result has no structured content")</span>
+}
+
+// toolError decodes {code, message, retryable} from an isError result; unknown shapes become unavailable.
+func toolError(res *mcp.CallToolResult) *apierr.Error <span class="cov8" title="1">{
+        var wire struct {
+                Code      apierr.Code `json:"code"`
+                Message   string      `json:"message"`
+                Retryable bool        `json:"retryable"`
+        }
+        raw, _ := json.Marshal(res.StructuredContent)
+        if res.StructuredContent == nil </span><span class="cov8" title="1">{
+                raw = []byte(firstText(res))
+        }</span>
+        <span class="cov8" title="1">if err := json.Unmarshal(raw, &amp;wire); err != nil || wire.Code == "" </span><span class="cov8" title="1">{
+                e := apierr.Unavailable()
+                if text := firstText(res); text != "" </span><span class="cov8" title="1">{
+                        e = e.WithMessage(text)
+                }</span>
+                <span class="cov8" title="1">e.Retryable = false
+                return e</span>
+        }
+        <span class="cov8" title="1">e := apierr.New(wire.Code, wire.Message)
+        e.Retryable = wire.Retryable
+        return e</span>
+}
+
+func firstText(res *mcp.CallToolResult) string <span class="cov8" title="1">{
+        for _, c := range res.Content </span><span class="cov8" title="1">{
+                if t, ok := c.(*mcp.TextContent); ok </span><span class="cov8" title="1">{
+                        return t.Text
+                }</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+// bearerTransport adds the user's token and the request id to every request of a session and remembers
+// whether any HTTP exchange failed, to classify errors.
+type bearerTransport struct {
+        token string
+        base  http.RoundTripper
+
+        mu           sync.Mutex
+        unauthorized bool
+        httpFailed   bool
+}
+
+func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) <span class="cov8" title="1">{
+        r := req.Clone(req.Context())
+        r.Header.Set("Authorization", "Bearer "+t.token)
+        if id := httpx.RequestIDFromContext(req.Context()); id != "" </span><span class="cov8" title="1">{
+                r.Header.Set(httpx.HeaderRequestID, id)
+        }</span>
+        <span class="cov8" title="1">resp, err := t.base.RoundTrip(r)
+        t.mu.Lock()
+        defer t.mu.Unlock()
+        switch </span>{
+        case err != nil:<span class="cov8" title="1">
+                t.httpFailed = true</span>
+        case resp.StatusCode == http.StatusUnauthorized:<span class="cov8" title="1">
+                t.unauthorized = true</span>
+        case resp.StatusCode &gt;= 400 &amp;&amp; !(req.Method == http.MethodGet &amp;&amp; resp.StatusCode == http.StatusMethodNotAllowed) &amp;&amp;
+                req.Method != http.MethodDelete:<span class="cov8" title="1">
+                t.httpFailed = true</span> // a 405 for the optional hanging GET and the DELETE on close are expected
+        }
+        <span class="cov8" title="1">return resp, err</span>
+}
+
+func (t *bearerTransport) wrap(ctx context.Context, op string, err error) error <span class="cov8" title="1">{
+        t.mu.Lock()
+        unauthorized, httpFailed := t.unauthorized, t.httpFailed
+        t.mu.Unlock()
+        kind := apierr.UpstreamUnavailable()
+        switch </span>{
+        case unauthorized:<span class="cov8" title="1">
+                kind = apierr.Unauthorized()</span>
+        case !httpFailed &amp;&amp; ctx.Err() == nil:<span class="cov8" title="1">
+                kind = apierr.Internal()</span> // the server answered with a JSON-RPC error
+        }
+        <span class="cov8" title="1">if cerr := ctx.Err(); cerr != nil &amp;&amp; !errors.Is(err, cerr) </span><span class="cov0" title="0">{
+                err = fmt.Errorf("%w: %w", cerr, err)
+        }</span>
+        <span class="cov8" title="1">return fmt.Errorf("mcpx: %s: %w: %w", op, kind, err)</span>
+}
+</pre>
+		
+		<pre class="file" id="file9" style="display: none">package mcpx
+
+import (
+        "context"
+        "encoding/json"
+        "fmt"
+        "net/http"
+        "time"
+
+        "github.com/modelcontextprotocol/go-sdk/auth"
+        "github.com/modelcontextprotocol/go-sdk/mcp"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/authn"
+)
+
+// PathPrefix is where Mount serves the servers: /mcp/&lt;name&gt;.
+const PathPrefix = "/mcp/"
+
+// MaxRequestBody limits one MCP HTTP request body (1 MiB).
+const MaxRequestBody = 1 &lt;&lt; 20
+
+const (
+        callerKey = "mcpx.caller" // key in auth.TokenInfo.Extra
+        version   = "0.1.0"
+)
+
+// Mount validates every server and serves it at PathPrefix+name on mux. It fails on the first invalid server.
+func Mount(mux *http.ServeMux, servers ...*Server) error <span class="cov8" title="1">{
+        for _, s := range servers </span><span class="cov8" title="1">{
+                h, err := s.Handler()
+                if err != nil </span><span class="cov8" title="1">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">mux.Handle(PathPrefix+s.name, h)</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+// Handler validates the server (see Validate) and returns its HTTP handler: JWT verification, then the go-sdk
+// streamable HTTP handler in stateless mode with JSON responses (no session id, no SSE). Missing or invalid JWTs
+// get 401 with `WWW-Authenticate: Bearer` and a JSON-RPC error body whose data is the apierr JSON.
+func (s *Server) Handler() (http.Handler, error) <span class="cov8" title="1">{
+        if err := s.Validate(); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">srv := mcp.NewServer(&amp;mcp.Implementation{Name: "aibuddy-" + s.name, Version: version}, &amp;mcp.ServerOptions{
+                HasTools:     true,
+                GetSessionID: func() string </span><span class="cov8" title="1">{ return "" }</span>, // stateless: no Mcp-Session-Id
+        })
+        <span class="cov8" title="1">for _, n := range s.order </span><span class="cov8" title="1">{
+                t := s.tools[n]
+                mt := &amp;mcp.Tool{Name: t.def.Name, Description: t.def.Description, InputSchema: t.def.InputSchema}
+                if len(t.def.OutputSchema) &gt; 0 </span><span class="cov8" title="1">{
+                        mt.OutputSchema = t.def.OutputSchema
+                }</span>
+                <span class="cov8" title="1">srv.AddTool(mt, s.toolHandler(t))</span>
+        }
+        <span class="cov8" title="1">srv.AddReceivingMiddleware(s.filterToolList)
+        streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server </span><span class="cov8" title="1">{ return srv }</span>,
+                &amp;mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+        // RequireBearerToken is how the go-sdk carries identity: the TokenInfo it puts into the request context is
+        // copied by the streamable transport into CallToolRequest.Extra.TokenInfo for every JSON-RPC message.
+        <span class="cov8" title="1">withTokenInfo := auth.RequireBearerToken(tokenInfo, nil)(streamable)
+        verifier := authn.NewVerifier(s.cfg.JWTSecret)
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) </span><span class="cov8" title="1">{
+                token, ok := authn.BearerToken(r)
+                if !ok </span><span class="cov8" title="1">{
+                        writeUnauthorized(w)
+                        return
+                }</span>
+                <span class="cov8" title="1">claims, err := verifier.Verify(token)
+                if err != nil </span><span class="cov8" title="1">{
+                        s.log.DebugContext(r.Context(), "mcp jwt rejected", "server", s.name, "err", err)
+                        writeUnauthorized(w)
+                        return
+                }</span>
+                <span class="cov8" title="1">r.Body = http.MaxBytesReader(w, r.Body, MaxRequestBody)
+                ctx := authn.WithToken(authn.NewContext(r.Context(), claims), token)
+                withTokenInfo.ServeHTTP(w, r.WithContext(ctx))</span>
+        }), nil
+}
+
+// tokenInfo is the auth.TokenVerifier: the JWT was already verified, so it only wraps the caller.
+func tokenInfo(ctx context.Context, _ string, _ *http.Request) (*auth.TokenInfo, error) <span class="cov8" title="1">{
+        c, ok := callerFromContext(ctx)
+        if !ok </span><span class="cov8" title="1">{
+                return nil, auth.ErrInvalidToken
+        }</span>
+        <span class="cov8" title="1">return &amp;auth.TokenInfo{
+                Expiration: time.Unix(c.Exp, 0).Add(authn.DefaultLeeway),
+                Extra:      map[string]any{callerKey: c},
+        }, nil</span>
+}
+
+func callerFromContext(ctx context.Context) (Caller, bool) <span class="cov8" title="1">{
+        claims, ok := authn.FromContext(ctx)
+        if !ok </span><span class="cov8" title="1">{
+                return Caller{}, false
+        }</span>
+        <span class="cov8" title="1">token, _ := authn.TokenFromContext(ctx)
+        return Caller{Claims: claims, Token: token}, true</span>
+}
+
+// CallerFrom returns the caller of an MCP request: from req.Extra.TokenInfo (set by Handler) or, failing that,
+// from the context. Tool handlers receive the Caller directly; this is for custom go-sdk handlers and tests.
+func CallerFrom(ctx context.Context, req mcp.Request) (Caller, bool) <span class="cov8" title="1">{
+        if req != nil </span><span class="cov8" title="1">{
+                if extra := req.GetExtra(); extra != nil &amp;&amp; extra.TokenInfo != nil </span><span class="cov8" title="1">{
+                        if c, ok := extra.TokenInfo.Extra[callerKey].(Caller); ok </span><span class="cov8" title="1">{
+                                return c, true
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">return callerFromContext(ctx)</span>
+}
+
+func (s *Server) toolHandler(t *tool) mcp.ToolHandler <span class="cov8" title="1">{
+        return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) </span><span class="cov8" title="1">{
+                c, ok := CallerFrom(ctx, req)
+                if !ok </span><span class="cov8" title="1">{
+                        return errorResult(apierr.ToMCP(apierr.Unauthorized())), nil
+                }</span>
+                <span class="cov8" title="1">out, aerr := s.run(ctx, c, t, req.Params.Arguments)
+                if aerr != nil </span><span class="cov8" title="1">{
+                        return errorResult(aerr), nil
+                }</span>
+                <span class="cov8" title="1">return &amp;mcp.CallToolResult{
+                        StructuredContent: out,
+                        Content:           []mcp.Content{&amp;mcp.TextContent{Text: string(out)}},
+                }, nil</span>
+        }
+}
+
+func errorResult(e *apierr.Error) *mcp.CallToolResult <span class="cov8" title="1">{
+        body, _ := json.Marshal(e) // strings and a bool: cannot fail
+        return &amp;mcp.CallToolResult{
+                IsError:           true,
+                StructuredContent: json.RawMessage(body),
+                Content:           []mcp.Content{&amp;mcp.TextContent{Text: string(body)}},
+        }
+}</span>
+
+// filterToolList hides from tools/list the tools the caller's role may not call (direct calls get forbidden).
+func (s *Server) filterToolList(next mcp.MethodHandler) mcp.MethodHandler <span class="cov8" title="1">{
+        return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) </span><span class="cov8" title="1">{
+                res, err := next(ctx, method, req)
+                list, ok := res.(*mcp.ListToolsResult)
+                if err != nil || !ok </span><span class="cov8" title="1">{
+                        return res, err
+                }</span>
+                <span class="cov8" title="1">c, _ := CallerFrom(ctx, req)
+                visible := make([]*mcp.Tool, 0, len(list.Tools))
+                for _, mt := range list.Tools </span><span class="cov8" title="1">{
+                        if t := s.tools[mt.Name]; t != nil &amp;&amp; t.allows(c.Role) </span><span class="cov8" title="1">{
+                                visible = append(visible, mt)
+                        }</span>
+                }
+                <span class="cov8" title="1">filtered := *list
+                filtered.Tools = visible
+                return &amp;filtered, nil</span>
+        }
+}
+
+// rpcErrUnauthorized is the JSON-RPC server error code sent with HTTP 401.
+const rpcErrUnauthorized = -32001
+
+func writeUnauthorized(w http.ResponseWriter) <span class="cov8" title="1">{
+        e := apierr.Unauthorized()
+        body, _ := json.Marshal(map[string]any{
+                "jsonrpc": "2.0",
+                "id":      nil,
+                "error":   map[string]any{"code": rpcErrUnauthorized, "message": e.Message, "data": e},
+        })
+        w.Header().Set("WWW-Authenticate", "Bearer")
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusUnauthorized)
+        _, _ = fmt.Fprintf(w, "%s", body)
+}</span>
+</pre>
+		
+		<pre class="file" id="file10" style="display: none">package mcpx
+
+import (
+        "encoding/json"
+        "fmt"
+        "io/fs"
+        "regexp"
+        "slices"
+        "time"
+
+        "github.com/google/jsonschema-go/jsonschema"
+
+        "aibuddy/contracts"
+)
+
+// ToolDef is one tool of contracts/schemas/&lt;server&gt;.json.
+type ToolDef struct {
+        Name         string          `json:"name"`
+        Description  string          `json:"description"`
+        Roles        []string        `json:"roles"`
+        Write        bool            `json:"write"`
+        InputSchema  json.RawMessage `json:"inputSchema"`
+        OutputSchema json.RawMessage `json:"outputSchema"`
+}
+
+type schemaFile struct {
+        Server string    `json:"server"`
+        Tools  []ToolDef `json:"tools"`
+}
+
+// LoadTools reads the tool definitions of server from contracts.Schemas (schemas/&lt;server&gt;.json).
+func LoadTools(server string) ([]ToolDef, error) <span class="cov8" title="1">{
+        return loadTools(contracts.Schemas, server)
+}</span>
+
+func loadTools(fsys fs.FS, server string) ([]ToolDef, error) <span class="cov8" title="1">{
+        raw, err := fs.ReadFile(fsys, "schemas/"+server+".json")
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: load schema %q: %w", server, err)
+        }</span>
+        <span class="cov8" title="1">var f schemaFile
+        if err := json.Unmarshal(raw, &amp;f); err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: parse schema %q: %w", server, err)
+        }</span>
+        <span class="cov8" title="1">if f.Server != server </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: schema file %q declares server %q", server, f.Server)
+        }</span>
+        <span class="cov8" title="1">return f.Tools, nil</span>
+}
+
+// tool is a compiled ToolDef.
+type tool struct {
+        def     ToolDef
+        input   *jsonschema.Resolved
+        output  *jsonschema.Resolved // nil when the contract has no output schema
+        formats map[string]string    // top-level argument -&gt; format (date, date-time, uuid)
+}
+
+func compile(def ToolDef) (*tool, error) <span class="cov8" title="1">{
+        if def.Name == "" </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: tool without name")
+        }</span>
+        <span class="cov8" title="1">if len(def.Roles) == 0 </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: tool %q: no roles", def.Name)
+        }</span>
+        <span class="cov8" title="1">in, props, err := resolve(def.InputSchema)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: tool %q: input schema: %w", def.Name, err)
+        }</span>
+        <span class="cov8" title="1">if def.Write </span><span class="cov8" title="1">{
+                for _, k := range []string{"idempotency_key", "confirmation_token"} </span><span class="cov8" title="1">{
+                        if _, ok := props[k]; !ok </span><span class="cov8" title="1">{
+                                return nil, fmt.Errorf("mcpx: write tool %q: input schema lacks %s", def.Name, k)
+                        }</span>
+                }
+        }
+        <span class="cov8" title="1">t := &amp;tool{def: def, input: in, formats: map[string]string{}}
+        for name, p := range props </span><span class="cov8" title="1">{
+                if p != nil &amp;&amp; formatCheckers[p.Format] != nil </span><span class="cov8" title="1">{
+                        t.formats[name] = p.Format
+                }</span>
+        }
+        <span class="cov8" title="1">if len(def.OutputSchema) &gt; 0 </span><span class="cov8" title="1">{
+                if t.output, _, err = resolve(def.OutputSchema); err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("mcpx: tool %q: output schema: %w", def.Name, err)
+                }</span>
+        }
+        <span class="cov8" title="1">return t, nil</span>
+}
+
+func resolve(raw json.RawMessage) (*jsonschema.Resolved, map[string]*jsonschema.Schema, error) <span class="cov8" title="1">{
+        var s jsonschema.Schema
+        if err := json.Unmarshal(raw, &amp;s); err != nil </span><span class="cov8" title="1">{
+                return nil, nil, err
+        }</span>
+        <span class="cov8" title="1">if s.Type != "object" </span><span class="cov8" title="1">{
+                return nil, nil, fmt.Errorf(`type must be "object", got %q`, s.Type)
+        }</span>
+        <span class="cov8" title="1">r, err := s.Resolve(nil)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, nil, err
+        }</span>
+        <span class="cov8" title="1">return r, s.Properties, nil</span>
+}
+
+func (t *tool) allows(role string) bool <span class="cov8" title="1">{ return slices.Contains(t.def.Roles, role) }</span>
+
+var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// formatCheckers enforce the "format" keywords the contracts use (jsonschema-go treats format as annotation only).
+var formatCheckers = map[string]func(string) bool{
+        "date":      func(s string) bool <span class="cov8" title="1">{ _, err := time.Parse(time.DateOnly, s); return err == nil }</span>,
+        "date-time": func(s string) bool <span class="cov0" title="0">{ _, err := time.Parse(time.RFC3339, s); return err == nil }</span>,
+        "uuid":      uuidRE.MatchString,
+}
+
+var formatNames = map[string]string{
+        "date":      "дата в формате ГГГГ-ММ-ДД",
+        "date-time": "дата и время в формате RFC 3339",
+        "uuid":      "UUID",
+}
+
+// checkFormats validates the format of top-level string arguments.
+func (t *tool) checkFormats(args map[string]any) error <span class="cov8" title="1">{
+        for name, format := range t.formats </span><span class="cov8" title="1">{
+                s, ok := args[name].(string)
+                if ok &amp;&amp; !formatCheckers[format](s) </span><span class="cov8" title="1">{
+                        return fmt.Errorf("поле %s: ожидается %s", name, formatNames[format])
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file11" style="display: none">// Package mcpx builds the MCP servers of mcp-mocks from the contracts and calls them from core
+// (docs/backend/IMPLEMENTATION.md §4, contracts/mcp-tools.md).
+//
+// Server side: NewServer loads contracts/schemas/&lt;name&gt;.json, Handle binds a plain Go func to every tool, and
+// Handler serves the MCP streamable HTTP transport (stateless, JSON responses) behind JWT verification.
+// For every tools/call mcpx enforces, in this order, before the handler runs:
+//  1. role allow-list of the tool (`roles`) → forbidden
+//  2. write tools: confirmation_token and idempotency_key present and non-empty → else invalid_confirmation
+//  3. inputSchema (unknown fields such as employee_id, types, enums, patterns, required; format date,
+//     date-time, uuid of top-level arguments) after applying schema defaults → validation_error
+//  4. write tools: confirm.Verify(sub = caller, key = idempotency_key, args as received) → invalid_confirmation
+//
+// Identity reaches handlers through the go-sdk mechanism for bearer auth: Handler verifies the JWT, wraps it in an
+// auth.TokenInfo (auth.RequireBearerToken), and the streamable transport copies it into CallToolRequest.Extra.
+//
+// Handler errors of type *apierr.Error become tool results with isError=true and structuredContent
+// {code, message, retryable} (MCP codes, see apierr.ToMCP); other errors and panics are logged and reported as a
+// generic, non-retryable error. Successful results must match the tool's outputSchema; they are sent as
+// structuredContent plus the same JSON as text content. tools/list shows only the tools the caller's role may use.
+package mcpx
+
+import (
+        "bytes"
+        "context"
+        "encoding/json"
+        "errors"
+        "fmt"
+        "log/slog"
+        "runtime/debug"
+        "slices"
+        "strings"
+        "time"
+
+        "aibuddy/services/internal/platform/apierr"
+        "aibuddy/services/internal/platform/authn"
+        "aibuddy/services/internal/platform/confirm"
+)
+
+// Caller is the authenticated user of an MCP request: verified JWT claims plus the raw bearer token.
+// Identity used by tool handlers comes only from here, never from tool arguments (R71).
+type Caller struct {
+        authn.Claims
+        Token string
+}
+
+// HandlerFunc implements a tool. args are the validated tool arguments as JSON (including idempotency_key and
+// confirmation_token for write tools; schema defaults applied). The result must marshal to a JSON object that
+// matches the tool's outputSchema. Return *apierr.Error for expected failures.
+type HandlerFunc func(ctx context.Context, c Caller, args json.RawMessage) (any, error)
+
+// Config holds the secrets and logger of a Server.
+type Config struct {
+        JWTSecret          []byte       // JWT_SECRET: verifies the caller's bearer token
+        ConfirmationSecret []byte       // CONFIRMATION_HMAC_SECRET: verifies write confirmations
+        Logger             *slog.Logger // nil means slog.Default()
+}
+
+// Server is one mock MCP server (absence, approvals, access, checklist, directory, kb).
+type Server struct {
+        name     string
+        cfg      Config
+        log      *slog.Logger
+        order    []string // tool names in contract order
+        tools    map[string]*tool
+        handlers map[string]HandlerFunc
+        errs     []error
+}
+
+// NewServer returns a server whose tools are defined by contracts/schemas/&lt;name&gt;.json. It fails when the schema
+// is missing or invalid. Bind every tool with Handle, then call Handler (or Mount).
+func NewServer(name string, cfg Config) (*Server, error) <span class="cov8" title="1">{
+        defs, err := LoadTools(name)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">return newServer(name, defs, cfg)</span>
+}
+
+func newServer(name string, defs []ToolDef, cfg Config) (*Server, error) <span class="cov8" title="1">{
+        if name == "" || strings.ContainsAny(name, "/ ") </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("mcpx: invalid server name %q", name)
+        }</span>
+        <span class="cov8" title="1">s := &amp;Server{name: name, cfg: cfg, log: cfg.Logger, tools: map[string]*tool{}, handlers: map[string]HandlerFunc{}}
+        if s.log == nil </span><span class="cov8" title="1">{
+                s.log = slog.Default()
+        }</span>
+        <span class="cov8" title="1">for _, d := range defs </span><span class="cov8" title="1">{
+                t, err := compile(d)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("server %q: %w", name, err)
+                }</span>
+                <span class="cov8" title="1">if _, dup := s.tools[d.Name]; dup </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("mcpx: server %q: duplicate tool %q", name, d.Name)
+                }</span>
+                <span class="cov8" title="1">s.tools[d.Name] = t
+                s.order = append(s.order, d.Name)</span>
+        }
+        <span class="cov8" title="1">return s, nil</span>
+}
+
+// Name returns the server name; it is served at /mcp/&lt;name&gt;.
+func (s *Server) Name() string <span class="cov8" title="1">{ return s.name }</span>
+
+// Tools returns the tool definitions in contract order.
+func (s *Server) Tools() []ToolDef <span class="cov8" title="1">{
+        out := make([]ToolDef, 0, len(s.order))
+        for _, n := range s.order </span><span class="cov8" title="1">{
+                out = append(out, s.tools[n].def)
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+// Handle binds h to the tool called name. Unknown names, duplicates and nil handlers are reported by Validate.
+func (s *Server) Handle(name string, h HandlerFunc) <span class="cov8" title="1">{
+        switch </span>{
+        case s.tools[name] == nil:<span class="cov8" title="1">
+                s.errs = append(s.errs, fmt.Errorf("mcpx: server %q: tool %q is not in the contract", s.name, name))</span>
+        case h == nil:<span class="cov8" title="1">
+                s.errs = append(s.errs, fmt.Errorf("mcpx: server %q: nil handler for %q", s.name, name))</span>
+        case s.handlers[name] != nil:<span class="cov8" title="1">
+                s.errs = append(s.errs, fmt.Errorf("mcpx: server %q: tool %q registered twice", s.name, name))</span>
+        default:<span class="cov8" title="1">
+                s.handlers[name] = h</span>
+        }
+}
+
+// Validate reports every registration problem: unknown or duplicate tools, contract tools without a handler,
+// missing secrets. Handler calls it, so a misconfigured server fails at startup.
+func (s *Server) Validate() error <span class="cov8" title="1">{
+        errs := slices.Clone(s.errs)
+        for _, n := range s.order </span><span class="cov8" title="1">{
+                if s.handlers[n] == nil </span><span class="cov8" title="1">{
+                        errs = append(errs, fmt.Errorf("mcpx: server %q: no handler for contract tool %q", s.name, n))
+                }</span>
+        }
+        <span class="cov8" title="1">if len(s.cfg.JWTSecret) == 0 </span><span class="cov8" title="1">{
+                errs = append(errs, fmt.Errorf("mcpx: server %q: empty JWT secret", s.name))
+        }</span>
+        <span class="cov8" title="1">if len(s.cfg.ConfirmationSecret) == 0 &amp;&amp; slices.ContainsFunc(s.order, func(n string) bool </span><span class="cov8" title="1">{ return s.tools[n].def.Write }</span>) <span class="cov8" title="1">{
+                errs = append(errs, fmt.Errorf("mcpx: server %q: empty confirmation secret", s.name))
+        }</span>
+        <span class="cov8" title="1">return errors.Join(errs...)</span>
+}
+
+// Invoke runs tool for c through the same checks as an MCP tools/call (role, schema, confirmation, handler,
+// output schema) without HTTP. It returns the structured result or a tool error; mock servers use it in tests.
+func (s *Server) Invoke(ctx context.Context, c Caller, name string, args any) (json.RawMessage, *apierr.Error) <span class="cov8" title="1">{
+        raw, err := json.Marshal(args)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, apierr.ToMCP(apierr.Validation().WithMessage("Аргументы инструмента не кодируются в JSON"))
+        }</span>
+        <span class="cov8" title="1">t := s.tools[name]
+        if t == nil || s.handlers[name] == nil </span><span class="cov8" title="1">{
+                return nil, apierr.ToMCP(apierr.NotFound().WithMessage(fmt.Sprintf("Инструмент %s.%s не найден", s.name, name)))
+        }</span>
+        <span class="cov8" title="1">return s.run(ctx, c, t, raw)</span>
+}
+
+func (s *Server) run(ctx context.Context, c Caller, t *tool, raw json.RawMessage) (json.RawMessage, *apierr.Error) <span class="cov8" title="1">{
+        if !t.allows(c.Role) </span><span class="cov8" title="1">{
+                return nil, apierr.Forbidden()
+        }</span>
+        <span class="cov8" title="1">if t.def.Write &amp;&amp; !hasConfirmationFields(raw) </span><span class="cov8" title="1">{
+                // The rights matrix wants invalid_confirmation (not validation_error) for a write without a token.
+                return nil, apierr.InvalidConfirmation()
+        }</span>
+        <span class="cov8" title="1">args, aerr := s.checkArgs(t, raw)
+        if aerr != nil </span><span class="cov8" title="1">{
+                return nil, aerr
+        }</span>
+        <span class="cov8" title="1">if t.def.Write </span><span class="cov8" title="1">{
+                key, _ := args[confirm.KeyIdempotency].(string)
+                token, _ := args[confirm.KeyConfirmation].(string)
+                if err := confirm.Verify(s.cfg.ConfirmationSecret, token, c.Sub, key, raw, time.Now()); err != nil </span><span class="cov8" title="1">{
+                        s.log.InfoContext(ctx, "mcp confirmation rejected", "server", s.name, "tool", t.def.Name, "sub", c.Sub, "reason", err)
+                        return nil, apierr.InvalidConfirmation()
+                }</span>
+        }
+        <span class="cov8" title="1">withDefaults, err := json.Marshal(args)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, s.internal(ctx, t, fmt.Errorf("re-encode args: %w", err))
+        }</span>
+        <span class="cov8" title="1">out, err := s.call(ctx, c, t, withDefaults)
+        if err != nil </span><span class="cov8" title="1">{
+                if e, ok := apierr.As(err); ok </span><span class="cov8" title="1">{
+                        return nil, apierr.ToMCP(e)
+                }</span>
+                <span class="cov8" title="1">if ctx.Err() != nil </span><span class="cov0" title="0">{
+                        return nil, apierr.ToMCP(apierr.From(ctx.Err()))
+                }</span>
+                <span class="cov8" title="1">return nil, s.internal(ctx, t, err)</span>
+        }
+        <span class="cov8" title="1">result, err := s.checkOutput(t, out)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, s.internal(ctx, t, err)
+        }</span>
+        <span class="cov8" title="1">return result, nil</span>
+}
+
+// checkArgs decodes the arguments, applies schema defaults and validates them.
+func (s *Server) checkArgs(t *tool, raw json.RawMessage) (map[string]any, *apierr.Error) <span class="cov8" title="1">{
+        args := map[string]any{}
+        if len(bytes.TrimSpace(raw)) &gt; 0 &amp;&amp; !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) </span><span class="cov8" title="1">{
+                if err := json.Unmarshal(raw, &amp;args); err != nil </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Аргументы инструмента должны быть JSON-объектом")
+                }</span>
+        }
+        <span class="cov8" title="1">if err := t.input.ApplyDefaults(&amp;args); err != nil </span><span class="cov0" title="0">{
+                return nil, apierr.Validation().WithMessage("Некорректные аргументы инструмента: " + err.Error())
+        }</span>
+        <span class="cov8" title="1">if err := t.input.Validate(&amp;args); err != nil </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Некорректные аргументы инструмента: " + err.Error())
+        }</span>
+        <span class="cov8" title="1">if err := t.checkFormats(args); err != nil </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Некорректные аргументы инструмента: " + err.Error())
+        }</span>
+        <span class="cov8" title="1">return args, nil</span>
+}
+
+// hasConfirmationFields reports whether raw is an object with non-empty string confirmation_token and
+// idempotency_key.
+func hasConfirmationFields(raw json.RawMessage) bool <span class="cov8" title="1">{
+        var f struct {
+                Token *string `json:"confirmation_token"`
+                Key   *string `json:"idempotency_key"`
+        }
+        if err := json.Unmarshal(raw, &amp;f); err != nil </span><span class="cov0" title="0">{
+                return false
+        }</span>
+        <span class="cov8" title="1">return f.Token != nil &amp;&amp; *f.Token != "" &amp;&amp; f.Key != nil &amp;&amp; *f.Key != ""</span>
+}
+
+// call runs the handler, turning a panic into an error.
+func (s *Server) call(ctx context.Context, c Caller, t *tool, args json.RawMessage) (out any, err error) <span class="cov8" title="1">{
+        defer func() </span><span class="cov8" title="1">{
+                if v := recover(); v != nil </span><span class="cov8" title="1">{
+                        err = fmt.Errorf("panic: %v\n%s", v, debug.Stack())
+                }</span>
+        }()
+        <span class="cov8" title="1">return s.handlers[t.def.Name](ctx, c, args)</span>
+}
+
+func (s *Server) checkOutput(t *tool, out any) (json.RawMessage, error) <span class="cov8" title="1">{
+        raw, err := json.Marshal(out)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("encode result: %w", err)
+        }</span>
+        <span class="cov8" title="1">var obj map[string]any
+        if err := json.Unmarshal(raw, &amp;obj); err != nil || obj == nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("result is not a JSON object: %s", truncate(raw))
+        }</span>
+        <span class="cov8" title="1">if t.output != nil </span><span class="cov8" title="1">{
+                if err := t.output.Validate(&amp;obj); err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("result violates outputSchema: %w", err)
+                }</span>
+        }
+        <span class="cov8" title="1">return raw, nil</span>
+}
+
+func (s *Server) internal(ctx context.Context, t *tool, err error) *apierr.Error <span class="cov8" title="1">{
+        s.log.ErrorContext(ctx, "mcp tool failed", "server", s.name, "tool", t.def.Name, "err", err)
+        return apierr.ToMCP(apierr.Internal())
+}</span>
+
+func truncate(b []byte) string <span class="cov8" title="1">{
+        if len(b) &gt; 200 </span><span class="cov0" title="0">{
+                return string(b[:200]) + "…"
+        }</span>
+        <span class="cov8" title="1">return string(b)</span>
+}
+
+// DecodeArgs unmarshals validated tool arguments into dst; a failure is a validation_error.
+func DecodeArgs(args json.RawMessage, dst any) error <span class="cov8" title="1">{
+        if err := json.Unmarshal(args, dst); err != nil </span><span class="cov8" title="1">{
+                return apierr.Validation().WithMessage("Некорректные аргументы инструмента: " + err.Error())
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// WithConfirmation returns a copy of args with idempotency_key = key and a confirmation_token signed for sub,
+// key and the hash of args (core uses it for approvals.decide and kb.add_faq, where the button press is the
+// confirmation; tests use it for write tools).
+func WithConfirmation(secret []byte, sub, key string, args map[string]any, ttl time.Duration) (map[string]any, error) <span class="cov8" title="1">{
+        hash, err := confirm.ArgsHash(args)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">token, err := confirm.Issue(secret, sub, key, hash, ttl)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">out := make(map[string]any, len(args)+2)
+        for k, v := range args </span><span class="cov8" title="1">{
+                out[k] = v
+        }</span>
+        <span class="cov8" title="1">out[confirm.KeyIdempotency] = key
+        out[confirm.KeyConfirmation] = token
+        return out, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file12" style="display: none">// Package period maps an intern's cohort start date to the periods of the Avito checklist
+// (data/checklist/checklist.yaml: week_1 … after_3_months) and gives each period its due offset and Russian label.
+package period
+
+import (
+        "fmt"
+        "slices"
+        "time"
+)
+
+// Period is a checklist period id (openapi Period).
+type Period string
+
+// The checklist periods in order.
+const (
+        Week1        Period = "week_1"
+        Week2        Period = "week_2"
+        Month1       Period = "month_1"
+        Month2       Period = "month_2"
+        After3Months Period = "after_3_months"
+)
+
+type info struct {
+        p       Period
+        before  int // Current returns p while days since cohort start &lt; before
+        dueDays int
+        label   string
+}
+
+// Same table as data/checklist/checklist.yaml (labels) and migrations/0003_seed_demo.sql (due offsets).
+var table = []info{
+        {Week1, 7, 7, "1 неделя"},
+        {Week2, 14, 14, "2 неделя"},
+        {Month1, 30, 30, "1 месяц"},
+        {Month2, 90, 60, "2 месяц"},
+        {After3Months, -1, 100, "После 3-х месяцев"},
+}
+
+// All returns the periods in checklist order (a fresh slice).
+func All() []Period <span class="cov8" title="1">{
+        out := make([]Period, len(table))
+        for i, t := range table </span><span class="cov8" title="1">{
+                out[i] = t.p
+        }</span>
+        <span class="cov8" title="1">return out</span>
+}
+
+// Parse returns s as a Period, or an error for an unknown id.
+func Parse(s string) (Period, error) <span class="cov8" title="1">{
+        p := Period(s)
+        if Order(p) &lt; 0 </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("period: unknown period %q", s)
+        }</span>
+        <span class="cov8" title="1">return p, nil</span>
+}
+
+// Order returns the 0-based position of p in checklist order, or -1 for an unknown period.
+func Order(p Period) int <span class="cov8" title="1">{
+        return slices.IndexFunc(table, func(t info) bool </span><span class="cov8" title="1">{ return t.p == p }</span>)
+}
+
+// Label returns the Russian label («1 неделя» … «После 3-х месяцев»), or string(p) for an unknown period.
+func Label(p Period) string <span class="cov8" title="1">{
+        if i := Order(p); i &gt;= 0 </span><span class="cov8" title="1">{
+                return table[i].label
+        }</span>
+        <span class="cov8" title="1">return string(p)</span>
+}
+
+// DueOffsetDays returns the due date offset from the cohort start: 7, 14, 30, 60, 100; 0 for an unknown period.
+func DueOffsetDays(p Period) int <span class="cov8" title="1">{
+        if i := Order(p); i &gt;= 0 </span><span class="cov8" title="1">{
+                return table[i].dueDays
+        }</span>
+        <span class="cov8" title="1">return 0</span>
+}
+
+// DaysSince returns the number of calendar days from cohortStart to today (negative before the start).
+// Each value is reduced to its calendar date in its own location; the time of day is ignored.
+func DaysSince(cohortStart, today time.Time) int <span class="cov8" title="1">{
+        return int(date(today).Sub(date(cohortStart)).Hours() / 24)
+}</span>
+
+// Current returns the period of an intern on today: week_1 for days &lt; 7 (also before the start), week_2 &lt; 14,
+// month_1 &lt; 30, month_2 &lt; 90, after_3_months otherwise. Days are counted by DaysSince.
+func Current(cohortStart, today time.Time) Period <span class="cov8" title="1">{
+        days := DaysSince(cohortStart, today)
+        for _, t := range table </span><span class="cov8" title="1">{
+                if t.before &lt; 0 || days &lt; t.before </span><span class="cov8" title="1">{
+                        return t.p
+                }</span>
+        }
+        <span class="cov0" title="0">return After3Months</span> // unreachable: the last row has no bound
+}
+
+// DueDate returns cohortStart + DueOffsetDays(p) as a date (midnight UTC), like the seed's cohort_start + days.
+func DueDate(cohortStart time.Time, p Period) time.Time <span class="cov8" title="1">{
+        return date(cohortStart).AddDate(0, 0, DueOffsetDays(p))
+}</span>
+
+// ParseDate parses a YYYY-MM-DD date (JWT claim cohort_start, DB dates) as midnight UTC.
+func ParseDate(s string) (time.Time, error) <span class="cov8" title="1">{
+        t, err := time.Parse(time.DateOnly, s)
+        if err != nil </span><span class="cov8" title="1">{
+                return time.Time{}, fmt.Errorf("period: parse date %q: %w", s, err)
+        }</span>
+        <span class="cov8" title="1">return t, nil</span>
+}
+
+func date(t time.Time) time.Time <span class="cov8" title="1">{
+        y, m, d := t.Date()
+        return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}</span>
+</pre>
+		
+		<pre class="file" id="file13" style="display: none">// Package pg opens PostgreSQL connection pools (pgx/v5) for core and mcp-mocks.
+package pg
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/jackc/pgx/v5/pgxpool"
+)
+
+// Options tune Open. Zero values mean defaults.
+type Options struct {
+        MaxConns     int32         // default 10
+        StartupWait  time.Duration // how long to retry while Postgres is still starting; default 30s
+        RetryBackoff time.Duration // pause between attempts; default 1s
+}
+
+// Open connects to url and pings it, retrying until opts.StartupWait elapses (Postgres may still be
+// running init scripts when the service starts).
+func Open(ctx context.Context, url string, opts Options) (*pgxpool.Pool, error) <span class="cov8" title="1">{
+        cfg, err := pgxpool.ParseConfig(url)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("parse postgres url: %w", err)
+        }</span>
+        <span class="cov8" title="1">cfg.MaxConns = opts.MaxConns
+        if cfg.MaxConns == 0 </span><span class="cov8" title="1">{
+                cfg.MaxConns = 10
+        }</span>
+        <span class="cov8" title="1">cfg.MaxConnIdleTime = 5 * time.Minute
+        wait, backoff := opts.StartupWait, opts.RetryBackoff
+        if wait == 0 </span><span class="cov8" title="1">{
+                wait = 30 * time.Second
+        }</span>
+        <span class="cov8" title="1">if backoff == 0 </span><span class="cov8" title="1">{
+                backoff = time.Second
+        }</span>
+        <span class="cov8" title="1">deadline := time.Now().Add(wait)
+        for </span><span class="cov8" title="1">{
+                pool, err := pgxpool.NewWithConfig(ctx, cfg)
+                if err == nil </span><span class="cov8" title="1">{
+                        if err = pool.Ping(ctx); err == nil </span><span class="cov8" title="1">{
+                                return pool, nil
+                        }</span>
+                        <span class="cov8" title="1">pool.Close()</span>
+                }
+                <span class="cov8" title="1">if time.Now().After(deadline) </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("connect postgres: %w", err)
+                }</span>
+                <span class="cov8" title="1">select </span>{
+                case &lt;-ctx.Done():<span class="cov8" title="1">
+                        return nil, ctx.Err()</span>
+                case &lt;-time.After(backoff):<span class="cov8" title="1"></span>
+                }
+        }
+}
+</pre>
+		
+		<pre class="file" id="file14" style="display: none">// Package pgtest gives tests a fresh PostgreSQL database built from the real migrations (schema + demo seed).
+//
+// Set TEST_DATABASE_URL to a superuser connection (scripts/test-db.sh prints one). Each New call creates
+// database t_&lt;random&gt;, applies migrations.FS in lexical order and drops the database when the test ends.
+package pgtest
+
+import (
+        "context"
+        "crypto/rand"
+        "encoding/hex"
+        "fmt"
+        "io/fs"
+        "net/url"
+        "os"
+        "sort"
+        "testing"
+        "time"
+
+        "github.com/jackc/pgx/v5"
+        "github.com/jackc/pgx/v5/pgxpool"
+
+        "aibuddy/migrations"
+)
+
+// EnvVar is the variable holding the admin connection string.
+const EnvVar = "TEST_DATABASE_URL"
+
+// New returns a pool connected to a fresh migrated database, or skips the test when TEST_DATABASE_URL is unset.
+func New(t testing.TB) *pgxpool.Pool <span class="cov8" title="1">{
+        t.Helper()
+        admin := os.Getenv(EnvVar)
+        if admin == "" </span><span class="cov8" title="1">{
+                t.Skipf("%s is not set; run `bash scripts/test-db.sh up` or `make test`", EnvVar)
+        }</span>
+        <span class="cov8" title="1">ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+        defer cancel()
+        name := newName()
+        adminConn, err := pgx.Connect(ctx, admin)
+        if err != nil </span><span class="cov8" title="1">{
+                t.Fatalf("pgtest: connect admin: %v", err)
+        }</span>
+        <span class="cov8" title="1">defer adminConn.Close(context.Background())
+        if _, err := adminConn.Exec(ctx, "CREATE DATABASE "+name); err != nil </span><span class="cov8" title="1">{
+                t.Fatalf("pgtest: create database: %v", err)
+        }</span>
+        <span class="cov8" title="1">dbURL, err := withDatabase(admin, name)
+        if err != nil </span><span class="cov0" title="0">{
+                t.Fatalf("pgtest: %v", err)
+        }</span>
+        <span class="cov8" title="1">if err := applyMigrations(ctx, dbURL); err != nil </span><span class="cov8" title="1">{
+                dropDatabase(admin, name)
+                t.Fatalf("pgtest: %v", err)
+        }</span>
+        <span class="cov8" title="1">pool, err := pgxpool.New(ctx, dbURL)
+        if err != nil </span><span class="cov0" title="0">{
+                dropDatabase(admin, name)
+                t.Fatalf("pgtest: open pool: %v", err)
+        }</span>
+        <span class="cov8" title="1">t.Cleanup(func() </span><span class="cov8" title="1">{
+                pool.Close()
+                dropDatabase(admin, name)
+        }</span>)
+        <span class="cov8" title="1">return pool</span>
+}
+
+// URL returns the connection string of the database behind pool (useful for services that open their own pool).
+func URL(t testing.TB, pool *pgxpool.Pool) string <span class="cov8" title="1">{
+        t.Helper()
+        return pool.Config().ConnString()
+}</span>
+
+func applyMigrations(ctx context.Context, dbURL string) error <span class="cov8" title="1">{
+        conn, err := pgx.Connect(ctx, dbURL)
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("connect test database: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer conn.Close(context.Background())
+        names, err := fs.Glob(migrations.FS, "*.sql")
+        if err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("list migrations: %w", err)
+        }</span>
+        <span class="cov8" title="1">sort.Strings(names)
+        for _, n := range names </span><span class="cov8" title="1">{
+                sql, err := migrations.FS.ReadFile(n)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("read %s: %w", n, err)
+                }</span>
+                // Simple protocol: a migration file is many statements in one string.
+                <span class="cov8" title="1">if _, err := conn.Exec(ctx, string(sql), pgx.QueryExecModeSimpleProtocol); err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("apply %s: %w", n, err)
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func withDatabase(raw, name string) (string, error) <span class="cov8" title="1">{
+        u, err := url.Parse(raw)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", fmt.Errorf("parse %s: %w", EnvVar, err)
+        }</span>
+        <span class="cov8" title="1">u.Path = "/" + name
+        return u.String(), nil</span>
+}
+
+func dropDatabase(admin, name string) <span class="cov8" title="1">{
+        ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+        defer cancel()
+        conn, err := pgx.Connect(ctx, admin)
+        if err != nil </span><span class="cov8" title="1">{
+                return
+        }</span>
+        <span class="cov8" title="1">defer conn.Close(context.Background())
+        _, _ = conn.Exec(ctx, "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)")</span>
+}
+
+func randomHex(n int) string <span class="cov8" title="1">{
+        b := make([]byte, n)
+        if _, err := rand.Read(b); err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+        <span class="cov8" title="1">return hex.EncodeToString(b)</span>
+}
+
+// newName returns the name of a fresh test database; a variable so tests can follow one database exactly.
+var newName = func() string <span class="cov8" title="1">{ return "t_" + randomHex(8) }</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

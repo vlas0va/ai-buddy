@@ -1,0 +1,12 @@
+{
+  "name": "aibuddy-e2e",
+  "private": true,
+  "description": "Playwright e2e: one spec per declared scenario, against a running stack on the stub LLM (no key).",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

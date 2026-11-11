@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -223,7 +224,7 @@ func TestSave_S4_AccessWithoutInternTask(t *testing.T) {
 		t.Fatalf("rejected %+v %v", rejected, err)
 	}
 	odd, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000009", Kind: KindAccess,
-		Result: accessResult("ACC-000045", "gitlab", "GitLab", "weird", "", nil)})
+		Result: accessResult("ACC-000045", "bitbucket", "Bitbucket", "weird", "", nil)})
 	if err != nil || odd.Status != StatusCreated || loadTask(t, pool, *odd.TaskID).status != "in_progress" {
 		t.Fatalf("unknown status %+v %v", odd, err)
 	}
@@ -467,5 +468,96 @@ func TestSave_S3_AbsenceIgnoresChecklistHint_R66(t *testing.T) {
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.source != "action" || task.checklist != nil {
 		t.Fatalf("absence linked to a checklist task: %+v", task)
+	}
+}
+
+func tripResult(id, city, start, end, approverName string) json.RawMessage {
+	m := map[string]any{"id": id, "city": city, "start_date": start, "end_date": end, "purpose": "Встреча с командой",
+		"status": "pending_approval", "approver_id": "lead.maria"}
+	if approverName != "" {
+		m["approver_display_name"] = approverName
+	}
+	b, _ := json.Marshal(m)
+	return b
+}
+
+func TestSave_R23_TripCreatesActionAndTask_R66(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	a, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000201", Kind: KindTrip,
+		Result: tripResult("TRP-000200", "Казань", "2026-11-23", "2026-11-25", "")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Status != StatusPendingApproval || a.Summary != "Командировка: Казань, 23.11.2026–25.11.2026, согласующий — Мария Лебедева" || a.TaskID == nil {
+		t.Fatalf("%+v", a)
+	}
+	if task := loadTask(t, pool, *a.TaskID); task.title != "Командировка: Казань" || task.status != "waiting_approval" {
+		t.Fatalf("task %+v", task)
+	}
+	got, changed, err := svc.ApplyDecision(ctx, pool, KindTrip, "TRP-000200", "approved", byMaria)
+	if err != nil || !changed || got.Status != StatusApproved {
+		t.Fatalf("%+v %v %v", got, changed, err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title = 'Командировка согласована'`); n != 1 {
+		t.Fatalf("notifications = %d", n)
+	}
+	b, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000202", Kind: KindTrip,
+		Result: tripResult("TRP-000201", "Казань", "2026-12-01", "2026-12-01", "М. Лебедева")})
+	if err != nil || !strings.Contains(b.Summary, "01.12.2026, согласующий — М. Лебедева") {
+		t.Fatalf("%+v %v", b, err)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindTrip, "TRP-000201", "rejected", byMaria); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title = 'Командировка отклонена'`); n != 1 {
+		t.Fatalf("rejected notifications = %d", n)
+	}
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000203", Kind: KindTrip,
+		Result: json.RawMessage(`{"city":"Казань"}`)}); err == nil {
+		t.Fatal("trip without id accepted")
+	}
+}
+
+func TestSave_R23_ConsentSignedWithoutTask_R66(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	a, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000211", Kind: KindConsent,
+		Result: json.RawMessage(`{"id":"CNS-000300","consent_id":"photo","title":"Фото и видео во внутренних материалах","status":"signed","signed_at":"2026-11-11T10:00:00Z"}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Status != StatusSigned || a.TaskID != nil || a.Summary != "Согласие: Фото и видео во внутренних материалах — подписано" {
+		t.Fatalf("%+v", a)
+	}
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000212", Kind: KindConsent,
+		Result: json.RawMessage(`{"consent_id":"photo"}`)}); err == nil {
+		t.Fatal("consent without id accepted")
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindConsent, "CNS-000300", "approved", byMaria); !apierr.HasCode(err, apierr.CodeValidation) {
+		t.Fatalf("consent decision: %v", err)
+	}
+}
+
+func TestApplyDecision_S3_ApprovedDayOffNotifiesHRBP(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000221", Kind: KindAbsence,
+		Result: absenceResult("ABS-000221", "2026-11-13", "2026-11-13", "Мария Лебедева")}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000221", "approved", byMaria); err != nil {
+		t.Fatal(err)
+	}
+	var title, body string
+	if err := pool.QueryRow(ctx, `SELECT title, body FROM core.notifications n JOIN core.users u ON u.id = n.user_id
+		WHERE u.role = 'hrbp' ORDER BY n.created_at DESC LIMIT 1`).Scan(&title, &body); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(title, "Отгул оформлен: ") || strings.Contains(body, "согласующий") || !strings.Contains(body, "HR-администратор") {
+		t.Fatalf("%q %q", title, body)
+	}
+	if withoutApprover("abc") != "abc" {
+		t.Fatal("withoutApprover")
 	}
 }
