@@ -75,16 +75,30 @@ describe('proposal cards for trips, consents and decisions', () => {
   })
 })
 
+describe('day off draft tiles', () => {
+  it('shows working days when the agent sends them', () => {
+    render(
+      <ActionProposalCard
+        proposal={proposal('absence_request', { type: 'day_off', start_date: '2026-11-18', end_date: '2026-11-18' }, { working_days: 1 })}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Рабочих дней')).toBeInTheDocument()
+    expect(screen.getByText('1')).toBeInTheDocument()
+  })
+})
+
 describe('HR steps of a day off (Q&A 10.11)', () => {
   it('chain follows the status', () => {
     expect(absenceSteps('approved').map((s) => s.state)).toEqual(['done', 'done', 'done'])
     expect(absenceSteps('rejected').map((s) => s.state)).toEqual(['done', 'skipped', 'skipped'])
-    expect(absenceSteps('pending_approval').every((s) => s.state === 'waiting')).toBe(true)
+    expect(absenceSteps('pending_approval').map((s) => s.state)).toEqual(['current', 'waiting', 'waiting'])
   })
 
   it('result card and requests panel show the steps', () => {
     render(withClient(<ActionResultCard result={{ action_id: 'a1', kind: 'absence_request', status: 'approved', external_id: 'ABS-1' }} />))
-    expect(screen.getByText(/HR-администратор: оформил/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Шаги согласования')).toHaveTextContent('HR-администратор: оформил в кадровой системе')
     render(
       <ActionsPanel
         query={{
@@ -99,7 +113,9 @@ describe('HR steps of a day off (Q&A 10.11)', () => {
       />,
     )
     expect(screen.getByText('Подписано')).toBeInTheDocument()
-    expect(screen.getAllByText(/HR BP: уведомлён/)).toHaveLength(2)
+    const lists = screen.getAllByLabelText('Шаги согласования')
+    expect(lists).toHaveLength(2)
+    for (const l of lists) expect(l).toHaveTextContent('HR BP: уведомлён')
   })
 })
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { keys } from '@/api/keys'
 import { listNotifications, markNotificationRead, type Notification } from '@/api/notifications'
 import { Card } from './ui/Card'
+import { BellIcon } from './ui/icons'
 import '@/plan/plan.css'
 
 /** AI-cron reminders and status changes (R54). Polls once a minute; marking read is optimistic. */
@@ -44,6 +45,7 @@ export function NotificationsBell() {
   return (
     <div className="notif" ref={box}>
       <button type="button" className="notif-btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen((v) => !v)}>
+        <BellIcon />
         Уведомления
         {unread > 0 && (
           <span className="notif-count" aria-label={`Непрочитанных: ${unread}`}>

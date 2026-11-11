@@ -21,7 +21,7 @@ export function ActionResultCard({ result }: { result: ActionResult }) {
       {result.summary && <p>{withoutApprover(result.summary)}</p>}
       {result.approver_display_name && <p className="hint">Согласующий: {result.approver_display_name}</p>}
       {result.kind === 'absence_request' && <Steps steps={absenceSteps(status)} />}
-      <p className="hint">Сохранено в журнале действий</p>
+      <p className="hint chat-saved">Сохранено в журнале действий</p>
     </Card>
   )
 }

@@ -17,6 +17,7 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
     return [
       { label: 'Даты', value: str(display?.dates) || (start === end || !end ? start : `${start} — ${end}`) },
       { label: 'Тип', value: TYPE_TEXT[str(args.type)] ?? str(args.type) },
+      { label: 'Рабочих дней', value: typeof display?.working_days === 'number' ? String(display.working_days) : '' },
       { label: 'Согласующий', value: str(display?.approver_display_name) },
     ]
   }

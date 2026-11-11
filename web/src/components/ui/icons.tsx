@@ -72,3 +72,30 @@ export const ClipIcon = () => (
     <path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" />
   </Icon>
 )
+
+export const QuestionIcon = () => (
+  <Icon>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.4V14M12 17h.01" />
+  </Icon>
+)
+
+export const TeamIcon = () => (
+  <Icon>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 .7 3 2.8 3 6" />
+  </Icon>
+)
+
+export const ApproveIcon = () => (
+  <Icon>
+    <path d="m5 12 4 4 10-10" />
+  </Icon>
+)
+
+export const BellIcon = () => (
+  <Icon>
+    <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" />
+  </Icon>
+)
