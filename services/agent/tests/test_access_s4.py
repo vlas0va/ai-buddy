@@ -11,9 +11,14 @@ def test_S4_01_lists_required_accesses_with_statuses(anna):
     assert "| Confluence | — | чтение, запись | есть |" in t and "| Jira | — | чтение, запись | не запрошен |" in t
     assert "| Ресурс | Окружения | Права | Статус | Кто согласует |" in t  # checkpoint 11.11: a table
     assert "согласование: руководитель команды" in t  # elevated resource is marked
-    kinds = {p["draft"]["args"]["resource_id"] for p in all_of(ev, "action_proposal")}
-    # only missing ordinary ones on read, never elevated or on-demand (database)
-    assert kinds == {"jira", "bitbucket", "jira-dlv", "bb-delivery-api", "space-delivery"}
+    proposals = all_of(ev, "action_proposal")
+    kinds = {p["draft"]["args"]["resource_id"] for p in proposals}
+    # every missing one, the elevated one too (one list with checkboxes); on-demand (database) is not offered
+    assert kinds == {"jira", "bitbucket", "jira-dlv", "bb-delivery-api", "space-delivery", "space-delivery-incidents"}
+    assert [
+        p["requires_approval"] for p in proposals if p["draft"]["args"]["resource_id"] == "space-delivery-incidents"
+    ] == [True]
+    assert "Запросить выбранные" in t
 
 
 def test_S4_02_ordinary_access_request_granted_and_saved(anna):
@@ -84,7 +89,7 @@ def test_S4_11_mentor_sees_what_intern_requested(client, anna):
 def test_S4_12_all_granted_message(anna):
     for p in all_of(anna.say("какие доступы мне нужны"), "action_proposal"):
         anna.confirm(p)
-    assert "Все обычные доступы уже есть" in text_of(anna.say("какие доступы мне нужны"))
+    assert "Все нужные доступы уже есть" in text_of(anna.say("какие доступы мне нужны"))
 
 
 def test_S4_13_concrete_jira_project_and_repository(anna):

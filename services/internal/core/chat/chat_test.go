@@ -831,3 +831,41 @@ func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 		t.Fatal("proposalState")
 	}
 }
+
+// Feedback 12.11: the list of accesses comes as several drafts in one message (checkboxes); the history keeps all of
+// them, each with its own state.
+func TestChat_Feedback_HistoryKeepsAllDraftsOfAMessage_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	draft := func(resource string) agenttest.Event {
+		return agenttest.Event{Name: "action_proposal", Data: map[string]any{"proposal_id": agenttest.NewID(), "kind": "access_request",
+			"summary": "Доступ: " + resource, "draft": map[string]any{"tool": "access.request_access",
+				"args": map[string]any{"resource_id": resource, "reason": "онбординг", "level": "read"}}}}
+	}
+	first, second := draft("confluence"), draft("space-delivery")
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Отметь нужные."}}, first, second, agenttest.Done()}
+	})
+	e.message(sid, anna, "какие доступы мне нужны")
+	e.agent.OnMessage(nil)
+	e.stream(e.confirmPath(sid, first.Data.(map[string]any)["proposal_id"].(string)), anna, nil)
+
+	var h struct {
+		Messages []struct {
+			Proposals []struct {
+				Proposal map[string]any `json:"proposal"`
+				State    string         `json:"state"`
+			} `json:"proposals"`
+		} `json:"messages"`
+	}
+	e.do(http.MethodGet, "/api/chat/sessions/"+sid, anna, nil).json(t, &h)
+	got := h.Messages[1].Proposals
+	if len(got) != 2 || got[0].State != "confirmed" || got[1].State != "pending" ||
+		got[1].Proposal["proposal_id"] != second.Data.(map[string]any)["proposal_id"] {
+		t.Fatalf("drafts %+v", got)
+	}
+	if restoreProposals(json.RawMessage(`{}`), []byte(`{}`)) != nil {
+		t.Fatal("broken cards")
+	}
+}

@@ -193,13 +193,15 @@ type Message struct {
 	Attachments []attachmentMeta  `json:"attachments"`
 	CreatedAt   string            `json:"created_at"`
 	// cards restored after leaving the chat (feedback 11.11); the proposal state and the result come from core's tables
-	Proposal       json.RawMessage `json:"proposal,omitempty"`
-	ProposalState  string          `json:"proposal_state,omitempty"`
-	Result         *actions.Result `json:"result,omitempty"`
-	Escalation     json.RawMessage `json:"escalation,omitempty"`
-	EscalationSent bool            `json:"escalation_sent,omitempty"` // a message to that role was sent after the draft
-	Refusal        json.RawMessage `json:"refusal,omitempty"`
-	NextStep       json.RawMessage `json:"next_step,omitempty"`
+	Proposal      json.RawMessage `json:"proposal,omitempty"`
+	ProposalState string          `json:"proposal_state,omitempty"`
+	// several drafts of one message (the list of accesses with checkboxes), each with its state
+	Proposals      []historyProposal `json:"proposals,omitempty"`
+	Result         *actions.Result   `json:"result,omitempty"`
+	Escalation     json.RawMessage   `json:"escalation,omitempty"`
+	EscalationSent bool              `json:"escalation_sent,omitempty"` // a message to that role was sent after the draft
+	Refusal        json.RawMessage   `json:"refusal,omitempty"`
+	NextStep       json.RawMessage   `json:"next_step,omitempty"`
 }
 
 // attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
@@ -223,11 +225,13 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := h.pool.Query(r.Context(), `SELECT m.id::text, m.author, m.text, m.sources, m.attachments,
-		to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), m.cards, coalesce(p.status, ''),
+		to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), m.cards,
+		coalesce((SELECT jsonb_object_agg(p.id::text, p.status) FROM core.proposals p WHERE p.session_id = m.session_id
+		          AND p.id::text IN (SELECT x->>'proposal_id' FROM jsonb_array_elements(
+		              CASE WHEN jsonb_typeof(m.cards->'proposals') = 'array' THEN m.cards->'proposals' ELSE '[]' END) x)), '{}'),
 		EXISTS (SELECT 1 FROM core.escalations e WHERE e.session_id = m.session_id AND e.created_at > m.created_at
 		        AND e.to_role = m.cards->'escalation'->>'to_role')
 		FROM (SELECT * FROM core.chat_messages WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2) m
-		LEFT JOIN core.proposals p ON p.session_id = m.session_id AND p.id::text = m.cards->'proposal'->>'proposal_id'
 		ORDER BY m.created_at, m.id`, sid, messagesLimit)
 	if err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("load messages: %w", err))
@@ -237,9 +241,8 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	out := []Message{}
 	for rows.Next() {
 		var m Message
-		var sources, atts, rawCards []byte
-		var proposalStatus string
-		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &atts, &m.CreatedAt, &rawCards, &proposalStatus,
+		var sources, atts, rawCards, rawStatuses []byte
+		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &atts, &m.CreatedAt, &rawCards, &rawStatuses,
 			&m.EscalationSent); err != nil {
 			apierr.WriteJSON(w, fmt.Errorf("scan message: %w", err))
 			return
@@ -253,8 +256,9 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		var cards map[string]json.RawMessage
 		_ = json.Unmarshal(rawCards, &cards)
 		m.Escalation, m.Refusal, m.NextStep = cards["escalation"], cards["refusal"], cards["next_step"]
-		if cards["proposal"] != nil && proposalStatus != "" {
-			m.Proposal, m.ProposalState = cards["proposal"], proposalState(proposalStatus)
+		m.Proposals = restoreProposals(cards["proposals"], rawStatuses)
+		if len(m.Proposals) == 1 {
+			m.Proposal, m.ProposalState, m.Proposals = m.Proposals[0].Proposal, m.Proposals[0].State, nil
 		}
 		out = append(out, m)
 	}
@@ -279,6 +283,33 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("load actions for the history", "err", err)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"session_id": sid, "messages": out})
+}
+
+type historyProposal struct {
+	Proposal json.RawMessage `json:"proposal"`
+	State    string          `json:"state"`
+}
+
+// restoreProposals pairs the stored drafts with the state of their proposal; a draft core does not know is dropped.
+func restoreProposals(raw json.RawMessage, rawStatuses []byte) []historyProposal {
+	var list []json.RawMessage
+	var statuses map[string]string
+	if json.Unmarshal(raw, &list) != nil || json.Unmarshal(rawStatuses, &statuses) != nil {
+		return nil
+	}
+	var out []historyProposal
+	for _, p := range list {
+		var id struct {
+			ProposalID string `json:"proposal_id"`
+		}
+		if json.Unmarshal(p, &id) != nil {
+			continue
+		}
+		if st, ok := statuses[id.ProposalID]; ok {
+			out = append(out, historyProposal{Proposal: p, State: proposalState(st)})
+		}
+	}
+	return out
 }
 
 // proposalState is what the chat card shows for a stored proposal.

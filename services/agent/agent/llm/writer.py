@@ -30,7 +30,8 @@ def user_block(user: User, open_tasks: list[str]) -> str:
     tasks = "; ".join(open_tasks[:5]) or "нет данных"
     return (
         f"Имя: {user.display_name or 'не указано'}. Роль: {ROLE_RU.get(user.role, user.role)}. "
-        f"Команда: {TEAM_RU.get(user.team_id, user.team_id)}. Этап: {user.stage or 'не указан'}. "
+        f"Команда: {TEAM_RU.get(user.team_id, user.team_id)}. Офис: {user.location or 'не указан'}. "
+        f"Этап: {user.stage or 'не указан'}. "
         f"Открытые задачи плана: {tasks}."
     )
 
@@ -76,9 +77,12 @@ class LLMWriter:
     ) -> list[dict[str, Any]]:
         open_tasks = [t.title for t in user.tasks if t.status != "done"]
         system = self.config.prompt_text("system").replace("{user_block}", user_block(user, open_tasks))
+        # the paragraph that answers (picked by the question and the user's office) first, then the whole document;
+        # no doc ids: the chat shows the sources as chips, the model must not print ids
         docs = "\n\n".join(
-            f'<doc title="{h["title"]}">\n{h.get("body") or h["snippet"]}\n</doc>' for h in hits
-        )  # no doc ids: the chat shows the sources as chips, the model must not print ids
+            f'<doc title="{h["title"]}">\nГлавное по вопросу:\n{h["snippet"]}\n\nВесь документ:\n{h.get("body") or h["snippet"]}\n</doc>'
+            for h in hits
+        )
         prompt = (
             self.config.prompt_text("answer")
             .replace("{question}", question)

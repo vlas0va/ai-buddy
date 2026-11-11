@@ -134,18 +134,28 @@ export function useChat() {
     [run],
   )
 
-  const confirm = useCallback(
-    (proposalId: string) => {
+  const confirmOne = useCallback(
+    async (proposalId: string) => {
       // idempotency on the client: one in-flight confirm per proposal_id; the server replays a stored result (R66, R79)
       if (inflight.current.has(proposalId) || streamingRef.current) return
       inflight.current.add(proposalId)
       streamingRef.current = true
       setState((s) => startConfirm(s, proposalId))
-      void run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/proposals/${proposalId}/confirm`, undefined, signal)).finally(
+      await run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/proposals/${proposalId}/confirm`, undefined, signal)).finally(
         () => inflight.current.delete(proposalId),
       )
     },
     [run],
+  )
+
+  const confirm = useCallback((proposalId: string) => void confirmOne(proposalId), [confirmOne])
+
+  // the checked drafts of a list, one after another (each is its own request with its own result card)
+  const confirmMany = useCallback(
+    async (proposalIds: string[]) => {
+      for (const id of proposalIds) await confirmOne(id)
+    },
+    [confirmOne],
   )
 
   const cancel = useCallback(async (proposalId: string) => {
@@ -184,5 +194,5 @@ export function useChat() {
     setState(initialState)
   }, [userId])
 
-  return { state, restoring, send, retry, confirm, cancel, newDialog }
+  return { state, restoring, send, retry, confirm, confirmMany, cancel, newDialog }
 }

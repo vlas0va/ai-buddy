@@ -54,7 +54,8 @@ type turnState struct {
 	doneEscalated bool
 	tooLarge      bool // text or sources over the per-turn bounds
 	// cards shown with the message and restored by the history: proposal, escalation, refusal, next_step
-	cards map[string]json.RawMessage
+	cards     map[string]json.RawMessage
+	proposals []json.RawMessage // every stored proposal of the turn (a list of accesses has several)
 }
 
 // maxCard bounds one stored card; a bigger one is relayed but not kept.
@@ -253,7 +254,12 @@ loop:
 				return
 			}
 			st.summary = summary
-			st.card("proposal", ev.Data) // only a proposal core stored can be restored and confirmed
+			if len(ev.Data) <= maxCard && len(st.proposals) < 10 {
+				st.proposals = append(st.proposals, ev.Data) // only a proposal core stored can be restored and confirmed
+				if raw, err := json.Marshal(st.proposals); err == nil {
+					st.card("proposals", raw)
+				}
+			}
 			if sse.Send(ev.Name, ev.Data) != nil {
 				return
 			}

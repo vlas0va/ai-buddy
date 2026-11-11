@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listActions } from '@/api/actions'
 import { keys } from '@/api/keys'
+import { AccessBundleCard } from '@/chat/components/AccessBundleCard'
 import { ActionProposalCard } from '@/chat/components/ActionProposalCard'
 import { ActionResultCard } from '@/chat/components/ActionResultCard'
 import { ActionsPanel } from '@/chat/components/ActionsPanel'
@@ -21,7 +22,7 @@ import { useAsk } from '@/store/ask'
 import { useSession } from '@/store/session'
 
 export function ChatPage() {
-  const { state, restoring, send, retry, confirm, cancel, newDialog } = useChat()
+  const { state, restoring, send, retry, confirm, confirmMany, cancel, newDialog } = useChat()
   const actions = useQuery({ queryKey: keys.actions, queryFn: listActions, refetchOnWindowFocus: true })
   const user = useSession((s) => s.user)
   const [drawer, setDrawer] = useState(false)
@@ -74,7 +75,7 @@ export function ChatPage() {
                 />
               )
               // an error without any text sits next to the avatar, like a buddy message
-              const inlineError = m.text === '' && !m.proposal && !m.result && !m.escalation && !m.refusal
+              const inlineError = m.text === '' && !m.proposal && !m.bundle && !m.result && !m.escalation && !m.refusal
               return (
                 <div key={m.id} className="chat-turn">
                   <MessageBubble
@@ -85,6 +86,14 @@ export function ChatPage() {
                   />
                   {m.proposal && (
                     <ActionProposalCard proposal={m.proposal} disabled={state.streaming} onConfirm={confirm} onCancel={(id) => void cancel(id)} />
+                  )}
+                  {m.bundle && (
+                    <AccessBundleCard
+                      proposals={m.bundle}
+                      disabled={state.streaming}
+                      onConfirmMany={(ids) => void confirmMany(ids)}
+                      onCancel={(id) => void cancel(id)}
+                    />
                   )}
                   {m.result && <ActionResultCard result={m.result} />}
                   {m.escalation && <EscalationDraft draft={m.escalation} canSend={user?.role === 'intern'} sent={m.escalationSent} />}

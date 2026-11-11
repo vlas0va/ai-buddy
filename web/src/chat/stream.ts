@@ -23,6 +23,8 @@ export interface ChatMessage {
   /** files attached to a user message (metadata only) */
   attachments?: AttachmentMeta[]
   proposal: (Proposal & { state: ProposalState }) | null
+  /** several drafts of one message (the missing accesses with checkboxes); then `proposal` is null */
+  bundle?: (Proposal & { state: ProposalState })[]
   result: ActionResult | null
   escalation: EscalationDraftData | null
   /** the draft was already sent (restored from the history) */
@@ -57,6 +59,7 @@ export function fromHistory(history: ChatHistory): ChatState {
       sources: m.sources ?? [],
       attachments: m.attachments ?? [],
       proposal: m.proposal ? { ...m.proposal, state: proposalState } : null,
+      bundle: m.proposals?.length ? m.proposals.map((p) => ({ ...p.proposal, state: p.state })) : undefined,
       result: m.result ?? null,
       escalation: m.escalation ?? null,
       escalationSent: m.escalation_sent ?? false,
@@ -121,7 +124,22 @@ export function startConfirm(state: ChatState, proposalId: string): ChatState {
 }
 
 export function updateProposal(messages: ChatMessage[], proposalId: string, next: ProposalState): ChatMessage[] {
-  return messages.map((m) => (m.proposal?.proposal_id === proposalId ? { ...m, proposal: { ...m.proposal, state: next } } : m))
+  return messages.map((m) => {
+    if (m.proposal?.proposal_id === proposalId) return { ...m, proposal: { ...m.proposal, state: next } }
+    if (m.bundle?.some((p) => p.proposal_id === proposalId)) {
+      return { ...m, bundle: m.bundle.map((p) => (p.proposal_id === proposalId ? { ...p, state: next } : p)) }
+    }
+    return m
+  })
+}
+
+/** Moves every draft in `from` state to `to` (single cards and bundles). */
+function moveStates(messages: ChatMessage[], from: ProposalState, to: ProposalState): ChatMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    proposal: m.proposal?.state === from ? { ...m.proposal, state: to } : m.proposal,
+    bundle: m.bundle?.map((p) => (p.state === from ? { ...p, state: to } : p)),
+  }))
 }
 
 export function setProposalState(state: ChatState, proposalId: string, next: ProposalState): ChatState {
@@ -143,17 +161,24 @@ export const handlers = {
   sources: (s: ChatState, d: { items: Source[] }): ChatState =>
     patchLast(s, (m) => ({ ...m, sources: [...m.sources, ...d.items] })),
   action_proposal: (s: ChatState, d: Proposal): ChatState =>
-    patchLast(s, (m) => ({ ...m, proposal: { ...d, state: 'pending' } })),
+    patchLast(s, (m) => {
+      const item = { ...d, state: 'pending' as const }
+      // a second access draft in the same answer turns the cards into one list with checkboxes (feedback 12.11)
+      if (d.kind === 'access_request' && (m.bundle || m.proposal?.kind === 'access_request')) {
+        return { ...m, proposal: null, bundle: [...(m.bundle ?? (m.proposal ? [m.proposal] : [])), item] }
+      }
+      return { ...m, proposal: item }
+    }),
   action_result: (s: ChatState, d: ActionResult): ChatState => {
     const next = patchLast(s, (m) => ({ ...m, result: d }))
-    return { ...next, messages: next.messages.map((m) => (m.proposal?.state === 'confirming' ? { ...m, proposal: { ...m.proposal, state: 'confirmed' as const } } : m)) }
+    return { ...next, messages: moveStates(next.messages, 'confirming', 'confirmed') }
   },
   escalation_draft: (s: ChatState, d: EscalationDraftData): ChatState => patchLast(s, (m) => ({ ...m, escalation: d })),
   refusal: (s: ChatState, d: Refusal): ChatState => patchLast(s, (m) => ({ ...m, refusal: d })),
   error: (s: ChatState, d: StreamError): ChatState => {
     const next = patchLast(s, (m) => ({ ...m, error: d }))
     return {
-      messages: next.messages.map((m) => (m.proposal?.state === 'confirming' ? { ...m, proposal: { ...m.proposal, state: 'pending' as const } } : m)),
+      messages: moveStates(next.messages, 'confirming', 'pending'),
       streaming: false,
       stage: null,
     }

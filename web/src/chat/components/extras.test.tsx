@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { attachmentKind, formatSize, readAttachment, safeUrl } from '@/chat/attachments'
 import type { Proposal } from '@/chat/events'
 import { absenceSteps } from '@/chat/statusText'
-import { fromHistory, initialState, restartTurn, startTurn } from '@/chat/stream'
+import { fromHistory, initialState, reduce, restartTurn, startConfirm, startTurn } from '@/chat/stream'
+import { AccessBundleCard } from './AccessBundleCard'
 import { ActionProposalCard } from './ActionProposalCard'
 import { ActionResultCard } from './ActionResultCard'
 import { ActionsPanel } from './ActionsPanel'
@@ -260,5 +261,48 @@ describe('Checkpoint 11.11: access to a concrete resource', () => {
     expect(screen.getByText('prod')).toBeInTheDocument()
     expect(screen.getByText('чтение')).toBeInTheDocument()
     expect(screen.getByText('руководитель команды, права выдаёт DevOps')).toBeInTheDocument()
+  })
+})
+
+describe('Feedback 12.11: missing accesses as one list with checkboxes', () => {
+  const access = (id: string, name: string, elevated = false) =>
+    ({
+      proposal_id: id,
+      kind: 'access_request',
+      draft: { tool: 'access.request_access', args: { resource_id: id, level: 'read' }, display: { resource_name: name, elevated } },
+    }) as unknown as Proposal
+
+  it('the reducer turns several access drafts of one answer into a list and tracks each state', () => {
+    let s = startTurn(initialState, 'какие доступы мне нужны')
+    s = reduce(s, { type: 'action_proposal', data: access('a', 'Jira') })
+    expect(s.messages.at(-1)?.proposal?.proposal_id).toBe('a')
+    s = reduce(s, { type: 'action_proposal', data: access('b', 'Закрытое пространство', true) })
+    const m = s.messages.at(-1)!
+    expect(m.proposal).toBeNull()
+    expect(m.bundle?.map((p) => p.proposal_id)).toEqual(['a', 'b'])
+    s = startConfirm(s, 'a')
+    s = reduce(s, { type: 'action_result', data: { action_id: 'x', kind: 'access_request', status: 'granted' } as never })
+    expect(s.messages.find((x) => x.bundle)?.bundle?.map((p) => p.state)).toEqual(['confirmed', 'pending'])
+    expect(fromHistory({ session_id: 's', messages: [{ id: '1', author: 'assistant', text: '', created_at: '', proposals: [{ proposal: access('c', 'X'), state: 'cancelled' }] }] } as never).messages[0]?.bundle?.[0]?.state).toBe('cancelled')
+  })
+
+  it('ordinary accesses are checked, the ones needing approval are not; the button sends the checked ones', async () => {
+    const onConfirmMany = vi.fn()
+    const items = [access('a', 'Jira'), access('b', 'Закрытое пространство', true)].map((p) => ({ ...p, state: 'pending' as const }))
+    render(<AccessBundleCard proposals={items} onConfirmMany={onConfirmMany} onCancel={vi.fn()} />)
+    expect(screen.getByLabelText('Jira · чтение')).toBeChecked()
+    expect(screen.getByLabelText('Закрытое пространство · чтение')).not.toBeChecked()
+    expect(screen.getByText('согласует руководитель')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Закрытое пространство · чтение'))
+    await userEvent.click(screen.getByRole('button', { name: 'Запросить выбранные (2)' }))
+    expect(onConfirmMany).toHaveBeenCalledWith(['a', 'b'])
+  })
+
+  it('finished lists show the states and no buttons', () => {
+    const items = [{ ...access('a', 'Jira'), state: 'confirmed' as const }, { ...access('b', 'Bitbucket'), state: 'cancelled' as const }]
+    render(<AccessBundleCard proposals={items} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('отправлено')).toBeInTheDocument()
+    expect(screen.getByText('отменено')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Запросить/ })).not.toBeInTheDocument()
   })
 })

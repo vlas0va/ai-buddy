@@ -21,6 +21,7 @@ const historySchema = chatHistorySchema.extend({
     chatMessageSchema.extend({
       proposal: proposalSchema.optional(),
       proposal_state: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
+      proposals: z.array(z.object({ proposal: proposalSchema, state: z.enum(['pending', 'confirmed', 'cancelled']) })).optional(),
       result: resultSchema.optional(),
       // feedback 11.11: the draft to the mentor, a refusal and the next step survive leaving the chat
       escalation: escalationDraftSchema.optional().catch(undefined),
