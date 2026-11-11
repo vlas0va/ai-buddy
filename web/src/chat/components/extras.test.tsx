@@ -190,3 +190,15 @@ describe('attachments (AT-xx)', () => {
     expect(h.messages[0]?.attachments?.[0]?.kind).toBe('document')
   })
 })
+
+describe('suggestions by role (checkpoint 11.11)', () => {
+  it('lead and mentor get their own list; unknown roles fall back to the intern list', async () => {
+    const { filterSuggestions } = await import('@/chat/suggestions')
+    const items = (role?: string) => filterSuggestions('', role).flatMap((g) => g.items)
+    expect(items('lead')).toContain('Покажи заявки на согласование')
+    expect(items('mentor')).toContain('Подготовь меня к 1:1 со стажёром')
+    expect(items('mentor')).not.toContain('Хочу взять отгул в пятницу')
+    expect(items('robot')).toEqual(items('intern'))
+    expect(filterSuggestions('1:1', 'lead')[0]?.items).toEqual(['Подготовь меня к 1:1 со стажёром'])
+  })
+})

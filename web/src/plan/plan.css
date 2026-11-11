@@ -48,7 +48,7 @@
 .notif-btn svg { flex: none; }
 .notif-btn:hover { background: var(--color-tile); color: var(--color-text); }
 .notif-count { margin-left: auto; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #d92d2a; color: #fff; font-weight: 700; font-size: var(--text-xs); display: inline-flex; align-items: center; justify-content: center; }
-.notif-panel { position: absolute; z-index: 20; left: 0; top: calc(100% + 4px); width: min(340px, 90vw); max-height: 60vh; overflow: auto; display: grid; gap: var(--space-2); padding: var(--space-3); box-shadow: var(--shadow-md); }
+.notif-panel { position: fixed; z-index: 30; left: 256px; top: var(--space-4); width: min(360px, calc(100vw - 272px)); max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: var(--space-2); padding: var(--space-3); box-shadow: var(--shadow-md); }
 .notif-item { display: grid; gap: 2px; padding: var(--space-2); border-radius: var(--radius-sm); }
 .notif-item.is-unread { background: var(--color-accent-soft); }
 .notif-item p { margin: 0; font-size: var(--text-sm); }

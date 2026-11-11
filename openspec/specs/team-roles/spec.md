@@ -42,3 +42,11 @@ The agent SHALL show mentors and leads the progress of their own interns only.
 #### Scenario: TR-08 Lead sees team interns
 - **WHEN** a lead asks about their intern
 - **THEN** the interns of the lead's mentors are shown
+
+### Requirement: 1:1 preparation for the mentor
+For a mentor or lead the agent SHALL prepare a 1:1 with an intern (progress from the plan, overdue tasks, accesses, feedback tips, next goals) instead of the intern-side «ask your mentor» draft; it SHALL NOT hold the meeting or give the feedback itself.
+
+#### Scenario: S1-16 Mentor 1:1 agenda
+- **WHEN** a mentor asks how to do the plan task «На 1:1 обсуди со стажёром …» or says «подготовь меня к 1:1»
+- **THEN** an agenda for the intern from user_context.mentees is shown with the feedback guide as source and no escalation draft; without mentees the answer points to «Мои стажёры»
+

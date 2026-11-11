@@ -35,9 +35,9 @@ def test_S4_03_elevated_access_goes_through_manager_approval(client, anna):
 def test_S4_04_channels_list_and_draft_to_mentor(anna):
     ev = anna.say("какие каналы есть в команде?")
     assert "#delivery-team" in text_of(ev) and "(закрытый)" in text_of(ev)
-    draft = first(ev, "escalation_draft")
-    assert draft["to_role"] == "mentor" and draft["to_name"] == "Олег Мартынов"
-    assert "#delivery-oncall" in draft["text"]
+    # checkpoint 11.11: chats are asked for in a personal message — advice, no draft
+    assert first(ev, "escalation_draft") is None
+    assert "личные сообщения" in text_of(ev) and "Олег Мартынов" in text_of(ev)
 
 
 def test_S4_05_already_granted_is_not_requested_again(anna):

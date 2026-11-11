@@ -274,6 +274,14 @@ def handle_escalate(turn: Turn, text: str) -> Iterator[Event]:
 
 
 def handle_human_only(turn: Turn, text: str) -> Iterator[Event]:
+    if turn.user.role in (
+        "mentor",
+        "lead",
+    ):  # «дай обратную связь стажёру» from a mentor: prepare the 1:1, not a draft to oneself
+        from .team import handle_one_on_one
+
+        yield from handle_one_on_one(turn, text)
+        return
     mentor = turn.contact("mentor")
     who = f" ({person_name(mentor)})" if mentor else ""
     yield from say(

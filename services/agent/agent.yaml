@@ -180,6 +180,7 @@ intents:
   plan:         {roles: [intern, mentor, lead, alumni], flag: scenario_s1}
   summary:      {roles: [intern, mentor], flag: scenario_s1}
   task_message: {roles: [intern], flag: scenario_s1}
+  one_on_one:   {roles: [mentor, lead]}
   approvals:    {roles: [lead]}
   mentee:       {roles: [mentor, lead]}
   kb_question:  {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}

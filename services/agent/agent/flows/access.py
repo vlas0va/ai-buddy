@@ -10,7 +10,7 @@ from typing import Any
 
 from ..sse import Event, status
 from ..text import normalize
-from .common import Turn, first_name, items, person_name, say
+from .common import Turn, items, person_name, say
 
 REQUEST_VERB = re.compile(r"(запрос|оформ|дай|выда|нуж|подключ|открой|получ|хочу)")
 ALL_WORDS = re.compile(r"\b(все|всё|недостающ\w*|остальн\w*)\b")
@@ -159,22 +159,11 @@ def handle_channels(turn: Turn, text: str) -> Iterator[Event]:
     if turn.user.role != "intern":
         return
     mentor = turn.contact("mentor")
-    names = ", ".join(c["name"] for c in channels)
-    hello = f"{first_name(mentor)}, привет!" if mentor else "Привет!"
     who = f" ({person_name(mentor)})" if mentor else ""
+    # checkpoint 11.11: asking for chats is done in a personal message, not through buddy — advice only, no draft
     yield from say(
-        f"\n\nДобавить в каналы может наставник{who}. Подготовил черновик сообщения — можешь отредактировать и "
-        "отправить."
-    )
-    yield Event(
-        "escalation_draft",
-        {
-            "to_role": "mentor",
-            "to_user_id": (mentor or {}).get("user_id"),
-            "to_name": person_name(mentor),
-            "topic": "channels",
-            "text": f"{hello} Добавь меня, пожалуйста, в каналы команды: {names} — включая закрытые. Спасибо!",
-        },
+        "\n\nОткрытые каналы найди по названию в мессенджере и вступи сам. В закрытые добавляет наставник"
+        f"{who} — напиши ему в личные сообщения, какие каналы нужны."
     )
 
 

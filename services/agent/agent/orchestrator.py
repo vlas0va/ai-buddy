@@ -73,6 +73,7 @@ QUIZ_BREAK_INTENTS = {
 }
 SLOT_INTENTS_BLOCKING = {
     "task_message",
+    "one_on_one",
     "absence_status",
     "trip_status",
     "consents",
@@ -289,6 +290,7 @@ class Agent:
             "plan": plan.handle,
             "summary": plan.handle_summary,
             "task_message": plan.handle_task_message,
+            "one_on_one": team.handle_one_on_one,
             "approvals": team.handle_approvals,
             "mentee": team.handle_mentee,
             "whois": qa.handle_whois,

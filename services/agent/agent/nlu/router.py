@@ -100,6 +100,10 @@ def looks_like_log(original: str) -> bool:
 
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
+    (
+        "one_on_one",
+        re.compile(r"подготов\w*\s+(меня\s+)?к\s+(встрече\s+)?1\s*[:\-]\s*1|повестк\w*\s+(для\s+|к\s+)?1\s*[:\-]\s*1"),
+    ),
     ("task_message", re.compile(r"(написать|напиши|сообщение)\s+(\w+\s+)?наставник\w*\s+(про|по|о)\s+задач\w*\s+«")),
     (
         "quiz",

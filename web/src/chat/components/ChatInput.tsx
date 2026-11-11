@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ClipIcon, SendIcon, SuggestIcon } from '@/components/ui/icons'
 import { ACCEPT, KIND_TEXT, MAX_ATTACHMENTS, type OutgoingAttachment, formatSize, readAttachment } from '../attachments'
+import { useSession } from '@/store/session'
 import { filterSuggestions } from '../suggestions'
 
 interface Props {
@@ -20,7 +21,8 @@ export function ChatInput({ disabled, onSend }: Props) {
   const wrapRef = useRef<HTMLFormElement>(null)
   const listId = useId()
 
-  const groups = filterSuggestions(text)
+  const role = useSession((s) => s.user?.role) ?? 'intern'
+  const groups = filterSuggestions(text, role)
   const flat = groups.flatMap((g) => g.items)
   const expanded = open && flat.length > 0
   const optionId = (i: number) => `${listId}-opt-${i}`

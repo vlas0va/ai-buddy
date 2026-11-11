@@ -68,3 +68,20 @@ def test_TR_07_decision_twice_is_conflict(client, anna):
 def test_TR_08_lead_sees_mentees_of_team(client):
     lead = client.login("lead.maria")
     assert "Анна Котова" in text_of(lead.say("как дела у моего стажёра"))
+
+
+def test_S1_16_mentor_prepares_one_on_one(client):
+    oleg = client.login("mentor.oleg")
+    ev = oleg.say("Как выполнить задачу «На 1:1 обсуди со стажёром промежуточные итоги, дай обратную связь по его прогрессу»?")
+    t = text_of(ev)
+    assert first(ev, "done")["intent"] in ("human_only", "one_on_one")
+    assert "Повестка 1:1" in t and "Анна" in t and first(ev, "escalation_draft") is None
+    ev = oleg.say("подготовь меня к 1:1 с Анной")
+    assert first(ev, "done")["intent"] == "one_on_one" and "Обратная связь" in text_of(ev)
+    oleg.ctx["mentees"] = []
+    assert "Мои стажёры" in text_of(oleg.say("подготовь меня к 1:1"))
+
+
+def test_S1_16b_intern_still_gets_draft_for_feedback(anna):
+    ev = anna.say("дай мне обратную связь по моей работе")
+    assert first(ev, "escalation_draft")["to_role"] == "mentor"

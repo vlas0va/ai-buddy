@@ -57,9 +57,9 @@ The agent SHALL refuse requests for another person or another team's resources a
 ### Requirement: Channels and mentor visibility
 The agent SHALL list team channels and prepare a draft asking the mentor to add the intern; the mentor SHALL see what the intern requested.
 
-#### Scenario: S4-04 Channels and draft
+#### Scenario: S4-04 Channels and advice
 - **WHEN** an intern asks about channels
-- **THEN** channels with closed markers and an escalation_draft to the mentor listing them
+- **THEN** channels with closed markers and advice: join open ones yourself, ask the mentor (by name) in a personal message for closed ones; no draft (organizers' feedback: chats are asked for in personal messages)
 
 #### Scenario: S4-11 Mentor view
 - **WHEN** the mentor asks what Anna requested
