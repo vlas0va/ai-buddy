@@ -716,6 +716,8 @@ func TestParseToolResult_BoundToProposal_R71(t *testing.T) {
 func TestCheckResult_S3_MatchesConfirmedDraft_R71(t *testing.T) {
 	absence := draft{Tool: "absence.create_request", Args: json.RawMessage(`{"type":"day_off","start_date":"2026-11-13","end_date":"2026-11-13","comment":""}`)}
 	decision := draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"approved","comment":""}`)}
+	trip := draft{Tool: "trips.create_request", Args: json.RawMessage(`{"city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","purpose":"Встреча"}`)}
+	consent := draft{Tool: "consents.sign", Args: json.RawMessage(`{"consent_id":"photo"}`)}
 	for _, tc := range []struct {
 		name   string
 		d      draft
@@ -729,6 +731,12 @@ func TestCheckResult_S3_MatchesConfirmedDraft_R71(t *testing.T) {
 		{"decision on another approval", decision, `{"id":"APR-2","status":"approved"}`, false},
 		{"decision reversed", decision, `{"id":"APR-1","status":"rejected"}`, false},
 		{"decision still pending", draft{Tool: "approvals.decide", Args: json.RawMessage(`{"approval_id":"APR-1","decision":"pending"}`)}, `{"id":"APR-1","status":"pending"}`, false},
+		{"trip as confirmed", trip, `{"id":"TRP-000200","city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","status":"pending_approval"}`, true},
+		{"trip other city", trip, `{"id":"TRP-000200","city":"Москва","start_date":"2026-11-23","end_date":"2026-11-25","status":"pending_approval"}`, false},
+		{"trip approved at creation", trip, `{"id":"TRP-000200","city":"Казань","start_date":"2026-11-23","end_date":"2026-11-25","status":"approved"}`, false},
+		{"consent as confirmed", consent, `{"id":"CNS-000300","consent_id":"photo","status":"signed"}`, true},
+		{"consent other type", consent, `{"id":"CNS-000300","consent_id":"surveys","status":"signed"}`, false},
+		{"consent not signed", consent, `{"id":"CNS-000300","consent_id":"photo","status":"not_signed"}`, false},
 		{"unknown tool", draft{Tool: "kb.add_faq", Args: json.RawMessage(`{}`)}, `{"id":"x"}`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

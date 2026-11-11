@@ -41,6 +41,8 @@ const (
 	ToolListApprovals  = "approvals.list_pending"
 	ToolDecideApproval = "approvals.decide"
 	ToolAddFAQ         = "kb.add_faq"
+	ToolCreateTrip     = "trips.create_request"
+	ToolSignConsent    = "consents.sign"
 )
 
 // Config configures a Client.
@@ -136,6 +138,27 @@ type AbsenceRequest struct {
 	ApproverDisplayName string `json:"approver_display_name,omitempty"`
 	CreatedAt           string `json:"created_at"`
 	Replayed            bool   `json:"replayed,omitempty"`
+}
+
+// TripRequest is the result of trips.create_request (contracts/schemas/trips.json).
+type TripRequest struct {
+	ID                  string `json:"id"`
+	City                string `json:"city"`
+	StartDate           string `json:"start_date"`
+	EndDate             string `json:"end_date"`
+	Purpose             string `json:"purpose"`
+	Status              string `json:"status"`
+	ApproverID          string `json:"approver_id"`
+	ApproverDisplayName string `json:"approver_display_name,omitempty"`
+}
+
+// ConsentSignature is the result of consents.sign (contracts/schemas/consents.json).
+type ConsentSignature struct {
+	ID        string `json:"id"`
+	ConsentID string `json:"consent_id"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	SignedAt  string `json:"signed_at"`
 }
 
 // AccessRequest is the result of access.request_access (contracts/schemas/access.json).

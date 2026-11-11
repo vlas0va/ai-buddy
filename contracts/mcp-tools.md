@@ -47,6 +47,18 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | access | `list_team_channels` | intern, mentor | no | S4 step 4, CL-04 |
 | access | `request_access` | intern, mentor | **yes** | S4 steps 2–3 |
 | kb (`/mcp/kb`) | `search` | all | no | S2 |
+| trips (`/mcp/trips`) | `get_policy` | intern, mentor, lead | no | командировка: порядок, офисы |
+| trips | `list_my_requests` | intern, mentor, lead | no | командировка: статус |
+| trips | `validate_request` | intern, mentor, lead | no | командировка: проверка города и дат |
+| trips | `create_request` | intern, mentor, lead | **yes** | командировка → согласование руководителя |
+| consents (`/mcp/consents`) | `list` | intern, mentor, lead, hrbp, alumni | no | согласия и их статусы |
+| consents | `sign` | intern, mentor, lead, hrbp, alumni | **yes** | добровольные согласия (фото, опросы) |
+
+Day off steps (organizers' Q&A 10.11): `absence.get_request` returns `steps` — lead approves → HR admin registers the
+day off in the HR system → HR BP is notified. `approvals.decide` on an absence records both HR steps; core notifies the HR BP.
+Trip rules: an Avito office city other than the employee's own, start at least 5 days ahead, at most 14 days, no overlap,
+purpose required; the lead approves via `approvals.decide` (kind `trip_request`). Consents signed in the HR portal at
+hire (personal data, NDA) are shown only; `sign` on them → `forbidden`.
 
 Callers: the agent (A) calls read tools and the S3/S4 write tools after confirmation; core (B) calls `approvals.*`
 (lead decision buttons) and `kb.add_faq` (mentor answer) and issues the confirmation token itself, because the button press
@@ -66,4 +78,6 @@ Not provided on purpose (R72): salary, compensation amounts, medical data, hirin
 | lead `decide` on another team's request | `forbidden` |
 | `search` as intern of team A | only docs with `acl.roles ∋ intern` and `acl.teams ∋ A` (or `*`); private notes only of the caller |
 | `request_access` for an `elevated` resource | created with `pending_approval`, approval item for the lead |
+| `consents.sign` on `pdn` / `nda` | `forbidden` (signed only in the HR portal) |
+| `trips.create_request` to the employee's own city or in less than 5 days | `validation_error` |
 | `get_my_contacts` | only own mentor, lead, HR BP, internship curator — no contact data beyond name and channel |

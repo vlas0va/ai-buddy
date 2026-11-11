@@ -231,9 +231,13 @@ paths:
           application/json:
             schema:
               type: object
-              required: [text]
+              required: []
               properties:
-                text: { type: string, minLength: 1, maxLength: 4000 }
+                text: { type: string, maxLength: 4000, description: "1–4000 characters; may be empty when attachments are present" }
+                attachments:
+                  type: array
+                  maxItems: 3
+                  items: { $ref: "#/components/schemas/MessageAttachment" }
       responses:
         "200":
           description: Event stream, see contracts/agent-stream.md
@@ -712,7 +716,24 @@ components:
         sources:
           type: array
           items: { $ref: "#/components/schemas/Source" }
+        attachments:
+          type: array
+          description: Metadata of the files attached to a user message (never their text)
+          items: { $ref: "#/components/schemas/MessageAttachment" }
         created_at: { type: string, format: date-time }
+
+    MessageAttachment:
+      type: object
+      required: [name, kind, size]
+      description: >
+        A file attached in the chat. The browser reads text files (logs, configs, code) and sends their text; screenshots
+        and documents are sent as metadata only, their content never leaves the browser.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        kind: { type: string, enum: [text, image, document] }
+        mime: { type: string, maxLength: 100 }
+        size: { type: integer, minimum: 0, maximum: 20971520 }
+        text: { type: string, maxLength: 32768, description: "kind=text only; dropped for other kinds; not returned in history" }
 
     Source:
       type: object
@@ -720,7 +741,10 @@ components:
       properties:
         doc_id: { type: string }
         title: { type: string }
-        source_type: { type: string, const: test, description: Always test in the prototype (R69) }
+        source_type:
+          type: string
+          enum: [test, external]
+          description: test = synthetic KB document of the prototype (R69); external = public web page from web search for a general technical question
         url: { type: string }
 
     Action:
@@ -728,12 +752,12 @@ components:
       required: [id, kind, status, summary, created_at]
       properties:
         id: { type: string, format: uuid }
-        kind: { type: string, enum: [absence_request, access_request] }
-        external_id: { type: ["string", "null"], examples: [ABS-000123] }
+        kind: { type: string, enum: [absence_request, access_request, trip_request, consent] }
+        external_id: { type: ["string", "null"], examples: [ABS-000123, TRP-000200, CNS-000300] }
         status:
           type: string
-          enum: [pending_approval, approved, rejected, granted, created, failed]
-          description: granted = access issued (S4); approved = absence approved (S3)
+          enum: [pending_approval, approved, rejected, granted, created, failed, signed]
+          description: granted = access issued (S4); approved = absence or trip approved; signed = voluntary consent signed
         summary: { type: string, examples: ["Отгул 14.11.2026, согласующий — Мария Л."] }
         approver_display_name: { type: ["string", "null"] }
         task_id: { type: ["string", "null"], format: uuid }
@@ -745,7 +769,7 @@ components:
       required: [id, kind, requester_display_name, summary, status, created_at]
       properties:
         id: { type: string }
-        kind: { type: string, enum: [absence_request, access_request] }
+        kind: { type: string, enum: [absence_request, access_request, trip_request] }
         requester_display_name: { type: string }
         summary: { type: string }
         status: { type: string, enum: [pending, approved, rejected] }

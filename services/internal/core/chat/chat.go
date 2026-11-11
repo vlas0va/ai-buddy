@@ -186,11 +186,20 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 
 // Message is the openapi ChatMessage.
 type Message struct {
-	ID        string            `json:"id"`
-	Author    string            `json:"author"`
-	Text      string            `json:"text"`
-	Sources   []json.RawMessage `json:"sources"`
-	CreatedAt string            `json:"created_at"`
+	ID          string            `json:"id"`
+	Author      string            `json:"author"`
+	Text        string            `json:"text"`
+	Sources     []json.RawMessage `json:"sources"`
+	Attachments []attachmentMeta  `json:"attachments"`
+	CreatedAt   string            `json:"created_at"`
+}
+
+// attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
+type attachmentMeta struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+	Mime string `json:"mime,omitempty"`
+	Size int64  `json:"size"`
 }
 
 const messagesLimit = 200
@@ -205,7 +214,7 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	rows, err := h.pool.Query(r.Context(), `SELECT id::text, author, text, sources,
+	rows, err := h.pool.Query(r.Context(), `SELECT id::text, author, text, sources, attachments,
 		to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
 		FROM (SELECT * FROM core.chat_messages WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2) m
 		ORDER BY created_at, id`, sid, messagesLimit)
@@ -217,13 +226,16 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 	out := []Message{}
 	for rows.Next() {
 		var m Message
-		var sources []byte
-		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &m.CreatedAt); err != nil {
+		var sources, atts []byte
+		if err := rows.Scan(&m.ID, &m.Author, &m.Text, &sources, &atts, &m.CreatedAt); err != nil {
 			apierr.WriteJSON(w, fmt.Errorf("scan message: %w", err))
 			return
 		}
 		if err := json.Unmarshal(sources, &m.Sources); err != nil || m.Sources == nil {
 			m.Sources = []json.RawMessage{}
+		}
+		if err := json.Unmarshal(atts, &m.Attachments); err != nil || m.Attachments == nil {
+			m.Attachments = []attachmentMeta{}
 		}
 		out = append(out, m)
 	}

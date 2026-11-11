@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -42,6 +43,8 @@ type Notifier interface {
 const (
 	KindAbsence = "absence_request"
 	KindAccess  = "access_request"
+	KindTrip    = "trip_request"
+	KindConsent = "consent"
 )
 
 // Action statuses (openapi Action.status).
@@ -52,6 +55,7 @@ const (
 	StatusGranted         = "granted"
 	StatusCreated         = "created"
 	StatusFailed          = "failed"
+	StatusSigned          = "signed"
 )
 
 // ErrNotFound is returned when no action matches (ApplyDecision for a request made outside the chat, ByProposal).
@@ -152,7 +156,8 @@ type description struct {
 	approverName  string
 	taskTitle     string
 	checklistItem string  // access: link the checklist task with this item
-	dueAt         *string // absence: the first day off
+	dueAt         *string // absence, trip: the first day
+	noTask        bool    // consent: a signature is not a step of the onboarding plan
 }
 
 // Save records a successful write in q (run it in the transaction that marks the proposal executed): inserts
@@ -185,9 +190,12 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
 	if err != nil {
 		return Action{}, fmt.Errorf("insert action: %w", err)
 	}
-	taskID, err := s.linkTask(ctx, q, in.Claims.Sub, id, d)
-	if err != nil {
-		return Action{}, err
+	var taskID *string
+	if !d.noTask {
+		taskID, err = s.linkTask(ctx, q, in.Claims.Sub, id, d)
+		if err != nil {
+			return Action{}, err
+		}
 	}
 	if taskID != nil {
 		if _, err := q.Exec(ctx, `UPDATE core.actions SET task_id = $2 WHERE id = $1`, id, *taskID); err != nil {
@@ -262,6 +270,36 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 			d.summary = "Доступ: " + resource + " — на согласовании"
 		}
 		return d, nil
+	case KindTrip:
+		var r mcpclient.TripRequest
+		if err := json.Unmarshal(in.Result, &r); err != nil || r.ID == "" {
+			return description{}, fmt.Errorf("trip result without id: %w", apierr.Internal())
+		}
+		name, err := s.displayName(ctx, q, firstNonEmpty(r.ApproverDisplayName, in.ApproverName), &r.ApproverID)
+		if err != nil {
+			return description{}, err
+		}
+		dates := ruDate(r.StartDate)
+		if r.EndDate != "" && r.EndDate != r.StartDate {
+			dates += "–" + ruDate(r.EndDate)
+		}
+		d := description{externalID: r.ID, status: absenceStatus(r.Status), summary: "Командировка: " + r.City + ", " + dates,
+			taskTitle: "Командировка: " + r.City, approverName: name}
+		if r.StartDate != "" {
+			d.dueAt = &r.StartDate
+		}
+		if name != "" {
+			d.summary += ", согласующий — " + name
+		}
+		return d, nil
+	case KindConsent:
+		var r mcpclient.ConsentSignature
+		if err := json.Unmarshal(in.Result, &r); err != nil || r.ID == "" {
+			return description{}, fmt.Errorf("consent result without id: %w", apierr.Internal())
+		}
+		title := firstNonEmpty(r.Title, r.ConsentID)
+		return description{externalID: r.ID, status: StatusSigned, summary: "Согласие: " + title + " — подписано",
+			noTask: true}, nil
 	default:
 		return description{}, apierr.Validation().WithMessage("Неизвестный тип действия")
 	}
@@ -410,9 +448,54 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 			Title: decisionTitle(kind, status), Body: a.Summary, DedupeKey: "action:" + a.ID + ":" + status}); err != nil {
 			return Action{}, false, fmt.Errorf("notify owner: %w", err)
 		}
+		if kind == KindAbsence && status == StatusApproved {
+			if err := s.notifyHRBP(ctx, q, a); err != nil {
+				return Action{}, false, err
+			}
+		}
 	}
 	a, err = scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
 	return a, err == nil, err
+}
+
+// notifyHRBP tells the HR BPs that an approved day off was registered by the HR admin (organizers' Q&A 10.11: a day off
+// involves the lead, the HR admin and the HR BP). The HR BP gets the summary only: no comment, no reason.
+func (s *Service) notifyHRBP(ctx context.Context, q DBTX, a Action) error {
+	rows, err := q.Query(ctx, `SELECT u.id, owner.display_name FROM core.users u, core.users owner
+		WHERE u.role = 'hrbp' AND owner.id = $1 ORDER BY u.id`, a.UserID)
+	if err != nil {
+		return fmt.Errorf("load hr bp: %w", err)
+	}
+	type target struct{ id, owner string }
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.id, &t.owner); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan hr bp: %w", err)
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("load hr bp: %w", err)
+	}
+	for _, t := range targets {
+		if err := s.notifier.Create(ctx, q, notify.Notification{UserID: t.id, Kind: notify.KindStatusChange,
+			Title: "Отгул оформлен: " + t.owner, Body: withoutApprover(a.Summary) + ". Согласован руководителем, HR-администратор оформил в кадровой системе.",
+			DedupeKey: "hrbp:" + a.ID}); err != nil {
+			return fmt.Errorf("notify hr bp: %w", err)
+		}
+	}
+	return nil
+}
+
+// withoutApprover drops the «, согласующий — …» tail of a summary.
+func withoutApprover(s string) string {
+	if i := strings.Index(s, ", согласующий"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 func (s *Service) emit(ctx context.Context, q DBTX, ev analytics.Event) error {
@@ -427,9 +510,9 @@ func (s *Service) emit(ctx context.Context, q DBTX, ev analytics.Event) error {
 
 func decisionStatus(kind, decision string) (string, error) {
 	switch {
-	case decision == "rejected" && (kind == KindAbsence || kind == KindAccess):
+	case decision == "rejected" && (kind == KindAbsence || kind == KindAccess || kind == KindTrip):
 		return StatusRejected, nil
-	case decision == "approved" && kind == KindAbsence:
+	case decision == "approved" && (kind == KindAbsence || kind == KindTrip):
 		return StatusApproved, nil
 	case (decision == "approved" || decision == "granted") && kind == KindAccess:
 		return StatusGranted, nil
@@ -443,6 +526,10 @@ func decisionTitle(kind, status string) string {
 		return "Отгул согласован"
 	case kind == KindAbsence:
 		return "Отгул отклонён"
+	case kind == KindTrip && status == StatusApproved:
+		return "Командировка согласована"
+	case kind == KindTrip:
+		return "Командировка отклонена"
 	case status == StatusGranted:
 		return "Доступ выдан"
 	default:
