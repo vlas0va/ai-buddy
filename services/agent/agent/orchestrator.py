@@ -29,7 +29,7 @@ from .nlu.router import IntentRouter, Route
 from .retrieval import KnowledgeBase
 from .sse import Event, status
 from .state import StateStore, make_store
-from .text import normalize, same_person
+from .text import generalize, normalize, same_person
 from .tools.base import ToolBackend, ToolGateway
 from .tools.inprocess import InProcessServer, MockServices
 from .tools.mcp_client import McpHttpServer
@@ -420,6 +420,8 @@ class Agent:
             raise Forbidden("Можно пополнять базу знаний только своей команды.")
         if not question.strip() or not answer.strip():
             raise BadRequest("Нужны вопрос и ответ.")
+        names = [e.get("display_name", "") for e in self.mocks.employees.values()] if self.mocks else []
+        question, answer = generalize(question, names), generalize(answer, names)  # an FAQ for every intern
         digest = hashlib.sha1(f"{team_id}:{question}".encode()).hexdigest()[:8]
         doc_id = f"faq-{team_id}-{digest}"
         title = question.strip().rstrip("?")[:90]

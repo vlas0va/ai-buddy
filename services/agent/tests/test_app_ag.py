@@ -155,3 +155,26 @@ def test_AG_14_dev_endpoints(client, anna):
 def test_AG_15_unknown_role_in_token(client):
     tok = mint_token(make_settings().jwt_secret, {"sub": "x", "role": "admin", "team_id": "delivery"})
     assert client.http.get("/v1/agent/config", headers={"Authorization": f"Bearer {tok}"}).status_code == 401
+
+
+def test_S2_22_faq_from_mentor_answer_has_no_names_or_dates_R10(client):
+    from agent.text import generalize
+
+    m = client.login("mentor.oleg")
+    r = client.http.post(
+        "/v1/kb/faq-draft",
+        json={
+            "question": "Олег, привет! Можно ли Анне взять отгул 13 ноября перед релизом?",
+            "answer": "Анна, да, только предупреди Марию Лебедеву за два дня, в пятницу согласует.",
+        },
+        headers=m.headers,
+    ).get_json()
+    text = r["title"] + r["body"] + r["markdown"]
+    for bad in ("Анн", "Олег", "Мари", "Лебедев", "13 ноября", "пятниц", "привет"):
+        assert bad not in text, bad
+    assert r["title"].startswith("Можно ли взять отгул в нужный день") and "предупреди за два дня" in r["body"]
+    names = ["Анна Котова"]
+    assert generalize("Отчёт сдаём 20.11.2026, а завтра — с 1 по 14 декабря.", names) == (
+        "Отчёт сдаём в нужный день, а в нужный день — в нужный день."
+    )
+    assert generalize("Как настроить VPN?", names) == "Как настроить VPN?"

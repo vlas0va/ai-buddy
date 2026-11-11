@@ -40,6 +40,12 @@ function AnswerForm({ e }: { e: Escalation }) {
         <input type="checkbox" checked={toKb} onChange={(ev) => setToKb(ev.target.checked)} />
         Добавить ответ в базу знаний команды (как тестовую инструкцию)
       </label>
+      {toKb && (
+        <p className="hint">
+          Ответ увидят все стажёры команды, поэтому пишите его общим: без имён и конкретных дат. Имена и даты buddy уберёт
+          сам перед добавлением.
+        </p>
+      )}
       {answer.isError && <p className="ui-field-error">{errorMessage(answer.error)}</p>}
       <div className="chat-actions">
         <Button size="sm" loading={answer.isPending} disabled={!text.trim()} onClick={() => answer.mutate()}>
