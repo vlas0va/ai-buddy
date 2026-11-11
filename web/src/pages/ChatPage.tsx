@@ -68,7 +68,9 @@ export function ChatPage() {
               const errorBlock = m.error && (
                 <ErrorBlock
                   error={m.error}
-                  onRetry={m.retryText && !state.streaming ? () => retry(m.id, m.retryText as string) : undefined}
+                  onRetry={
+                    m.retryText !== undefined && !state.streaming ? () => retry(m.id, m.retryText as string, m.retryAttachments) : undefined
+                  }
                 />
               )
               // an error without any text sits next to the avatar, like a buddy message

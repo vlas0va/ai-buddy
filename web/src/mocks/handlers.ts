@@ -4,7 +4,7 @@ import { MOCK_FLAGS, MOCK_PASSWORD, MOCK_USERS, saveState, state, userByToken, u
 import { decideApproval, listPendingApprovals } from './approvals'
 import { findTask, planFor } from './plan'
 import { recordConfirm, recordTurn, setStoredProposalState } from './history'
-import { confirmEvents, messageEvents } from './scenario'
+import { confirmEvents, messageEvents, type MockAttachment } from './scenario'
 import { sseResponse } from './sse'
 
 // Paths and shapes mirror contracts/openapi.yaml; `*` keeps them independent of VITE_API_BASE_URL.
@@ -197,11 +197,12 @@ export const handlers = [
   http.post('*/api/chat/sessions/:sessionId/messages', async ({ request, params }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
-    const body = (await request.json()) as { text?: string }
+    const body = (await request.json()) as { text?: string; attachments?: MockAttachment[] }
     const sessionId = String(params.sessionId)
     if (!state.sessions.has(sessionId)) return notFound()
-    const events = messageEvents(sessionId, user, body.text ?? '')
-    recordTurn(sessionId, body.text ?? '', events)
+    const files = body.attachments ?? []
+    const events = messageEvents(sessionId, user, body.text ?? '', files)
+    recordTurn(sessionId, body.text ?? '', events, files)
     saveState()
     return sseResponse(events)
   }),

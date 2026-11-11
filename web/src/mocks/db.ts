@@ -32,6 +32,7 @@ export interface MockProposal {
 }
 
 export interface StoredMessage {
+  attachments?: { name: string; kind: string; size: number }[]
   id: string
   author: 'user' | 'assistant'
   text: string

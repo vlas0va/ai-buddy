@@ -15,7 +15,11 @@ import './approvals.css'
 
 type Approval = z.infer<typeof approvalSchema>
 
-const KIND_TEXT: Record<Approval['kind'], string> = { absence_request: 'Отсутствие', access_request: 'Доступ' }
+const KIND_TEXT: Record<Approval['kind'], string> = {
+  absence_request: 'Отсутствие',
+  access_request: 'Доступ',
+  trip_request: 'Командировка',
+}
 
 function ApprovalCard({ approval }: { approval: Approval }) {
   const client = useQueryClient()

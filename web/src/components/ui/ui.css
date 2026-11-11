@@ -88,6 +88,7 @@
 .ui-badge-waiting_approval { background: var(--status-waiting_approval-bg); color: var(--status-waiting_approval); }
 .ui-badge-done { background: var(--status-done-bg); color: var(--status-done); }
 .ui-badge-overdue { background: var(--status-overdue-bg); color: var(--status-overdue); }
+.ui-badge-external { background: var(--color-neutral-soft); color: var(--color-neutral); border: 1px dashed var(--color-border); }
 .ui-badge-test { background: var(--color-warning-soft); color: var(--color-warning); border: 1px dashed var(--color-warning); }
 
 /* Avatar */

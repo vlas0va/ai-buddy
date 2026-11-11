@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { contactRoleSchema, sourceSchema } from '@/api/schemas'
+import { ACTION_KINDS, ACTION_STATUSES, contactRoleSchema, sourceSchema } from '@/api/schemas'
 
 // Event payloads from contracts/agent-stream.md. Every payload is parsed; a bad one becomes a local error event.
 
@@ -15,7 +15,7 @@ export type Draft = z.infer<typeof draftSchema>
 
 export const proposalSchema = z.object({
   proposal_id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
   draft: draftSchema,
   summary: z.string().optional(),
 })
@@ -23,9 +23,9 @@ export type Proposal = z.infer<typeof proposalSchema>
 
 export const resultSchema = z.object({
   action_id: z.string(),
-  kind: z.enum(['absence_request', 'access_request']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision']),
   external_id: z.string().nullable().optional(),
-  status: z.enum(['pending_approval', 'approved', 'rejected', 'granted', 'created', 'failed']),
+  status: z.enum(ACTION_STATUSES),
   summary: z.string().optional(),
   approver_display_name: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),

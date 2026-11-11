@@ -17,6 +17,15 @@
 @keyframes chat-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
 .chat-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .chat-chip { padding: 4px var(--space-3); border-radius: 999px; background: var(--color-neutral-soft); font-size: var(--text-sm); }
+.chat-chip-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.chat-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+.chat-attachment { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border-radius: 999px; background: var(--color-neutral-soft); font-size: var(--text-sm); max-width: 100%; overflow-wrap: anywhere; }
+.chat-attachment button { border: 0; background: none; cursor: pointer; font: inherit; color: var(--color-neutral); padding: 0 2px; }
+.chat-input-attachments { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); }
+.chat-input-error { color: var(--color-danger, #b42318); font-size: var(--text-sm); padding: 0 var(--space-2) var(--space-2); }
+.chat-steps { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: 2px; font-size: var(--text-sm); }
+.chat-steps .is-done { color: var(--color-success, inherit); }
+.chat-steps .is-waiting, .chat-steps .is-skipped { color: var(--color-neutral); }
 .chat-chip-btn { border: 1px solid var(--color-border); background: var(--color-surface); cursor: pointer; font: inherit; font-size: var(--text-sm); }
 .chat-chip-btn:hover { border-color: var(--color-accent); }
 .chat-empty { display: grid; gap: var(--space-3); }

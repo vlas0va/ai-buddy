@@ -118,8 +118,11 @@ services:
       CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
       REDIS_URL: redis://redis:6379/1
       AGENT_USE_REDIS: "true"
-      # B's six MCP servers (one binary mcp-mocks). The agent's in-process mocks stay for `make agent-dev` and its tests.
+      # B's eight MCP servers (one binary mcp-mocks). The agent's in-process mocks stay for `make agent-dev` and its tests.
       MCP_BASE_URL: ${MCP_BASE_URL:-http://mcp-mocks:8100/mcp}
+      # Web search for general technical questions: curated (default, offline) | searxng (profile websearch) | off.
+      WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-curated}
+      WEB_SEARCH_URL: ${WEB_SEARCH_URL:-}
       # LLM_* come from ../.env (see .env.example).
     depends_on:
       redis:
@@ -133,6 +136,16 @@ services:
       retries: 10
     ports:
       - "127.0.0.1:${AGENT_HOST_PORT:-8090}:8090"   # debug only; core reaches it at http://agent:8090
+
+  searxng:
+    # Optional live web search: docker compose -f deploy/docker-compose.yml --profile core --profile websearch up -d
+    # and in .env: WEB_SEARCH_PROVIDER=searxng WEB_SEARCH_URL=http://searxng:8080
+    image: searxng/searxng:latest
+    profiles: [websearch]
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-local-dev-only-searxng-secret}
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   ollama:
     # Optional local LLM for demos without an external key: docker compose --profile core --profile ollama up -d

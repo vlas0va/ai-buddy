@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import type { ChatHistory } from '@/api/chat'
-import type { sourceSchema } from '@/api/schemas'
+import type { AttachmentMeta, sourceSchema } from '@/api/schemas'
 import type {
   ActionResult,
   EscalationDraftData,
@@ -20,6 +20,8 @@ export interface ChatMessage {
   author: 'user' | 'assistant'
   text: string
   sources: Source[]
+  /** files attached to a user message (metadata only) */
+  attachments?: AttachmentMeta[]
   proposal: (Proposal & { state: ProposalState }) | null
   result: ActionResult | null
   escalation: EscalationDraftData | null
@@ -30,6 +32,8 @@ export interface ChatMessage {
   serverId?: string
   /** user text that produced this assistant message, used by "Повторить" */
   retryText?: string
+  /** attachments of that user message, sent again by "Повторить" */
+  retryAttachments?: unknown[]
 }
 
 export interface ChatState {
@@ -49,6 +53,7 @@ export function fromHistory(history: ChatHistory): ChatState {
       author: m.author,
       text: m.text,
       sources: m.sources ?? [],
+      attachments: m.attachments ?? [],
       proposal: m.proposal ? { ...m.proposal, state: proposalState } : null,
       result: m.result ?? null,
       escalation: null,
@@ -78,10 +83,12 @@ function blank(author: ChatMessage['author'], text = ''): ChatMessage {
 }
 
 /** Starts a turn: appends the user bubble (unless retrying) and an empty assistant message. */
-export function startTurn(state: ChatState, text: string): ChatState {
-  const assistant = { ...blank('assistant'), retryText: text }
+export function startTurn(state: ChatState, text: string, attachments: (AttachmentMeta & { text?: string })[] = []): ChatState {
+  const assistant = { ...blank('assistant'), retryText: text, retryAttachments: attachments.length ? attachments : undefined }
+  const meta = attachments.map(({ name, kind, mime, size }) => ({ name, kind, mime, size }))
+  const user = { ...blank('user', text), attachments: meta }
   return {
-    messages: [...state.messages, blank('user', text), assistant],
+    messages: [...state.messages, user, assistant],
     streaming: true,
     stage: 'thinking',
   }
@@ -92,7 +99,7 @@ export function restartTurn(state: ChatState, assistantId: string): ChatState {
   const i = state.messages.findIndex((m) => m.id === assistantId)
   if (i === -1) return state
   const retryText = state.messages[i]?.retryText
-  const assistant = { ...blank('assistant'), retryText }
+  const assistant = { ...blank('assistant'), retryText, retryAttachments: state.messages[i]?.retryAttachments }
   return {
     messages: [...state.messages.slice(0, i), assistant, ...state.messages.slice(i + 1)],
     streaming: true,

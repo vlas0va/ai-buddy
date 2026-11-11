@@ -160,7 +160,7 @@ describe('ChatInput', () => {
     expect(onSend).not.toHaveBeenCalled()
     expect(box).toHaveValue('a\nb')
     await userEvent.type(box, '{Enter}')
-    expect(onSend).toHaveBeenCalledWith('a\nb')
+    expect(onSend).toHaveBeenCalledWith('a\nb', [])
     expect(box).toHaveValue('')
   })
 
@@ -177,7 +177,7 @@ describe('ChatInput', () => {
     render(<ChatInput disabled={false} onSend={onSend} />)
     await userEvent.type(screen.getByLabelText('Сообщение'), 'привет')
     await userEvent.click(screen.getByRole('button', { name: 'Отправить' }))
-    expect(onSend).toHaveBeenCalledWith('привет')
+    expect(onSend).toHaveBeenCalledWith('привет', [])
   })
 })
 
@@ -220,7 +220,7 @@ describe('ChatInput suggestions (combobox)', () => {
     await userEvent.keyboard('{ArrowUp}')
     expect(box).toHaveAttribute('aria-activedescendant', options[5]!.id) // wraps
     await userEvent.keyboard('{Enter}')
-    expect(onSend).toHaveBeenCalledWith('Что мне сделать на этой неделе?')
+    expect(onSend).toHaveBeenCalledWith('Что мне сделать на этой неделе?', [])
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
 
@@ -228,7 +228,7 @@ describe('ChatInput suggestions (combobox)', () => {
     const { box, onSend } = setup()
     await userEvent.click(box)
     await userEvent.click(screen.getByRole('option', { name: 'Кто мой наставник?' }))
-    expect(onSend).toHaveBeenCalledWith('Кто мой наставник?')
+    expect(onSend).toHaveBeenCalledWith('Кто мой наставник?', [])
     await userEvent.click(screen.getByRole('button', { name: 'Подсказки' }))
     expect(screen.getByRole('listbox')).toBeInTheDocument()
     await userEvent.click(document.body)

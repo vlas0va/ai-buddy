@@ -7,6 +7,7 @@ import { useChatStore } from '@/store/chat'
 import { useSession } from '@/store/session'
 import type { StreamEvent } from './events'
 import { streamPost } from './sse'
+import type { OutgoingAttachment } from './attachments'
 import {
   fromHistory,
   initialState,
@@ -111,22 +112,24 @@ export function useChat() {
   )
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, attachments: OutgoingAttachment[] = []) => {
       const trimmed = text.trim()
-      if (!trimmed || streamingRef.current) return
+      if ((!trimmed && attachments.length === 0) || streamingRef.current) return
       streamingRef.current = true
-      setState((s) => startTurn(s, trimmed))
-      void run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/messages`, { text: trimmed }, signal))
+      setState((s) => startTurn(s, trimmed, attachments))
+      const body = attachments.length ? { text: trimmed, attachments } : { text: trimmed }
+      void run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/messages`, body, signal))
     },
     [run],
   )
 
   const retry = useCallback(
-    (messageId: string, text: string) => {
+    (messageId: string, text: string, attachments?: unknown[]) => {
       if (streamingRef.current) return
       streamingRef.current = true
       setState((s) => restartTurn(s, messageId))
-      void run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/messages`, { text }, signal))
+      const body = attachments?.length ? { text, attachments } : { text }
+      void run((sid, signal) => streamPost(`/api/chat/sessions/${sid}/messages`, body, signal))
     },
     [run],
   )
