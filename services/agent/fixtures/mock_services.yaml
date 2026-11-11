@@ -15,6 +15,7 @@ employees:
   mentor.sergey: {display_name: "Сергей Орлов",   role: mentor,  team_id: search,   channel: "#search-team",   lead_id: lead.dmitry, hrbp_id: hrbp.elena, curator_id: curator.irina}
   intern.anna:   {display_name: "Анна Котова",    role: intern,  team_id: delivery, channel: "#delivery-team", cohort_days_ago: 10, location: "Москва", mentor_id: mentor.oleg, lead_id: lead.maria, hrbp_id: hrbp.elena, curator_id: curator.irina}
   intern.ivan:   {display_name: "Иван Белов",     role: intern,  team_id: search,   channel: "#search-team",   cohort_days_ago: 3, location: "Санкт-Петербург", mentor_id: mentor.sergey, lead_id: lead.dmitry, hrbp_id: hrbp.elena, curator_id: curator.irina}
+  hradmin.olga:  {display_name: "Ольга Смирнова", role: hr_admin, team_id: people,  channel: "#hr-questions"}
   alumni.petr:   {display_name: "Пётр Никитин",   role: alumni,  team_id: delivery, channel: "#delivery-team", cohort_days_ago: 200, mentor_id: mentor.oleg, lead_id: lead.maria, hrbp_id: hrbp.elena, curator_id: curator.irina}
 
 ask_about:
@@ -54,3 +55,10 @@ demo_plan_status:
   intern.anna: {CL-03: done, CL-04: in_progress}
   intern.ivan: {CL-03: done}
   mentor.oleg: {CL-01: in_progress}
+
+# consents (= migrations/0006 consents.types): pdn and nda are signed in the HR portal at hire, the rest are voluntary
+consents:
+  - {consent_id: pdn, title: "Обработка персональных данных", description: "Подписывается при оформлении в кадровом портале", signable: false, required: true}
+  - {consent_id: nda, title: "Соглашение о конфиденциальности", description: "Подписывается при оформлении в кадровом портале", signable: false, required: true}
+  - {consent_id: photo, title: "Фото и видео во внутренних материалах", description: "Можно использовать ваши фото и видео в рассылках и на внутреннем портале", signable: true, required: false}
+  - {consent_id: surveys, title: "Участие в опросах стажёров", description: "Короткие опросы на 2-й неделе и на экваторе, ответы обезличены", signable: true, required: false}

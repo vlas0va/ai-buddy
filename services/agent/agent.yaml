@@ -36,7 +36,17 @@ nlu:
   model_path: agent/models/intent_model.json
   min_confidence: 0.30
 
-# MCP servers (streamable HTTP, contracts/mcp-tools.md): B runs all six in one binary at http://mcp-mocks:8100/mcp/<server>.
+# Web search for general technical questions the KB does not cover (git, Docker, SQL …): only the masked question
+# leaves the agent, results are external sources («Внешний источник»). curated = official docs list, works offline;
+# searxng = live search through a SearXNG instance (WEB_SEARCH_URL, compose profile websearch); off = disabled.
+web_search:
+  provider: ${WEB_SEARCH_PROVIDER:-curated}
+  url: ${WEB_SEARCH_URL:-}
+  timeout_s: 4
+  max_results: 3
+  curated_path: fixtures/web_curated.yaml
+
+# MCP servers (streamable HTTP, contracts/mcp-tools.md): B runs all eight in one binary at http://mcp-mocks:8100/mcp/<server>.
 # Per-server MCP_<SERVER>_URL wins; else MCP_BASE_URL + "/<server>"; else the in-process mock of that server is used
 # (standalone/dev/test, or until B's server implements its tools).
 mcp_servers:
@@ -46,6 +56,8 @@ mcp_servers:
   checklist: {url: "${MCP_CHECKLIST_URL:-}", timeout_s: 5}   # http://mcp-mocks:8100/mcp/checklist
   access:    {url: "${MCP_ACCESS_URL:-}",    timeout_s: 5}   # http://mcp-mocks:8100/mcp/access
   kb:        {url: "${MCP_KB_URL:-}",        timeout_s: 5}   # http://mcp-mocks:8100/mcp/kb
+  trips:     {url: "${MCP_TRIPS_URL:-}",     timeout_s: 5}   # http://mcp-mocks:8100/mcp/trips
+  consents:  {url: "${MCP_CONSENTS_URL:-}",  timeout_s: 5}   # http://mcp-mocks:8100/mcp/consents
 
 roles: [intern, mentor, lead, hrbp, alumni]
 
@@ -128,6 +140,37 @@ tools:
     write: false
     description: Поиск по базе знаний (результаты уже отфильтрованы по правам роли и команды).
     input_schema: {type: object, properties: {query: {type: string}, k: {type: integer, minimum: 1, maximum: 10}}, required: [query]}
+  - name: trips.get_policy
+    roles: [intern, mentor, lead]
+    write: false
+    description: Правила командировок — офисы, срок подачи заявки, максимальная длительность.
+    input_schema: {type: object, properties: {}}
+  - name: trips.list_my_requests
+    roles: [intern, mentor, lead]
+    write: false
+    description: Мои заявки на командировку и их статусы.
+    input_schema: {type: object, properties: {}}
+  - name: trips.validate_request
+    roles: [intern, mentor, lead]
+    write: false
+    description: Проверить город, даты и цель командировки.
+    input_schema:
+      type: object
+      properties: {city: {type: string}, start_date: {type: string, format: date}, end_date: {type: string, format: date}, purpose: {type: string}}
+      required: [city, start_date, end_date, purpose]
+  - name: trips.create_request
+    roles: [intern, mentor, lead]
+    write: true
+    proposal_kind: trip_request
+  - name: consents.list
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: false
+    description: Мои согласия (персональные данные, NDA, фото, опросы) и их статусы.
+    input_schema: {type: object, properties: {}}
+  - name: consents.sign
+    roles: [intern, mentor, lead, hrbp, alumni]
+    write: true
+    proposal_kind: consent
 
 # Intents available per role (feature flags from core can switch scenarios off per team, R55).
 intents:
@@ -145,3 +188,5 @@ intents:
   troubleshoot: {roles: [intern, mentor, lead], flag: scenario_s2}
   learning:     {roles: [intern, mentor, lead, alumni], flag: scenario_s2}
   benefit:      {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}
+  trip:         {roles: [intern, mentor, lead]}
+  consents:     {roles: [intern, mentor, lead, hrbp, alumni]}

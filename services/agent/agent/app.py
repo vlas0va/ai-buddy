@@ -21,9 +21,20 @@ from .sse import encode
 log = logging.getLogger("agent")
 
 
+class Attachment(BaseModel):
+    """contracts/agent-stream.md turn.attachments: text files carry their text, images and documents metadata only."""
+
+    name: str = Field(min_length=1, max_length=200)
+    kind: Literal["text", "image", "document"]
+    mime: str = Field(default="", max_length=100)
+    size: int = Field(default=0, ge=0)
+    text: str = Field(default="", max_length=32768)
+
+
 class Turn(BaseModel):
     kind: Literal["message", "confirm"] = "message"
     text: str | None = Field(default=None, max_length=4000)
+    attachments: list[Attachment] = Field(default_factory=list, max_length=3)
     proposal_id: str | None = None
     draft: dict[str, Any] | None = None
     confirmation_token: str | None = None
@@ -140,7 +151,7 @@ def create_app(
             for h in req.history
         ]
         t = req.turn
-        if t.kind == "message" and not (t.text or "").strip():
+        if t.kind == "message" and not (t.text or "").strip() and not t.attachments:
             raise BadRequest("Пустое сообщение.")
         if t.kind == "confirm" and not (t.proposal_id and t.draft and t.confirmation_token):
             raise BadRequest("Для подтверждения нужны proposal_id, draft и confirmation_token.", code="bad_proposal")
@@ -149,7 +160,15 @@ def create_app(
             token = clock.set_today(override) if override else None
             try:
                 events = (
-                    agent.chat(user, t.text or "", req.session_id, req.message_id, history, request_id)
+                    agent.chat(
+                        user,
+                        t.text or "",
+                        req.session_id,
+                        req.message_id,
+                        history,
+                        request_id,
+                        attachments=[a.model_dump() for a in t.attachments],
+                    )
                     if t.kind == "message"
                     else agent.confirm(user, t.proposal_id or "", t.draft or {}, t.confirmation_token or "", request_id)
                 )

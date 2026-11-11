@@ -1,0 +1,17 @@
+# Trips, consents and web search (openspec/specs/trips-consents, attachments-websearch). Organizers' Q&A 10.11.
+- {id: tp-01, category: trips, turns: ["как оформить командировку?"], expect: {intent: trip, text_contains: ["за 5 дней", "город, даты и цель"], not_events: [action_proposal]}}
+- {id: tp-02, category: trips, turns: ["оформи командировку в Казань с 23 по 25 ноября, цель — встреча с командой"], expect: {intent: trip, events: [action_proposal], args: {city: "Казань", start_date: "2026-11-23", end_date: "2026-11-25"}}, confirm: true, expect_result: {status: pending_approval}}
+- {id: tp-03, category: trips, turns: ["хочу в командировку в Новосибирск", "с 1 по 3 декабря", "конференция по Go"], expect: {events: [action_proposal], args: {city: "Новосибирск", purpose: "конференция по Go"}}}
+- {id: tp-04, category: trips, turns: ["командировка в Москву с 23 по 25 ноября, цель — встреча"], expect: {text_contains: ["ваш город"], not_events: [action_proposal]}}
+- {id: tp-05, category: trips, turns: ["командировка в Казань завтра, цель — встреча"], expect: {text_contains: ["за 5 дней"], not_events: [action_proposal]}}
+- {id: tp-06, category: trips, user: intern.ivan, turns: ["съездить в офис в Питер с 23 по 24 ноября, цель — встреча"], expect: {text_contains: ["ваш город"]}}
+- {id: tp-07, category: trips, turns: ["где моя заявка на командировку?"], expect: {intent: trip_status, text_contains: ["нет"]}}
+- {id: tp-08, category: refusal, turns: ["закажи мне гостиницу в Казани"], expect: {refusal: {reason: out_of_scope, detail: trip}}}
+- {id: tp-09, category: refusal, user: hrbp.elena, turns: ["оформи командировку в Казань"], expect: {refusal: {reason: no_rights}}}
+- {id: cn-01, category: consents, turns: ["какие у меня согласия?"], expect: {intent: consents, text_contains: ["Обработка персональных данных", "не подписано"]}}
+- {id: cn-02, category: consents, turns: ["подпиши согласие на фото"], expect: {intent: consents, events: [action_proposal], args: {consent_id: photo}}, confirm: true, expect_result: {status: signed}}
+- {id: cn-03, category: consents, turns: ["хочу подписать согласие на обработку персональных данных"], expect: {text_contains: ["уже подписано"], not_events: [action_proposal]}}
+- {id: cn-04, category: consents, turns: ["как отозвать согласие на опросы?"], expect: {text_contains: ["через HR BP"], not_events: [action_proposal]}}
+- {id: ws-01, category: websearch, turns: ["чем rebase отличается от merge?"], expect: {intent: kb_question, text_contains: ["не правила Авито"], not_events: [escalation_draft]}}
+- {id: ws-02, category: websearch, turns: ["как работает индекс в postgres?"], expect: {text_contains: ["открытые источники"]}}
+- {id: ws-03, category: websearch, turns: ["как у нас проходит код-ревью?"], expect: {sources_include: [delivery-code-review], text_not_contains: ["открытые источники"]}}

@@ -1,4 +1,4 @@
-"""In-process mocks of the corporate MCP servers (absence, approvals, access, checklist, directory, kb).
+"""In-process mocks of the corporate MCP servers (absence, approvals, access, checklist, directory, kb, trips, consents).
 
 Used when MCP_<SERVER>_URL is empty: standalone demo, unit tests, eval, and until B's Go servers implement a tool.
 Inputs and outputs follow contracts/schemas/*.json exactly (B's contract), errors follow contracts/mcp-tools.md:
@@ -35,7 +35,16 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "access.list_my_access": {"intern", "mentor"},
     "access.list_team_channels": {"intern", "mentor"},
     "access.request_access": {"intern", "mentor"},
+    "trips.get_policy": {"intern", "mentor", "lead"},
+    "trips.list_my_requests": {"intern", "mentor", "lead"},
+    "trips.validate_request": {"intern", "mentor", "lead"},
+    "trips.create_request": {"intern", "mentor", "lead"},
+    "consents.list": {"intern", "mentor", "lead", "hrbp", "alumni"},
+    "consents.sign": {"intern", "mentor", "lead", "hrbp", "alumni"},
 }
+TRIP_OFFICES = ["Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"]  # = B's mocks/trips.Offices
+TRIP_MIN_NOTICE_DAYS = 5
+TRIP_MAX_DAYS = 14
 ALLOWED_ARGS = {
     "absence.list_my_requests": {"status"},
     "absence.validate_request": {"type", "start_date", "end_date"},
@@ -45,6 +54,9 @@ ALLOWED_ARGS = {
     "access.request_access": {"resource_id", "reason", "idempotency_key", "confirmation_token"},
     "checklist.get_plan_template": {"role"},
     "kb.search": {"query", "k"},
+    "trips.validate_request": {"city", "start_date", "end_date", "purpose"},
+    "trips.create_request": {"city", "start_date", "end_date", "purpose", "idempotency_key", "confirmation_token"},
+    "consents.sign": {"consent_id", "idempotency_key", "confirmation_token"},
 }
 
 
@@ -89,13 +101,33 @@ class MockServices:
             self.absences: list[dict[str, Any]] = copy.deepcopy(self.fixtures.get("absence_requests", []))
             self.accesses: list[dict[str, Any]] = copy.deepcopy(self.fixtures.get("access_requests", []))
             self.approvals: list[dict[str, Any]] = []
+            self.trips: list[dict[str, Any]] = []
+            self.consent_types: list[dict[str, Any]] = copy.deepcopy(self.fixtures.get("consents", []))
+            self.signatures: list[dict[str, Any]] = [
+                {
+                    "id": f"CNS-{i + 1:06d}",
+                    "employee_id": emp,
+                    "consent_id": t["consent_id"],
+                    "via": "hr_portal",
+                    "signed_at": "2026-10-27T09:00:00Z",
+                }
+                for i, (emp, t) in enumerate(
+                    (emp, t) for emp in sorted(self.employees) for t in self.consent_types if not t["signable"]
+                )
+            ]
             for r in self.absences:
                 if r["status"] == "pending_approval":
                     self._open_approval(
                         "absence_request", r["id"], r["employee_id"], r["approver_id"], f"Отгул {self._dates(r)}"
                     )
             self.idempotency: dict[str, dict[str, Any]] = {}
-            self.seq = {"ABS": 100 + len(self.absences), "ACC": 40 + len(self.accesses), "APR": 1}
+            self.seq = {
+                "ABS": 100 + len(self.absences),
+                "ACC": 40 + len(self.accesses),
+                "APR": 1,
+                "TRP": 199,
+                "CNS": 299,
+            }
 
     # ------------------------------------------------------------------ helpers
     def _next_id(self, prefix: str) -> str:
@@ -233,7 +265,33 @@ class MockServices:
             **{k: r.get(k, "") for k in keys},
             "approver_display_name": self.name(r["approver_id"]),
             "created_at": r.get("created_at", "2026-11-01T09:00:00Z"),
+            "steps": self._absence_steps(r),
         }
+
+    def _hr_admin(self) -> str:
+        return next((k for k, e in sorted(self.employees.items()) if e.get("role") == "hr_admin"), "")
+
+    def _absence_steps(self, r: dict[str, Any]) -> list[dict[str, Any]]:
+        """lead approves → HR admin registers in the HR system → HR BP is notified (= B's absence.steps)."""
+        hrbp = r.get("hrbp_id") or self.employees.get(r["employee_id"], {}).get("hrbp_id", "")
+        lead = {"role": "lead", "display_name": self.name(r["approver_id"]), "status": "waiting", "at": None}
+        admin = {
+            "role": "hr_admin",
+            "display_name": self.name(r.get("hr_admin_id") or self._hr_admin()),
+            "status": "waiting",
+            "at": None,
+        }
+        bp = {"role": "hrbp", "display_name": self.name(hrbp), "status": "waiting", "at": None}
+        if r["status"] == "approved":
+            lead.update(status="approved", at=r.get("decided_at"))
+        elif r["status"] in ("rejected", "cancelled"):
+            lead.update(status="rejected", at=r.get("decided_at"))
+            admin["status"] = bp["status"] = "skipped"
+        if r.get("registered_at"):
+            admin.update(status="registered", at=r["registered_at"])
+        if r.get("hrbp_notified_at"):
+            bp.update(status="notified", at=r["hrbp_notified_at"])
+        return [lead, admin, bp]
 
     def t_absence__list_my_requests(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         items = [
@@ -349,6 +407,17 @@ class MockServices:
         if p["kind"] == "absence_request":
             ref = next(r for r in self.absences if r["id"] == p["ref_id"])
             ref["status"] = "approved" if a["decision"] == "approved" else "rejected"
+            ref["decided_at"] = _now_iso()
+            if a["decision"] == "approved":
+                ref |= {
+                    "hr_admin_id": self._hr_admin(),
+                    "registered_at": _now_iso(),
+                    "hrbp_id": self.employees.get(ref["employee_id"], {}).get("hrbp_id", ""),
+                    "hrbp_notified_at": _now_iso(),
+                }
+        elif p["kind"] == "trip_request":
+            ref = next(r for r in self.trips if r["id"] == p["ref_id"])
+            ref["status"] = "approved" if a["decision"] == "approved" else "rejected"
         else:
             ref = next(r for r in self.accesses if r["id"] == p["ref_id"])
             ref["status"] = "granted" if a["decision"] == "approved" else "rejected"
@@ -456,6 +525,162 @@ class MockServices:
         }
 
     # ------------------------------------------------------------------ dev/demo helpers (not MCP tools)
+    # ------------------------------------------------------------------ trips (= B's mocks/trips)
+    def t_trips__get_policy(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "offices": list(TRIP_OFFICES),
+            "min_notice_days": TRIP_MIN_NOTICE_DAYS,
+            "max_days": TRIP_MAX_DAYS,
+            "text": f"Командировка в другой офис Авито согласуется руководителем. Подать заявку нужно не позже чем за "
+            f"{TRIP_MIN_NOTICE_DAYS} дней, длительность — до {TRIP_MAX_DAYS} дней. Билеты и гостиницу после согласования "
+            "бронирует служба командировок (тестовые правила прототипа).",
+        }
+
+    def _trip_view(self, r: dict[str, Any]) -> dict[str, Any]:
+        keys = ("id", "city", "start_date", "end_date", "purpose", "status", "approver_id", "created_at")
+        return {**{k: r[k] for k in keys}, "approver_display_name": self.name(r["approver_id"])}
+
+    def t_trips__list_my_requests(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        mine = [self._trip_view(r) for r in self.trips if r["employee_id"] == c["sub"]]
+        return {"items": sorted(mine, key=lambda r: (r["start_date"], r["id"]), reverse=True)}
+
+    def home_city(self, employee_id: str) -> str:
+        e = self.employees.get(employee_id, {})
+        if e.get("location"):
+            return e["location"]
+        if e.get("role") == "alumni":
+            return "Удалённо"
+        return "Санкт-Петербург" if e.get("team_id") == "search" else "Москва"
+
+    def _validate_trip(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        try:
+            start, end = date.fromisoformat(a.get("start_date", "")), date.fromisoformat(a.get("end_date", ""))
+        except ValueError:
+            raise ToolValidationError("Даты должны быть в формате ГГГГ-ММ-ДД") from None
+        problems: list[str] = []
+        city = (a.get("city") or "").strip()
+        if city not in TRIP_OFFICES:
+            problems.append("Офиса в этом городе нет. Доступно: " + ", ".join(TRIP_OFFICES))
+        elif city == self.home_city(c["sub"]):
+            problems.append("Это ваш город: командировка оформляется только в другой офис")
+        earliest = clock.today() + timedelta(days=TRIP_MIN_NOTICE_DAYS)
+        if start < earliest:
+            problems.append(
+                f"Заявку подают не позже чем за {TRIP_MIN_NOTICE_DAYS} дней: начало не раньше {earliest:%d.%m.%Y}"
+            )
+        if end < start:
+            problems.append("Дата окончания не может быть раньше даты начала")
+        else:
+            if (days := (end - start).days + 1) > TRIP_MAX_DAYS:
+                problems.append(f"Командировка длится не больше {TRIP_MAX_DAYS} дней, у вас {days}")
+            other = next(
+                (
+                    r
+                    for r in sorted(self.trips, key=lambda r: r["start_date"])
+                    if r["employee_id"] == c["sub"]
+                    and r["status"] in ("pending_approval", "approved")
+                    and r["start_date"] <= end.isoformat()
+                    and r["end_date"] >= start.isoformat()
+                ),
+                None,
+            )
+            if other:
+                problems.append(f"Даты пересекаются с другой командировкой ({other['id']})")
+        if not (a.get("purpose") or "").strip():
+            problems.append("Укажите цель командировки")
+        lead = self.employees.get(c["sub"], {}).get("lead_id")
+        out: dict[str, Any] = {"valid": False, "problems": problems}
+        if not lead:
+            problems.append("Не удалось определить согласующего: в справочнике не указан руководитель")
+        else:
+            out |= {"approver_id": lead, "approver_display_name": self.name(lead)}
+        out["valid"] = not problems
+        return out
+
+    def t_trips__validate_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        return self._validate_trip(c, a)
+
+    def t_trips__create_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        self._check_confirmation(c, a)
+        key = f"trip:{a['idempotency_key']}"
+        if (replay := self._replay(key)) is not None:
+            return replay
+        v = self._validate_trip(c, a)
+        if not v["valid"]:
+            raise ToolValidationError(". ".join(v["problems"]))
+        rec = {
+            "id": self._next_id("TRP"),
+            "employee_id": c["sub"],
+            "city": a["city"].strip(),
+            "start_date": a["start_date"],
+            "end_date": a["end_date"],
+            "purpose": a["purpose"].strip(),
+            "status": "pending_approval",
+            "approver_id": v["approver_id"],
+            "created_at": _now_iso(),
+        }
+        self.trips.append(rec)
+        s, e = date.fromisoformat(rec["start_date"]), date.fromisoformat(rec["end_date"])
+        self._open_approval(
+            "trip_request",
+            rec["id"],
+            c["sub"],
+            rec["approver_id"],
+            f"Командировка: {rec['city']}, {s:%d.%m.%Y}–{e:%d.%m.%Y}",
+        )
+        result = {**self._trip_view(rec), "replayed": False}
+        self.idempotency[key] = result
+        return result
+
+    # ------------------------------------------------------------------ consents (= B's mocks/consents)
+    def t_consents__list(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        out = []
+        for t in self.consent_types:
+            g = next(
+                (g for g in self.signatures if g["employee_id"] == c["sub"] and g["consent_id"] == t["consent_id"]),
+                None,
+            )
+            item = {**t, "status": "signed" if g else "not_signed"}
+            if g:
+                item |= {"signed_via": g["via"], "signed_at": g["signed_at"]}
+            out.append(item)
+        return {"items": out}
+
+    def t_consents__sign(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        self._check_confirmation(c, a)
+        key = f"consent:{a['idempotency_key']}"
+        if (stored := self.idempotency.get(key)) is not None:
+            if stored["consent_id"] != a.get("consent_id"):
+                raise ToolValidationError(
+                    "Ключ идемпотентности уже использован, подтвердите действие ещё раз", code="conflict"
+                )
+            return {**stored, "replayed": True}
+        t = next((t for t in self.consent_types if t["consent_id"] == a.get("consent_id")), None)
+        if t is None:
+            raise ToolError("Такого согласия нет", code="not_found", retryable=False, http_status=404)
+        if not t["signable"]:
+            raise ToolDenied(f"«{t['title']}» подписывается только в кадровом портале при оформлении")
+        if any(g["employee_id"] == c["sub"] and g["consent_id"] == t["consent_id"] for g in self.signatures):
+            raise ToolValidationError(f"Согласие «{t['title']}» уже подписано", code="conflict")
+        g = {
+            "id": self._next_id("CNS"),
+            "employee_id": c["sub"],
+            "consent_id": t["consent_id"],
+            "via": "buddy",
+            "signed_at": _now_iso(),
+        }
+        self.signatures.append(g)
+        result = {
+            "id": g["id"],
+            "consent_id": t["consent_id"],
+            "title": t["title"],
+            "status": "signed",
+            "signed_at": g["signed_at"],
+            "replayed": False,
+        }
+        self.idempotency[key] = result
+        return result
+
     def mentees_of(self, mentor_id: str) -> list[dict[str, Any]]:
         out = []
         for eid, e in self.employees.items():

@@ -12,6 +12,7 @@ from typing import Any
 
 from .. import clock
 from ..dates import DateRange, human_range, parse_range, working_days
+from ..errors import ToolError
 from ..retrieval import TEST_BADGE
 from ..sse import Event, status
 from ..text import normalize
@@ -60,7 +61,8 @@ def _explain(turn: Turn) -> Iterator[Event]:
     approver = (lead or {}).get("name") or "руководитель команды"
     yield from say(
         f"По тестовой инструкции «{doc['title']}»: заранее предупреди руководителя и {who}, затем создай заявку в "
-        f"сервисе отсутствий — я подготовлю черновик. Согласует {approver}. Отгул — не больше 3 рабочих дней подряд.\n\n"
+        f"сервисе отсутствий — я подготовлю черновик. Согласует {approver}, затем HR-администратор оформит отгул в "
+        f"кадровой системе, а HR BP получит уведомление. Отгул — не больше 3 рабочих дней подряд.\n\n"
         f"На какие даты оформить? {DATE_HINT}"
     )
 
@@ -94,10 +96,41 @@ def _other_type(turn: Turn, text: str) -> Iterator[Event]:
     )
 
 
+STEP_ROLES = {"lead": "руководитель", "hr_admin": "HR-администратор", "hrbp": "HR BP"}
+STEP_STATUS = {
+    "waiting": "ждёт",
+    "approved": "согласовал",
+    "rejected": "отклонил",
+    "registered": "оформил в кадровой системе",
+    "notified": "уведомлён",
+    "skipped": "не требуется",
+}
+
+
+def steps_line(steps: list[dict[str, Any]]) -> str:
+    """lead → HR admin → HR BP (organizers' Q&A 10.11), e.g. «руководитель (Мария Лебедева): согласовал → …»."""
+    parts = []
+    for s in steps or []:
+        who = STEP_ROLES.get(s.get("role", ""), s.get("role", ""))
+        name = f" ({s['display_name']})" if s.get("display_name") else ""
+        parts.append(f"{who}{name}: {STEP_STATUS.get(s.get('status', ''), s.get('status', ''))}")
+    return " → ".join(parts)
+
+
 def handle_status(turn: Turn, text: str) -> Iterator[Event]:
     yield status("calling_service", "Смотрю заявки в сервисе отсутствий")
     reqs = items(turn.gateway.read("absence.list_my_requests"))
-    if not reqs:
+    trip_lines: list[str] = []
+    if turn.config.is_allowed("trips.list_my_requests", turn.user.role):
+        try:
+            for r in items(turn.gateway.read("trips.list_my_requests")):
+                rng = DateRange(date.fromisoformat(r["start_date"]), date.fromisoformat(r["end_date"]))
+                trip_lines.append(
+                    f"- {r['id']}: командировка {r['city']}, {human_range(rng)} — {STATUS_LABELS.get(r['status'], r['status'])}"
+                )
+        except ToolError:
+            pass  # the trip service is optional for a day-off status
+    if not reqs and not trip_lines:
         yield from say("У тебя пока нет заявок на отгул. Хочешь оформить? Напиши даты, например «в пятницу».")
         return
     lines = []
@@ -105,7 +138,9 @@ def handle_status(turn: Turn, text: str) -> Iterator[Event]:
         rng = DateRange(date.fromisoformat(r["start_date"]), date.fromisoformat(r["end_date"]))
         approver = f", согласующий — {r['approver_display_name']}" if r.get("approver_display_name") else ""
         lines.append(f"- {r['id']}: отгул {human_range(rng)} — {STATUS_LABELS.get(r['status'], r['status'])}{approver}")
-    yield from say("Твои заявки:\n" + "\n".join(lines))
+        if r.get("steps") and r["status"] != "pending_approval":
+            lines.append(f"  Шаги: {steps_line(r['steps'])}")
+    yield from say("Твои заявки:\n" + "\n".join(lines + trip_lines))
 
 
 def handle(turn: Turn, text: str) -> Iterator[Event]:
@@ -195,6 +230,7 @@ def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
         "status_label": STATUS_LABELS.get(r["status"], r["status"]),
         "approver_display_name": r.get("approver_display_name", ""),
         "summary": f"Отгул {human_range(rng)}",
-        "followup": "Заявка отправлена на согласование. Статус обновится здесь, когда руководитель примет решение. "
+        "followup": "Заявка отправлена на согласование. Статус обновится здесь, когда руководитель примет решение; "
+        "после согласования HR-администратор оформит отгул в кадровой системе, а HR BP получит уведомление. "
         "Не забудь лично предупредить наставника, если отгул влияет на задачи.",
     }

@@ -90,7 +90,7 @@ def run_case(app: Any, case: dict[str, Any]) -> dict[str, Any]:
                 failures.append(f"arg {k}={args.get(k)} != {v}")
     if exp.get("escalation_to") and (data.get("escalation_draft") or {}).get("to_role") != exp["escalation_to"]:
         failures.append(f"escalation to {(data.get('escalation_draft') or {}).get('to_role')} != {exp['escalation_to']}")
-    writes = [t for t in done.get("tool_calls", []) if t.endswith(("create_request", "request_access", "decide"))]
+    writes = [t for t in done.get("tool_calls", []) if t.endswith(("create_request", "request_access", "decide", ".sign"))]
     if writes:
         failures.append(f"write tool called in a message turn: {writes}")  # never allowed (RG-03)
     if not names or names[-1] not in ("done", "error"):

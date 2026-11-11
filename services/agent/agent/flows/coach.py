@@ -18,7 +18,13 @@ from ..text import STOPWORDS, normalize, stem, stems, words
 from .common import Turn, first_name, person_name, say
 
 SECRET_PATTERNS = [
-    (re.compile(r"(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)\b(\s*[=:]\s*)(\S+)"), r"\1\2***"),
+    (
+        re.compile(
+            r"(?i)\b(\w*?(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key)\w*)([ \t]*[=:][ \t]*)"
+            r"(?![\s\"']*\*\*\*)([\"']?)[^\s\"']+\3"
+        ),
+        r"\1\2\3***\3",
+    ),
     (re.compile(r"(?i)\b(bearer)\s+[a-z0-9._\-]{12,}"), r"\1 ***"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AKIA***"),
     (re.compile(r"\beyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{5,}"), "<jwt скрыт>"),

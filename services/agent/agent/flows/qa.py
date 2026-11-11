@@ -10,6 +10,8 @@ from typing import Any
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
 from ..text import STOPWORDS, canonical_query, normalize, stems, words
+from ..websearch import is_general_tech
+from .coach import mask_secrets
 from .common import CONTACT_LABELS, Turn, first_name, items, person_name, say
 
 CURATOR_TOPICS = re.compile(r"практик|вуз|учебн|диплом|курсов|экватор|выпускн|методичк|опрос")
@@ -147,6 +149,12 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
+    weak_kb = not hits or (turn.kb is not None and _weak(turn, hits, text))
+    if weak_kb and turn.web is not None and turn.web.enabled and is_general_tech(asked):
+        found = turn.web.search(mask_secrets(asked)[0][:300])  # only the masked question leaves the agent
+        if found:
+            yield from _web_answer(turn, asked, found)
+            return
     if not hits:
         ranking = turn.meta.get("ranking", [])
         work_words = re.search(r"команд|работ|стажир|наставник|задач|проект|офис|сервис", normalize(text))
@@ -210,6 +218,25 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."
         )
+
+
+def _web_answer(turn: Turn, asked: str, found: list[Any]) -> Iterator[Event]:
+    """General technical question outside the KB: public documentation, clearly marked as an external source (WS-01)."""
+    yield status("searching_web", "Ищу в открытых источниках")
+    yield Event("sources", {"items": [r.source() for r in found]})
+    lines = [
+        "Это общий технический вопрос — в базе знаний команды его нет, поэтому посмотрел открытые источники "
+        "(это не правила Авито):",
+        "",
+    ]
+    lines += [f"- {r.title}: {sanitize_snippet(r.snippet)}" if r.snippet else f"- {r.title}" for r in found]
+    lines += [
+        "",
+        "Попробуй сначала сам по документации. Если речь о том, как это принято в вашей команде (ветки, CI, ревью), "
+        "спроси наставника — могу подготовить вопрос.",
+    ]
+    yield from say("\n".join(lines))
+    turn.meta["web_search"] = len(found)
 
 
 def handle_whois(turn: Turn, text: str) -> Iterator[Event]:
@@ -277,7 +304,8 @@ REFUSAL_TEXT = {
 }
 OUT_OF_SCOPE_TEXT = {
     "hr": "Найм и увольнения не входят в мои задачи — это кадровые вопросы.",
-    "trip": "Командировки я не оформляю: решение принимает руководитель, оформление идёт через сервис командировок.",
+    "trip": "Билеты и гостиницу я не бронирую и не оплачиваю: после согласования командировки это делает служба "
+    "командировок. Саму заявку на командировку могу подготовить — напиши город, даты и цель.",
     "benefit": "Бенефиты и компенсации я не оформляю — могу дать только общую справку.",
 }
 

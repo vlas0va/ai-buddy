@@ -13,7 +13,7 @@ INJECTION = re.compile(
     r"(игнорир\w*|забудь|отключи|обойди|ignore|disregard|forget)\s+(\w+\s+){0,3}(инструкц|правил|ограничен|instruction|rule|prompt)"
     r"|системн\w+\s+промпт|system\s*prompt|developer\s*mode|режим\w*\s+(разработчика|бога|админ)|jailbreak|dan\s+mode"
     r"|ты\s+теперь\s+(не\s+)?(buddy|бадди|ассистент|админ)|притворись|представь,?\s+что\s+ты"
-    r"|\b(approvals|absence|access|directory|kb|checklist)\.[a-z_]+",
+    r"|\b(approvals|absence|access|directory|kb|checklist|trips|consents)\.[a-z_]+",
     re.IGNORECASE,
 )
 SENSITIVE = re.compile(
@@ -28,8 +28,9 @@ HIRING_FIRING = re.compile(
     r"уволи|увольн|уволь|наня|найм|нанять|оффер\w*\s+кандидат|открыть\s+вакансию|собеседован\w*\s+кандидат",
     re.IGNORECASE,
 )
+# Booking and paying are the travel service's job; the trip request itself is the «trip» scenario.
 TRIP_OPS = re.compile(
-    r"(оформи|создай|забронируй|закажи|оплати)\w*\s+(\w+\s+)?(командировк|билет|отел|гостиниц)", re.IGNORECASE
+    r"(забронируй|бронируй|закажи|оплати|купи)\w*\s+(\w+\s+){0,2}(билет|отел|гостиниц|жиль|номер\s+в)", re.IGNORECASE
 )
 BENEFIT_OPS = re.compile(
     r"(оформи|подключи|начисли|верни|оплати|компенсируй|возмести)\w*\s+(\w+\s+){0,2}"
@@ -115,6 +116,12 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ),
     ("kb_question", re.compile(r"к\s+кому\s+(мне\s+)?(идти|обращаться|обратиться|пойти)")),
     (
+        "trip_status",
+        re.compile(
+            r"(статус|что\s+с|как\s+там|где)\s+(\w+\s+){0,3}командировк|мои\s+командировк|список\s+(моих\s+)?командировок"
+        ),
+    ),
+    (
         "absence_status",
         re.compile(
             r"(статус|что\s+с|как\s+там|где)\s+(\w+\s+){0,2}(мо\w+\s+)?(заявк|отгул|отпуск)|мои\s+заявк|список\s+(моих\s+)?заявок"
@@ -123,8 +130,19 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     (
         "approvals",
         re.compile(
-            r"(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}(заявк|отгул|abs-|acc-)|на\s+согласовани|ожида\w+\s+(моего\s+)?согласован|заявки\s+(моей\s+)?команды|abs-\d+|acc-\d+"
+            r"(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}(заявк|отгул|abs-|acc-)|на\s+согласовани|ожида\w+\s+(моего\s+)?согласован|заявки\s+(моей\s+)?команды|abs-\d+|acc-\d+|trp-\d+"
+            r"|(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}командировк"
         ),
+    ),
+    (
+        "trip",
+        re.compile(
+            r"командировк|(съездить|поехать|поездк\w*)\s+(\w+\s+)?в\s+(офис|казан|новосибирск|екатеринбург|питер|петербург|москв)"
+        ),
+    ),
+    (
+        "consents",
+        re.compile(r"\bсоглас(ие|ия|ий|ию|иям|иях)\b|\bnda\b|соглаш\w+\s+о\s+(конфиденциальн|неразглашен)"),
     ),
     (
         "absence",
@@ -177,7 +195,7 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
 ]
-WRITE_INTENTS = frozenset({"absence", "access", "approvals"})
+WRITE_INTENTS = frozenset({"absence", "access", "approvals", "trip", "consents"})
 ESCALATE_VERB = re.compile(
     r"спроси|передай|напиши|уточни|позови|соедини|эскалир|нужен\s+человек|живого|нужна\s+помощь\s+человека|подготовь\s+сообщение"
 )
