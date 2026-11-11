@@ -20,7 +20,7 @@ export const errorSchema = z.object({
   retryable: z.boolean(),
 })
 
-export const roleSchema = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'alumni'])
+export const roleSchema = z.enum(['intern', 'mentor', 'lead', 'hrbp', 'alumni', 'hr_admin'])
 export const contactRoleSchema = z.enum(['mentor', 'lead', 'hrbp', 'curator'])
 export const periodSchema = z.enum(['week_1', 'week_2', 'month_1', 'month_2', 'after_3_months'])
 export const taskStatusSchema = z.enum([
@@ -146,7 +146,7 @@ export const chatHistorySchema = z.object({
 })
 
 export const ACTION_KINDS = ['absence_request', 'access_request', 'trip_request', 'consent'] as const
-export const ACTION_STATUSES = ['pending_approval', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed'] as const
+export const ACTION_STATUSES = ['pending_approval', 'pending_hr', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed'] as const
 
 export const actionSchema = z.object({
   id: z.string(),
@@ -166,8 +166,10 @@ export const approvalSchema = z.object({
   kind: z.enum(['absence_request', 'access_request', 'trip_request']),
   requester_display_name: z.string(),
   summary: z.string(),
-  status: z.enum(['pending', 'approved', 'rejected']),
+  status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
   comment: z.string().nullable().optional(),
+  /** lead first, then the HR admin for an absence request (checkpoint 11.11) */
+  stage: z.enum(['lead', 'hr_admin']).optional(),
   created_at: z.string(),
 })
 

@@ -47,7 +47,7 @@ export function AppLayout() {
             <ChatIcon />
             Чат
           </Link>
-          {user?.role !== 'lead' && user?.role !== 'hrbp' && user?.role !== 'alumni' && (
+          {user?.role !== 'lead' && user?.role !== 'hrbp' && user?.role !== 'alumni' && user?.role !== 'hr_admin' && (
             <Link to="/plan" className="nav-link">
               <StepsIcon />
               Мой план
@@ -59,13 +59,13 @@ export function AppLayout() {
               Мои стажёры
             </Link>
           )}
-          {user && user.role !== 'alumni' && (
+          {user && user.role !== 'alumni' && user.role !== 'hr_admin' && (
             <Link to="/questions" className="nav-link">
               <QuestionIcon />
               {user.role === 'intern' ? 'Мои вопросы' : 'Вопросы стажёров'}
             </Link>
           )}
-          {user?.role === 'lead' && (
+          {(user?.role === 'lead' || user?.role === 'hr_admin') && (
             <Link to="/approvals" className="nav-link">
               <ApproveIcon />
               Согласования

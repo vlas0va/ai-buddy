@@ -3,7 +3,7 @@ export interface SuggestionGroup {
   items: string[]
 }
 
-export type SuggestionRole = 'intern' | 'mentor' | 'lead' | 'hrbp' | 'alumni'
+export type SuggestionRole = 'intern' | 'mentor' | 'lead' | 'hrbp' | 'alumni' | 'hr_admin'
 
 /** Suggestions per role: only requests the agent handles for that role (checkpoint 11.11: lead and mentor differ from intern). */
 export const SUGGESTIONS: Record<SuggestionRole, SuggestionGroup[]> = {
@@ -23,6 +23,9 @@ export const SUGGESTIONS: Record<SuggestionRole, SuggestionGroup[]> = {
   hrbp: [
     { title: 'Стажировка', items: ['Как оформляется больничный стажёра?', 'Куда стажёру отправлять документы?'] },
     { title: 'Контакты', items: ['Кто куратор стажировки?'] },
+  ],
+  hr_admin: [
+    { title: 'Согласования', items: ['Покажи заявки на согласование', 'Как оформляется отпуск?'] },
   ],
   alumni: [
     { title: 'Работа', items: ['Как оформить отгул?', 'Где лежат документы команды?', 'К кому идти с вопросом?'] },

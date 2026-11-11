@@ -9,6 +9,7 @@ export const STAGE_TEXT: Record<Stage, string> = {
 
 export const ACTION_STATUS_TEXT: Record<string, string> = {
   pending_approval: 'На согласовании',
+  pending_hr: 'Ждёт HR-администратора',
   approved: 'Согласовано',
   rejected: 'Отклонено',
   granted: 'Доступ выдан',
@@ -19,6 +20,7 @@ export const ACTION_STATUS_TEXT: Record<string, string> = {
 
 export const ACTION_STATUS_VARIANT: Record<string, 'waiting_approval' | 'done' | 'overdue' | 'neutral'> = {
   pending_approval: 'waiting_approval',
+  pending_hr: 'waiting_approval',
   approved: 'done',
   granted: 'done',
   created: 'done',
@@ -46,8 +48,8 @@ export interface Step {
 }
 
 /**
- * Day off goes lead → HR admin → HR BP (organizers' Q&A 10.11). approvals.decide records both HR steps together with the
- * lead's approval, so the chain follows from the action status.
+ * An absence request goes lead → HR admin → HR BP (organizers' Q&A 10.11, checkpoint 11.11): the lead approves, then
+ * the HR admin approves and registers it, the HR BP is notified. The chain follows from the action status.
  */
 export function absenceSteps(status: string): Step[] {
   if (status === 'approved') {
@@ -64,9 +66,16 @@ export function absenceSteps(status: string): Step[] {
       { who: 'HR BP', state: 'skipped', text: 'не требуется' },
     ]
   }
+  if (status === 'pending_hr') {
+    return [
+      { who: 'Руководитель', state: 'done', text: 'согласовал' },
+      { who: 'HR-администратор', state: 'current', text: 'согласует; до этого даты можно перенести' },
+      { who: 'HR BP', state: 'waiting', text: 'получит уведомление' },
+    ]
+  }
   return [
     { who: 'Руководитель', state: 'current', text: 'согласует' },
-    { who: 'HR-администратор', state: 'waiting', text: 'оформит после согласования' },
+    { who: 'HR-администратор', state: 'waiting', text: 'согласует после руководителя' },
     { who: 'HR BP', state: 'waiting', text: 'получит уведомление' },
   ]
 }

@@ -54,6 +54,19 @@ describe('S3 step 8: manager approval', () => {
     lead.unmount()
 
     signInAs('intern.anna')
+    const waiting = mountApp('/chat')
+    expect(await within(await screen.findByLabelText('Результат заявки')).findByText('Ждёт HR-администратора')).toBeInTheDocument()
+    waiting.unmount()
+
+    signInAs('hradmin.olga')
+    const admin = mountApp('/chat')
+    expect(screen.queryByRole('link', { name: 'Мой план' })).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('link', { name: 'Согласования' }))
+    await userEvent.click(within(await screen.findByLabelText('Заявка: Анна Соколова')).getByRole('button', { name: 'Согласовать' }))
+    expect(await screen.findByText('Заявок на согласование нет.')).toBeInTheDocument()
+    admin.unmount()
+
+    signInAs('intern.anna')
     mountApp('/chat')
     const result = await screen.findByLabelText('Результат заявки')
     expect(await within(result).findByText('Согласовано')).toBeInTheDocument()

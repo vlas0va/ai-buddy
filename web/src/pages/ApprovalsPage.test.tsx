@@ -32,7 +32,7 @@ describe('S3 step 8: manager approvals page', () => {
   it('S3_R66: lead sees who/what/when and approves with a comment only after a click', async () => {
     const action = seedRequest('intern.anna', 'хочу отгул в пятницу')
     signInAs('lead.maria')
-    mountWithClient(<ApprovalsPage />)
+    const leadView = mountWithClient(<ApprovalsPage />)
 
     const card = await screen.findByLabelText('Заявка: Анна Соколова')
     expect(within(card).getByText('Отсутствие')).toBeInTheDocument()
@@ -44,6 +44,17 @@ describe('S3 step 8: manager approvals page', () => {
 
     expect(await screen.findByText('Заявок на согласование нет.')).toBeInTheDocument()
     expect(decisionCalls[0]).toMatchObject({ id: action.id, body: { decision: 'approved', comment: 'Хорошего отдыха' } })
+    // checkpoint 11.11: the lead's approval passes the request to the HR admin
+    expect(state.actions.get('intern.anna')![0]!.status).toBe('pending_hr')
+    expect(state.extraTasks.get('intern.anna')![0]!.status).toBe('waiting_approval')
+    leadView.unmount()
+
+    signInAs('hradmin.olga')
+    mountWithClient(<ApprovalsPage />)
+    const hrCard = await screen.findByLabelText('Заявка: Анна Соколова')
+    expect(within(hrCard).getByText(/Этап: HR-администратор/)).toBeInTheDocument()
+    await userEvent.click(within(hrCard).getByRole('button', { name: 'Согласовать' }))
+    expect(await screen.findByText('Заявок на согласование нет.')).toBeInTheDocument()
     expect(state.actions.get('intern.anna')![0]!.status).toBe('approved')
     expect(state.extraTasks.get('intern.anna')![0]!.status).toBe('done')
   })
@@ -53,7 +64,7 @@ describe('S3 step 8: manager approvals page', () => {
     signInAs('lead.maria')
     mountWithClient(<ApprovalsPage />)
     const card = await screen.findByLabelText('Заявка: Анна Соколова')
-    expect(within(card).getByText(/HR-администратор оформит отгул/)).toBeInTheDocument()
+    expect(within(card).getByText(/заявку согласует HR-администратор/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Все · 1' })).toHaveAttribute('aria-pressed', 'true')
     await userEvent.click(screen.getByRole('button', { name: 'Командировки · 0' }))
     expect(screen.getByText('Заявок этого типа нет.')).toBeInTheDocument()

@@ -589,7 +589,7 @@ components:
 
     Role:
       type: string
-      enum: [intern, mentor, lead, hrbp, alumni]
+      enum: [intern, mentor, lead, hrbp, alumni, hr_admin]
 
     ContactRole:
       type: string
@@ -756,7 +756,7 @@ components:
         external_id: { type: ["string", "null"], examples: [ABS-000123, TRP-000200, CNS-000300] }
         status:
           type: string
-          enum: [pending_approval, approved, rejected, granted, created, failed, signed]
+          enum: [pending_approval, pending_hr, approved, rejected, granted, created, failed, signed]
           description: granted = access issued (S4); approved = absence or trip approved; signed = voluntary consent signed
         summary: { type: string, examples: ["Отгул 14.11.2026, согласующий — Мария Л."] }
         approver_display_name: { type: ["string", "null"] }
@@ -772,8 +772,12 @@ components:
         kind: { type: string, enum: [absence_request, access_request, trip_request] }
         requester_display_name: { type: string }
         summary: { type: string }
-        status: { type: string, enum: [pending, approved, rejected] }
+        status: { type: string, enum: [pending, approved, rejected, cancelled] }
         comment: { type: ["string", "null"] }
+        stage:
+          type: string
+          enum: [lead, hr_admin]
+          description: absence requests are decided by the lead, then by the HR admin (checkpoint 11.11)
         created_at: { type: string, format: date-time }
 
     Escalation:

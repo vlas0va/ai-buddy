@@ -10,6 +10,7 @@ export const MOCK_USERS: User[] = [
   { id: 'mentor.oleg', login: 'mentor.oleg', display_name: 'Олег Крылов', role: 'mentor', team_id: 'delivery', team_name: 'Доставка' },
   { id: 'lead.maria', login: 'lead.maria', display_name: 'Мария Лебедева', role: 'lead', team_id: 'delivery', team_name: 'Доставка' },
   { id: 'hrbp.elena', login: 'hrbp.elena', display_name: 'Елена Орлова', role: 'hrbp', team_id: 'hr', team_name: 'HR' },
+  { id: 'hradmin.olga', login: 'hradmin.olga', display_name: 'Ольга Смирнова', role: 'hr_admin', team_id: 'people', team_name: 'HR' },
   { id: 'alumni.petr', login: 'alumni.petr', display_name: 'Пётр Волков', role: 'alumni', team_id: 'delivery', team_name: 'Доставка' },
 ]
 

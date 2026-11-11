@@ -6,4 +6,5 @@ export const ROLE_LABELS: Record<Role, string> = {
   lead: 'Руководитель',
   hrbp: 'HR BP',
   alumni: 'Выпускник',
+  hr_admin: 'HR-администратор',
 }

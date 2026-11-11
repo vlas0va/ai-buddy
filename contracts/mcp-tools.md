@@ -37,8 +37,9 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | absence | `validate_request` | intern, mentor, lead | no | S3 step 2 |
 | absence | `create_request` | intern, mentor, lead | **yes** | S3 steps 5–7 |
 | absence | `get_request` | intern, mentor, lead (own only) | no | S3 step 8 |
-| approvals (`/mcp/approvals`) | `list_pending` | lead | no | S3 step 8, S4 |
-| approvals | `decide` | lead (own team only) | **yes** | S3 step 8, S4 |
+| absence | `reschedule_request` | intern, mentor, lead (own only) | **yes** | перенос до согласования HR-администратором |
+| approvals (`/mcp/approvals`) | `list_pending` | lead, hr_admin | no | S3 step 8, S4 |
+| approvals | `decide` | lead (own team only), hr_admin (second stage) | **yes** | S3 step 8, S4 |
 | directory (`/mcp/directory`) | `whoami` | all | no | S2 |
 | directory | `get_my_contacts` | all | no | S2 «к кому идти», CL-02, CL-03 |
 | checklist (`/mcp/checklist`) | `get_plan_template` | all | no | S1 |
@@ -54,8 +55,11 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | consents (`/mcp/consents`) | `list` | intern, mentor, lead, hrbp, alumni | no | согласия и их статусы |
 | consents | `sign` | intern, mentor, lead, hrbp, alumni | **yes** | добровольные согласия (фото, опросы) |
 
-Day off steps (organizers' Q&A 10.11): `absence.get_request` returns `steps` — lead approves → HR admin registers the
-day off in the HR system → HR BP is notified. `approvals.decide` on an absence records both HR steps; core notifies the HR BP.
+Absence request (checkpoint 11.11): one request with dates, a type (`day_off`, `vacation` ≥ 14 days ahead and ≤ 28 days,
+`absence` ≤ 5 days, `parental_leave` with a document) and up to 3 documents (metadata). `approvals.decide` by the lead
+moves it to `pending_hr` and opens an item with `stage: hr_admin`; the HR admin's approval makes it `approved`, registers
+it and notifies the HR BP. Until then `reschedule_request` moves the dates (validated with `exclude_id`), cancels the open
+item and sends the request back to the lead. `absence.get_request` returns `steps`: lead → HR admin → HR BP.
 Trip rules: an Avito office city other than the employee's own, start at least 5 days ahead, at most 14 days, no overlap,
 purpose required; the lead approves via `approvals.decide` (kind `trip_request`). Consents signed in the HR portal at
 hire (personal data, NDA) are shown only; `sign` on them → `forbidden`.

@@ -202,3 +202,44 @@ describe('suggestions by role (checkpoint 11.11)', () => {
     expect(filterSuggestions('1:1', 'lead')[0]?.items).toEqual(['Подготовь меня к 1:1 со стажёром'])
   })
 })
+
+describe('Checkpoint 11.11: absence types, HR admin stage, reschedule', () => {
+  it('absence steps: after the lead, the HR admin is the current step', () => {
+    expect(absenceSteps('pending_hr').map((s) => s.state)).toEqual(['done', 'current', 'waiting'])
+  })
+
+  it('vacation draft shows the type, calendar days, documents and both approvers', () => {
+    const p = {
+      proposal_id: 'v1',
+      kind: 'absence_request',
+      state: 'pending',
+      draft: {
+        tool: 'absence.create_request',
+        args: { type: 'vacation', start_date: '2026-12-01', end_date: '2026-12-10' },
+        display: { dates: '01.12.2026–10.12.2026', calendar_days: 10, documents: ['заявление.pdf'], approver_display_name: 'Мария Лебедева' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('Отпуск')).toBeInTheDocument()
+    expect(screen.getByText('Календарных дней')).toBeInTheDocument()
+    expect(screen.getByText('заявление.pdf')).toBeInTheDocument()
+    expect(screen.getByText('HR-администратор')).toBeInTheDocument()
+  })
+
+  it('reschedule draft shows the old and the new dates', () => {
+    const p = {
+      proposal_id: 'r1',
+      kind: 'absence_reschedule',
+      state: 'pending',
+      draft: {
+        tool: 'absence.reschedule_request',
+        args: { id: 'ABS-000101', start_date: '2026-12-08', end_date: '2026-12-17' },
+        display: { ref_id: 'ABS-000101', type_label: 'Отпуск', old_period_label: 'с 1 по 10 декабря', period_label: 'с 8 по 17 декабря' },
+      },
+    } as unknown as Proposal & { state: 'pending' }
+    render(<ActionProposalCard proposal={p} onConfirm={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('Перенос заявки')).toBeInTheDocument()
+    expect(screen.getByText('ABS-000101 — Отпуск')).toBeInTheDocument()
+    expect(screen.getByText('с 8 по 17 декабря')).toBeInTheDocument()
+  })
+})

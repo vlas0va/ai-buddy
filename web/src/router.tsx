@@ -51,12 +51,13 @@ const indexRoute = createRoute({
 const chatRoute = createRoute({ getParentRoute: () => appRoute, path: '/chat', component: ChatPage })
 const planRoute = createRoute({ getParentRoute: () => appRoute, path: '/plan', component: PlanPage })
 
-// only a lead decides requests; the server returns 403 for everyone else, this guard just keeps the page out of reach
+// only a lead and the HR admin (second stage of an absence) decide requests; the server returns 403 for everyone else, this guard just keeps the page out of reach
 const approvalsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/approvals',
   beforeLoad: () => {
-    if (useSession.getState().user?.role !== 'lead') throw redirect({ to: '/chat' })
+    const role = useSession.getState().user?.role
+    if (role !== 'lead' && role !== 'hr_admin') throw redirect({ to: '/chat' })
   },
   component: ApprovalsPage,
 })
@@ -82,7 +83,8 @@ const questionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/questions',
   beforeLoad: () => {
-    if (useSession.getState().user?.role === 'alumni') throw redirect({ to: '/chat' })
+    const role = useSession.getState().user?.role
+    if (role === 'alumni' || role === 'hr_admin') throw redirect({ to: '/chat' })
   },
   component: EscalationsPage,
 })

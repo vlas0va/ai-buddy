@@ -20,13 +20,15 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   }
 })
 
-test('S4: channels of the team come with a draft to the mentor', async ({ page }) => {
+// checkpoint 11.11: adding to groups is asked in personal messages, so buddy gives advice without a draft
+test('S4: channels of the team come with advice to write the mentor personally', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)
   await ask(page, 'в какие каналы мне вступить?')
   await waitAnswer(page)
   await expect(lastTurn(page)).toContainText('#delivery')
-  await expect(page.getByLabel('Черновик сообщения').last()).toBeVisible()
+  await expect(lastTurn(page)).toContainText('личные сообщения')
+  await expect(lastTurn(page).getByLabel('Черновик сообщения')).toHaveCount(0)
 })
 
 test('S4: a clone question is engineering help, not an access request', async ({ page }) => {
