@@ -112,7 +112,11 @@ class OpenAICompatClient:
     def _raise_for(resp: httpx.Response) -> None:
         if resp.status_code >= 400:
             retryable = resp.status_code in (408, 429) or resp.status_code >= 500
-            raise LLMError(f"Модель вернула ошибку {resp.status_code}.", retryable=retryable)
+            try:
+                detail = resp.text[:200]  # e.g. Ollama «model "…" not found»
+            except Exception:  # noqa: BLE001 - a streamed body may be unreadable
+                detail = ""
+            raise LLMError(f"Модель вернула ошибку {resp.status_code}. {detail}".strip(), retryable=retryable)
 
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> Completion:
         try:

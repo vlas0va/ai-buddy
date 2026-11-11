@@ -4,6 +4,7 @@ OpenAI-compatible model and may call READ tools of the user's role. Both receive
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Iterator
 from typing import Any
 
@@ -12,6 +13,8 @@ from ..config import AgentConfig
 from ..errors import LLMError, ToolError
 from ..tools.base import ToolGateway
 from .openai_compat import OpenAICompatClient
+
+log = logging.getLogger("agent.llm")
 
 ROLE_RU = {
     "intern": "стажёр",
@@ -115,7 +118,11 @@ class LLMWriter:
             if self.tool_calling and gateway is not None:
                 msgs = self._run_tools(msgs, user, gateway)
             yield from self.client.stream(msgs)
-        except LLMError:
+        except LLMError as exc:
+            # the reason goes to the log, so «упрощённый режим» can be diagnosed (model name, address, timeout)
+            log.warning(
+                "LLM failed, answering with the stub: %s (url=%s model=%s)", exc, self.client.url, self.client.model
+            )
             if not self.fallback:
                 raise
             if meta is not None:
