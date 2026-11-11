@@ -500,3 +500,49 @@ func TestRoundTrip_S3_HTTP_R71(t *testing.T) {
 		t.Fatalf("requests = %d", n)
 	}
 }
+
+func TestGetRequest_S3_StepsLeadHRAdminHRBP(t *testing.T) {
+	e := newEnv(t)
+	own := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), dayOff("2026-11-10", "2026-11-10")))
+	type stepOut struct {
+		Role, DisplayName, Status, At string
+	}
+	read := func() []stepOut {
+		raw, terr := e.call(anna, "get_request", map[string]any{"id": own.ID})
+		if terr != nil {
+			t.Fatal(terr)
+		}
+		var out struct {
+			Steps []struct {
+				Role        string `json:"role"`
+				DisplayName string `json:"display_name"`
+				Status      string `json:"status"`
+				At          string `json:"at"`
+			} `json:"steps"`
+		}
+		if err := json.Unmarshal(raw, &out); err != nil {
+			t.Fatal(err)
+		}
+		var s []stepOut
+		for _, x := range out.Steps {
+			s = append(s, stepOut{x.Role, x.DisplayName, x.Status, x.At})
+		}
+		return s
+	}
+	got := read()
+	if len(got) != 3 || got[0] != (stepOut{"lead", "Мария Лебедева", "waiting", ""}) ||
+		got[1] != (stepOut{"hr_admin", "Ольга Смирнова", "waiting", ""}) || got[2] != (stepOut{"hrbp", "Елена Соколова", "waiting", ""}) {
+		t.Fatalf("pending steps %+v", got)
+	}
+	e.exec(`UPDATE absence.requests SET status = 'approved', decided_at = now(), registered_at = now(), hrbp_notified_at = now()
+WHERE id = $1`, own.ID)
+	got = read()
+	if got[0].Status != "approved" || got[1].Status != "registered" || got[2].Status != "notified" || got[1].At == "" {
+		t.Fatalf("approved steps %+v", got)
+	}
+	e.exec(`UPDATE absence.requests SET status = 'rejected', registered_at = NULL, hrbp_notified_at = NULL WHERE id = $1`, own.ID)
+	got = read()
+	if got[0].Status != "rejected" || got[1].Status != "skipped" || got[2].Status != "skipped" {
+		t.Fatalf("rejected steps %+v", got)
+	}
+}

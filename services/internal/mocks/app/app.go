@@ -1,5 +1,5 @@
-// Package app wires mcp-mocks: six independent mock Avito MCP servers served by one binary at /mcp/<server>
-// (absence, approvals, access, directory, checklist, kb). Each server owns its DB schema and tool set, so it can be
+// Package app wires mcp-mocks: eight independent mock Avito MCP servers served by one binary at /mcp/<server>
+// (absence, approvals, access, directory, checklist, kb, trips, consents). Each server owns its DB schema and tool set, so it can be
 // moved to its own process or replaced by a real Avito API by changing a URL in the agent config (R23, R56).
 package app
 
@@ -17,8 +17,10 @@ import (
 	"aibuddy/services/internal/mocks/access"
 	"aibuddy/services/internal/mocks/approvals"
 	"aibuddy/services/internal/mocks/checklist"
+	"aibuddy/services/internal/mocks/consents"
 	"aibuddy/services/internal/mocks/directory"
 	"aibuddy/services/internal/mocks/kb"
+	"aibuddy/services/internal/mocks/trips"
 	"aibuddy/services/internal/platform/config"
 	"aibuddy/services/internal/platform/httpx"
 	"aibuddy/services/internal/platform/mcpx"
@@ -72,9 +74,11 @@ var registrars = []struct {
 	{"directory", directory.Register},
 	{"checklist", checklist.Register},
 	{"kb", kb.Register},
+	{"trips", trips.Register},
+	{"consents", consents.Register},
 }
 
-// NewHandler builds the HTTP handler: /healthz plus /mcp/<server> for all six servers.
+// NewHandler builds the HTTP handler: /healthz plus /mcp/<server> for all eight servers.
 func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
