@@ -6,6 +6,7 @@ export type EditableStatus = 'not_started' | 'in_progress' | 'done'
 export interface GoalInput {
   title: string
   criteria?: string
+  status?: 'proposed' | 'active' | 'achieved' | 'missed'
 }
 
 /** Own plan without arguments; a mentor or lead passes `userId` of an intern of their team (R71: 403 otherwise). */
@@ -20,6 +21,11 @@ export function updateTaskStatus(taskId: string, status: EditableStatus) {
 
 export function saveGoals(userId: string, goals: GoalInput[]) {
   return apiRequest('/api/plan/goals', z.array(goalSchema), { method: 'PUT', body: { user_id: userId, goals } })
+}
+
+/** The intern writes down the goals agreed with the lead; they wait for the mentor or the lead (organizers 12.11). */
+export function proposeGoals(goals: GoalInput[]) {
+  return apiRequest('/api/plan/goals/propose', z.array(goalSchema), { method: 'POST', body: { goals } })
 }
 
 export function listInterns() {
@@ -58,6 +64,8 @@ export const reportSchema = z.object({
   }),
   accesses_requested: z.number(),
   goals: z.number(),
+  goals_achieved: z.number().default(0),
+  goals_proposed: z.number().default(0),
   discuss: z.array(z.string()),
 })
 export type Report = z.infer<typeof reportSchema>

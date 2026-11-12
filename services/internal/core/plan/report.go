@@ -31,6 +31,8 @@ type Report struct {
 	Questions     ReportQuestion `json:"questions"`
 	Accesses      int            `json:"accesses_requested"`
 	Goals         int            `json:"goals"`
+	GoalsAchieved int            `json:"goals_achieved"`
+	GoalsProposed int            `json:"goals_proposed"`
 	Discuss       []string       `json:"discuss"`
 }
 
@@ -195,9 +197,11 @@ func (h *Handler) buildReport(ctx context.Context, ref planRef) (Report, error) 
 		  (SELECT count(*) FROM core.escalations WHERE from_user_id = $1 AND status = 'answered'),
 		  (SELECT count(*) FROM core.escalations WHERE from_user_id = $1 AND added_to_kb),
 		  (SELECT count(*) FROM core.actions WHERE user_id = $1 AND kind = 'access_request' AND status <> 'failed'),
-		  (SELECT count(*) FROM core.goals WHERE plan_id = $2::uuid)`, ref.userID, ref.id).
+		  (SELECT count(*) FROM core.goals WHERE plan_id = $2::uuid),
+		  (SELECT count(*) FROM core.goals WHERE plan_id = $2::uuid AND status = 'achieved'),
+		  (SELECT count(*) FROM core.goals WHERE plan_id = $2::uuid AND status = 'proposed')`, ref.userID, ref.id).
 		Scan(&rep.Questions.Asked, &rep.Questions.Escalated, &rep.Questions.Answered, &rep.Questions.AddedToKB,
-			&rep.Accesses, &rep.Goals)
+			&rep.Accesses, &rep.Goals, &rep.GoalsAchieved, &rep.GoalsProposed)
 	if err != nil {
 		return rep, fmt.Errorf("report counters: %w", err)
 	}
@@ -216,6 +220,9 @@ func discuss(rep Report) []string {
 			break
 		}
 		out = append(out, "Просрочена задача «"+t.Title+"» — что мешает и чем помочь.")
+	}
+	if rep.GoalsProposed > 0 {
+		out = append(out, fmt.Sprintf("Стажёр предложил целей: %d — согласуйте их в плане стажёра.", rep.GoalsProposed))
 	}
 	if rep.Goals == 0 {
 		out = append(out, "Цели на стажировку ещё не внесены — их ставят наставник и руководитель (CL-06).")

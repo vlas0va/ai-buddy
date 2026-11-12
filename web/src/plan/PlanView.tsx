@@ -159,6 +159,7 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
             goals={data.goals}
             editable={canEditGoals}
             planKey={key}
+            canPropose={!userId && data.plan_role === 'intern'}
           />
         </div>
       )}

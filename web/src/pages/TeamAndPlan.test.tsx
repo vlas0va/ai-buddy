@@ -90,7 +90,7 @@ describe('S1 plan page', () => {
   })
 
   it('S1: the intern sees goals read-only', async () => {
-    state.goals.set('intern.anna', [{ id: 'g1', created_by: 'mentor.oleg', title: 'Сделать первую задачу', criteria: 'MR смержен' }])
+    state.goals.set('intern.anna', [{ id: 'g1', created_by: 'mentor.oleg', title: 'Сделать первую задачу', criteria: 'MR смержен', status: 'active' }])
     signInAs('intern.anna')
     mountAt('/plan')
     expect(await screen.findByText('Сделать первую задачу')).toBeInTheDocument()

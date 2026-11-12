@@ -115,7 +115,7 @@ function Body({ r }: { r: Report }) {
           <Stat label="получили ответ" value={r.questions.answered} />
           <Stat label="ответов добавлено в базу знаний" value={r.questions.added_to_kb} tone="good" />
           <Stat label="заявок на доступы" value={r.accesses_requested} />
-          <Stat label="целей на стажировку" value={r.goals} />
+          <Stat label={`целей достигнуто из ${r.goals}`} value={r.goals_achieved} tone="good" />
         </div>
       </Card>
 

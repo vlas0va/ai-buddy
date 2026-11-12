@@ -1,68 +1,141 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { errorMessage } from '@/api/client'
-import { saveGoals, type GoalInput } from '@/api/plan'
+import { proposeGoals, saveGoals, type GoalInput } from '@/api/plan'
 import type { Goal } from '@/api/schemas'
+import { Badge, type BadgeVariant } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+
+type Status = NonNullable<GoalInput['status']>
 
 interface Props {
   internId: string
   goals: Goal[]
   editable: boolean
   planKey: readonly unknown[]
+  /** the intern may write down the goals agreed with the lead (they wait for approval) */
+  canPropose?: boolean
 }
 
-/** Adaptation goals: the mentor or lead writes them (CL-01 step 4, CL-06), the intern sees them in the plan. */
-export function GoalsSection({ internId, goals, editable, planKey }: Props) {
-  const qc = useQueryClient()
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<GoalInput[]>([])
-  const save = useMutation({
-    mutationFn: () => saveGoals(internId, draft.filter((g) => g.title.trim()).map((g) => ({ title: g.title.trim(), ...(g.criteria?.trim() ? { criteria: g.criteria.trim() } : {}) }))),
-    onSuccess: () => {
-      setEditing(false)
-      void qc.invalidateQueries({ queryKey: planKey })
-      void qc.invalidateQueries({ queryKey: ['plan'] })
-    },
-  })
+const STATUS: Record<Status, { text: string; variant: BadgeVariant }> = {
+  proposed: { text: 'Ждёт согласования', variant: 'waiting_approval' },
+  active: { text: 'В работе', variant: 'in_progress' },
+  achieved: { text: 'Достигнута', variant: 'done' },
+  missed: { text: 'Не достигнута', variant: 'overdue' },
+}
 
-  function start() {
-    setDraft(goals.length ? goals.map((g) => ({ title: g.title, criteria: g.criteria ?? '' })) : [{ title: '', criteria: '' }])
-    setEditing(true)
+const toInput = (g: Goal): GoalInput => ({ title: g.title, criteria: g.criteria ?? '', status: g.status })
+const clean = (list: GoalInput[]) =>
+  list
+    .filter((g) => g.title.trim())
+    .map((g) => ({ title: g.title.trim(), ...(g.criteria?.trim() ? { criteria: g.criteria.trim() } : {}), ...(g.status ? { status: g.status } : {}) }))
+
+/**
+ * Adaptation goals (CL-01 step 4, CL-06; organizers 12.11): in the first week the intern and the lead agree on the goals
+ * and the criteria of success; the intern can write them down, the mentor or the lead approves them and follows them
+ * (in work → achieved / missed).
+ */
+export function GoalsSection({ internId, goals, editable, planKey, canPropose = false }: Props) {
+  const qc = useQueryClient()
+  const [mode, setMode] = useState<'view' | 'edit' | 'propose'>('view')
+  const [draft, setDraft] = useState<GoalInput[]>([])
+  const refresh = () => {
+    setMode('view')
+    void qc.invalidateQueries({ queryKey: planKey })
+    void qc.invalidateQueries({ queryKey: ['plan'] })
+    void qc.invalidateQueries({ queryKey: ['report'] })
   }
+  const save = useMutation({ mutationFn: (list: GoalInput[]) => saveGoals(internId, clean(list)), onSuccess: refresh })
+  const propose = useMutation({ mutationFn: () => proposeGoals(clean(draft).map(({ title, criteria }) => ({ title, criteria }))), onSuccess: refresh })
+  const busy = save.isPending || propose.isPending
+
+  function start(next: 'edit' | 'propose') {
+    setDraft(next === 'edit' && goals.length ? goals.map(toInput) : [{ title: '', criteria: '' }])
+    setMode(next)
+  }
+  const setStatus = (id: string, status: Status) => save.mutate(goals.map((g) => (g.id === id ? { ...toInput(g), status } : toInput(g))))
   const update = (i: number, patch: Partial<GoalInput>) => setDraft((d) => d.map((g, n) => (n === i ? { ...g, ...patch } : g)))
+  const done = goals.filter((g) => g.status === 'achieved').length
+  const counted = goals.filter((g) => g.status !== 'proposed').length
 
   return (
     <section className="page-section" aria-label="Цели адаптации">
-      <h2 className="plan-period-title">Цели адаптации</h2>
-      {!editing && (
+      <h2 className="plan-period-title">
+        Цели адаптации{counted > 0 && <span className="hint"> · достигнуто {done} из {counted}</span>}
+      </h2>
+      {mode === 'view' && (
         <>
           {goals.length === 0 ? (
-            <p className="hint">{editable ? 'Целей пока нет — задайте 2–3 цели с критериями.' : 'Цели пока не заданы — их ставят наставник и руководитель.'}</p>
+            <p className="hint">
+              {editable
+                ? 'Целей пока нет — задайте 2–3 цели с критериями.'
+                : 'Цели обсуждают с руководителем на первой неделе. После встречи запиши их здесь — руководитель или наставник согласует.'}
+            </p>
           ) : (
             <ul className="list">
               {goals.map((g) => (
                 <li key={g.id}>
                   <Card className="plan-goal">
-                    <strong>{g.title}</strong>
+                    <div className="plan-goal-head">
+                      <strong>{g.title}</strong>
+                      <Badge variant={STATUS[g.status].variant}>{STATUS[g.status].text}</Badge>
+                    </div>
                     {g.criteria && <span className="hint">Критерий: {g.criteria}</span>}
+                    {editable && (
+                      <div className="plan-goal-actions">
+                        {g.status === 'proposed' ? (
+                          <Button size="sm" disabled={busy} onClick={() => setStatus(g.id, 'active')}>
+                            Согласовать
+                          </Button>
+                        ) : (
+                          <>
+                            {g.status !== 'achieved' && (
+                              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setStatus(g.id, 'achieved')}>
+                                Достигнута
+                              </Button>
+                            )}
+                            {g.status !== 'missed' && (
+                              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setStatus(g.id, 'missed')}>
+                                Не достигнута
+                              </Button>
+                            )}
+                            {g.status !== 'active' && (
+                              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setStatus(g.id, 'active')}>
+                                Вернуть в работу
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </Card>
                 </li>
               ))}
             </ul>
           )}
-          {editable && (
+          {save.isError && <p className="ui-field-error">{errorMessage(save.error)}</p>}
+          {(editable || canPropose) && (
             <div className="chat-actions">
-              <Button size="sm" variant="secondary" onClick={start}>
-                {goals.length ? 'Изменить цели' : 'Задать цели'}
-              </Button>
+              {editable && (
+                <Button size="sm" variant="secondary" onClick={() => start('edit')}>
+                  {goals.length ? 'Изменить цели' : 'Задать цели'}
+                </Button>
+              )}
+              {canPropose && goals.length < 10 && (
+                <Button size="sm" variant="secondary" onClick={() => start('propose')}>
+                  Записать цели после встречи
+                </Button>
+              )}
             </div>
           )}
         </>
       )}
-      {editing && (
+      {mode !== 'view' && (
         <Card className="plan-goals-form">
+          {mode === 'propose' && (
+            <p className="hint">Запиши цели и критерии, о которых договорились с руководителем. Они появятся у него на согласование.</p>
+          )}
           {draft.map((g, i) => (
             <div key={i} className="plan-goal-edit">
               <input
@@ -86,17 +159,17 @@ export function GoalsSection({ internId, goals, editable, planKey }: Props) {
               </Button>
             </div>
           ))}
-          {save.isError && <p className="ui-field-error">{errorMessage(save.error)}</p>}
+          {(save.isError || propose.isError) && <p className="ui-field-error">{errorMessage(save.error ?? propose.error)}</p>}
           <div className="chat-actions">
-            {draft.length < 10 && (
+            {draft.length < (mode === 'propose' ? 5 : 10) && (
               <Button size="sm" variant="secondary" onClick={() => setDraft((d) => [...d, { title: '', criteria: '' }])}>
                 Добавить цель
               </Button>
             )}
-            <Button size="sm" loading={save.isPending} onClick={() => save.mutate()}>
-              Сохранить
+            <Button size="sm" loading={busy} onClick={() => (mode === 'propose' ? propose.mutate() : save.mutate(draft))}>
+              {mode === 'propose' ? 'Отправить на согласование' : 'Сохранить'}
             </Button>
-            <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => setEditing(false)}>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setMode('view')}>
               Отмена
             </Button>
           </div>

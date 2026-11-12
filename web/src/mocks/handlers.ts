@@ -69,14 +69,29 @@ export const handlers = [
     return HttpResponse.json({ ...task, status: body.status })
   }),
 
+  http.post('*/api/plan/goals/propose', async ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'intern') return forbidden()
+    const body = (await request.json().catch(() => ({}))) as { goals?: { title: string; criteria?: string }[] }
+    const added = (body.goals ?? []).slice(0, 5).map((g) => ({ id: uuid(), created_by: user.id, title: g.title, status: 'proposed' as const, ...(g.criteria ? { criteria: g.criteria } : {}) }))
+    state.goals.set(user.id, [...(state.goals.get(user.id) ?? []), ...added])
+    saveState()
+    return HttpResponse.json(added, { status: 201 })
+  }),
   http.put('*/api/plan/goals', async ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
     if (user.role !== 'mentor' && user.role !== 'lead') return forbidden()
-    const body = (await request.json().catch(() => ({}))) as { user_id?: string; goals?: { title: string; criteria?: string }[] }
+    const body = (await request.json().catch(() => ({}))) as {
+      user_id?: string
+      goals?: { title: string; criteria?: string; status?: 'proposed' | 'active' | 'achieved' | 'missed' }[]
+    }
     const intern = MOCK_USERS.find((u) => u.id === body.user_id)
     if (!intern || !teamOf(user, intern)) return forbidden()
-    const goals = (body.goals ?? []).slice(0, 10).map((g) => ({ id: uuid(), created_by: user.id, title: g.title, ...(g.criteria ? { criteria: g.criteria } : {}) }))
+    const goals = (body.goals ?? [])
+      .slice(0, 10)
+      .map((g) => ({ id: uuid(), created_by: user.id, title: g.title, status: g.status ?? ('active' as const), ...(g.criteria ? { criteria: g.criteria } : {}) }))
     state.goals.set(intern.id, goals)
     saveState()
     return HttpResponse.json(goals)

@@ -54,7 +54,7 @@ export interface MockState {
   decisions: Map<string, { actionId: string; decision: 'approved' | 'rejected' }>
   /** `${userId}:${taskId}` -> status set from the plan page */
   taskStatus: Map<string, string>
-  goals: Map<string, { id: string; created_by: string; title: string; criteria?: string }[]>
+  goals: Map<string, { id: string; created_by: string; title: string; criteria?: string; status: 'proposed' | 'active' | 'achieved' | 'missed' }[]>
   escalations: MockEscalation[]
   notifications: Map<string, MockNotification[]>
   seq: number

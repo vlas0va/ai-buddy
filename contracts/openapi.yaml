@@ -168,6 +168,34 @@ paths:
                 items: { $ref: "#/components/schemas/Goal" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/plan/goals/propose:
+    post:
+      tags: [plan]
+      summary: The intern writes down the goals agreed with the lead; they wait as «proposed» (the mentor and the lead are notified)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goals]
+              properties:
+                goals:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items: { $ref: "#/components/schemas/GoalInput" }
+      responses:
+        "201":
+          description: Proposed goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Goal" }
+        "400": { description: "no goals, more than 5, or more than 10 in the plan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/plan/report:
     get:
       tags: [plan]
@@ -214,6 +242,8 @@ paths:
                       saved_minutes: { type: integer, description: "self_served × 10 minutes of the mentor (estimate)" }
                   accesses_requested: { type: integer }
                   goals: { type: integer }
+                  goals_achieved: { type: integer }
+                  goals_proposed: { type: integer }
                   discuss: { type: array, items: { type: string } }
         "400": { description: user_id is missing }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -774,6 +804,11 @@ components:
       properties:
         title: { type: string, maxLength: 300 }
         criteria: { type: string, maxLength: 1000 }
+        status:
+          type: string
+          enum: [proposed, active, achieved, missed]
+          default: active
+          description: proposed = written down by the intern, waits for the mentor or the lead
 
     Goal:
       allOf:

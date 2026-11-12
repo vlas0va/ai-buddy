@@ -52,6 +52,7 @@ export const goalSchema = z.object({
   created_by: z.string(),
   title: z.string(),
   criteria: z.string().optional(),
+  status: z.enum(['proposed', 'active', 'achieved', 'missed']).default('active'),
 })
 
 export const nextStepSchema = z.object({

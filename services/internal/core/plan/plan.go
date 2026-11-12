@@ -54,6 +54,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/plan/goals", h.putGoals)
 	mux.HandleFunc("GET /api/team/interns", h.teamInterns)
 	mux.HandleFunc("GET /api/plan/report", h.getReport)
+	mux.HandleFunc("POST /api/plan/goals/propose", h.proposeGoals)
 }
 
 func (h *Handler) today() string { return h.Now().UTC().Format("2006-01-02") }
@@ -114,7 +115,10 @@ type Goal struct {
 	Title     string  `json:"title"`
 	Criteria  *string `json:"criteria,omitempty"`
 	CreatedBy string  `json:"created_by"`
+	Status    string  `json:"status"` // proposed | active | achieved | missed
 }
+
+var goalStatuses = map[string]bool{"proposed": true, "active": true, "achieved": true, "missed": true}
 
 // Plan is the openapi Plan.
 type Plan struct {
@@ -281,7 +285,7 @@ func (h *Handler) loadTasks(ctx context.Context, planID, today string) ([]Period
 }
 
 func (h *Handler) loadGoals(ctx context.Context, internID string) ([]Goal, error) {
-	rows, err := h.pool.Query(ctx, `SELECT g.id::text, g.title, g.criteria, g.created_by FROM core.goals g
+	rows, err := h.pool.Query(ctx, `SELECT g.id::text, g.title, g.criteria, g.created_by, g.status FROM core.goals g
 		JOIN core.plans p ON p.id = g.plan_id WHERE p.user_id = $1 AND p.plan_role = 'intern' ORDER BY g.created_at, g.id`, internID)
 	if err != nil {
 		return nil, fmt.Errorf("select goals: %w", err)
@@ -290,7 +294,7 @@ func (h *Handler) loadGoals(ctx context.Context, internID string) ([]Goal, error
 	out := []Goal{}
 	for rows.Next() {
 		var g Goal
-		if err := rows.Scan(&g.ID, &g.Title, &g.Criteria, &g.CreatedBy); err != nil {
+		if err := rows.Scan(&g.ID, &g.Title, &g.Criteria, &g.CreatedBy, &g.Status); err != nil {
 			return nil, fmt.Errorf("scan goal: %w", err)
 		}
 		out = append(out, g)
@@ -564,6 +568,7 @@ func (h *Handler) loadTop(ctx context.Context, q pgx.Tx, id string) (TopTask, er
 type goalInput struct {
 	Title    string `json:"title"`
 	Criteria string `json:"criteria"`
+	Status   string `json:"status"` // empty = active
 }
 
 func (h *Handler) putGoals(w http.ResponseWriter, r *http.Request) {
@@ -604,6 +609,13 @@ func (h *Handler) putGoals(w http.ResponseWriter, r *http.Request) {
 			apierr.WriteJSON(w, apierr.Validation().WithMessage("У цели нужен заголовок до 300 символов, критерии — до 1000"))
 			return
 		}
+		if g.Status == "" {
+			g.Status = "active"
+		}
+		if !goalStatuses[g.Status] {
+			apierr.WriteJSON(w, apierr.Validation().WithMessage("Статус цели: proposed, active, achieved или missed"))
+			return
+		}
 	}
 	goals, err := h.replaceGoals(ctx, c, body.UserID, body.Goals)
 	if err != nil {
@@ -634,9 +646,9 @@ func (h *Handler) replaceGoals(ctx context.Context, c authn.Claims, internID str
 	for _, g := range in {
 		var saved Goal
 		// clock_timestamp() keeps the input order: created_at differs per row inside one transaction.
-		err := tx.QueryRow(ctx, `INSERT INTO core.goals (plan_id, title, criteria, created_by, created_at)
-			VALUES ($1, $2, NULLIF($3, ''), $4, clock_timestamp()) RETURNING id::text, title, criteria, created_by`,
-			planID, g.Title, g.Criteria, c.Sub).Scan(&saved.ID, &saved.Title, &saved.Criteria, &saved.CreatedBy)
+		err := tx.QueryRow(ctx, `INSERT INTO core.goals (plan_id, title, criteria, created_by, created_at, status)
+			VALUES ($1, $2, NULLIF($3, ''), $4, clock_timestamp(), $5) RETURNING id::text, title, criteria, created_by, status`,
+			planID, g.Title, g.Criteria, c.Sub, g.Status).Scan(&saved.ID, &saved.Title, &saved.Criteria, &saved.CreatedBy, &saved.Status)
 		if err != nil {
 			return nil, fmt.Errorf("insert goal: %w", err)
 		}
