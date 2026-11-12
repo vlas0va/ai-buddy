@@ -24,7 +24,7 @@ func num(m map[string]any, path ...string) int {
 
 func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 	e := setup(t)
-	code, m := e.report(anna, "")
+	code, m := e.report(oleg, "?user_id=intern.anna")
 	if code != 200 {
 		t.Fatalf("code %d: %v", code, m)
 	}
@@ -44,7 +44,7 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 
 	// The overdue CL-05 done today counts as late; going back to work clears the completion time.
 	e.setItem("intern.anna", "intern", "CL-05", "done")
-	_, m = e.report(anna, "")
+	_, m = e.report(oleg, "?user_id=intern.anna")
 	if num(m, "tasks", "late") != 1 || num(m, "tasks", "done") != 2 {
 		t.Fatalf("late: %v", m["tasks"])
 	}
@@ -80,6 +80,8 @@ func TestReport_Rights_R71(t *testing.T) {
 		{"mentor of another team", sergey, "?user_id=intern.anna", 403},
 		{"another intern", ivan, "?user_id=intern.anna", 403},
 		{"hr bp", elena, "?user_id=intern.anna", 403},
+		{"the intern herself", anna, "", 403},
+		{"the intern with her id", anna, "?user_id=intern.anna", 403},
 		{"no token", user{}, "", 401},
 	}
 	for _, c := range cases {

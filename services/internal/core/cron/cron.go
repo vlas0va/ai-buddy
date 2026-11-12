@@ -187,7 +187,7 @@ func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error {
 			return err
 		}
 	}
-	if p.cohort != nil {
+	if p.cohort != nil && p.role == "mentor" {
 		if start, err := period.ParseDate(*p.cohort); err == nil && now.Sub(start) >= ReportAfter {
 			title, body := reportText(p)
 			n := notify.Notification{UserID: p.userID, Kind: notify.KindReminder, DedupeKey: "report:3m:" + p.internID,
@@ -211,17 +211,14 @@ func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error {
 	return nil
 }
 
-// ReportAfter: after three months buddy tells the intern and the mentor that the internship report is ready (idea 12.11).
+// ReportAfter: after three months buddy tells the mentor that the internship report is ready (idea 12.11; the report is
+// for the mentor only).
 const ReportAfter = 90 * 24 * time.Hour
 
 func reportText(p planRow) (title, body string) {
-	if p.role == "mentor" {
-		return "Отчёт о стажёре " + p.intern + " за 3 месяца готов",
-			"Buddy собрал факты за стажировку: задачи плана раньше срока, в срок и с опозданием, вопросы и доступы. " +
-				"Открой «Мои стажёры» → «Отчёт за стажировку». Выводы — за тобой: это не оценка, а подготовка к разговору."
-	}
-	return "Твой отчёт за 3 месяца стажировки готов",
-		"Его видит и наставник. Открой «Мой план» → «Отчёт за стажировку» — там задачи, вопросы и что обсудить на 1:1."
+	return "Отчёт о стажёре " + p.intern + " за 3 месяца готов",
+		"Buddy собрал факты за стажировку: задачи плана раньше срока, в срок и с опозданием, вопросы и доступы. " +
+			"Открой «Мои стажёры» → «Отчёт за стажировку». Выводы — за тобой: это не оценка, а подготовка к разговору."
 }
 
 func (r *Runner) emit(ctx context.Context, tx analytics.DBTX, base analytics.Event, name string, props map[string]any) error {

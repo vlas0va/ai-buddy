@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/components/PageHeader'
 import { PlanView } from '@/plan/PlanView'
 import { useSession } from '@/store/session'
@@ -12,15 +11,7 @@ export function PlanPage() {
   const role = useSession((s) => s.user?.role)
   return (
     <section>
-      <PageHeader title={role === 'mentor' ? 'План наставника' : 'План адаптации'} hint={HINT[role ?? 'intern'] ?? HINT.intern}
-        actions={
-          role === 'intern' ? (
-            <Link to="/plan/report" className="chat-link">
-              Отчёт за стажировку
-            </Link>
-          ) : undefined
-        }
-      />
+      <PageHeader title={role === 'mentor' ? 'План наставника' : 'План адаптации'} hint={HINT[role ?? 'intern'] ?? HINT.intern} />
       <PlanView />
     </section>
   )

@@ -265,12 +265,15 @@ func TestCron_ReportAfterThreeMonths_Idea1211(t *testing.T) {
 	}
 	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 85) } // Анна started 10 days ago: day 95
 	res, err = r.RunOnce(context.Background())
-	if err != nil || res.Reports < 2 {
+	if err != nil || res.Reports < 1 {
 		t.Fatalf("day 95: %+v %v", res, err)
 	}
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE dedupe_key = 'report:3m:intern.anna'
-		AND ((user_id = 'intern.anna' AND title LIKE 'Твой отчёт%') OR (user_id = 'mentor.oleg' AND title LIKE '%Анна Котова%'))`); n != 2 {
-		t.Fatalf("report notifications for Анна and Олег: %d", n)
+		AND user_id = 'mentor.oleg' AND title LIKE '%Анна Котова%'`); n != 1 {
+		t.Fatalf("report notification for Олег: %d", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE dedupe_key LIKE 'report:%' AND user_id LIKE 'intern.%'`); n != 0 {
+		t.Fatal("the report is for the mentor only")
 	}
 	if res, _ = r.RunOnce(context.Background()); res.Reports != 0 {
 		t.Fatalf("report notification repeated: %+v", res)

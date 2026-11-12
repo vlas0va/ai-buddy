@@ -67,7 +67,7 @@ test('S1: reminders arrive in the notifications bell', async ({ page }) => {
   await expect(page.getByRole('region', { name: 'Уведомления' })).toBeVisible()
 })
 
-test('Report: the mentor opens the intern report, the intern sees the same facts (idea 12.11)', async ({ browser }) => {
+test('Report: the mentor opens the intern report; the intern has no report (idea 12.11)', async ({ browser }) => {
   const mentor = await (await browser.newContext()).newPage()
   await login(mentor, 'mentor.oleg')
   await mentor.goto('/team/intern.anna')
@@ -82,7 +82,8 @@ test('Report: the mentor opens the intern report, the intern sees the same facts
   const intern = await (await browser.newContext()).newPage()
   await login(intern, 'intern.anna')
   await intern.goto('/plan')
-  await intern.getByRole('link', { name: 'Отчёт за стажировку' }).click()
-  await expect(intern.getByRole('heading', { name: 'Мой отчёт за стажировку' })).toBeVisible()
-  await expect(intern.getByText(/Этот же отчёт видит твой наставник/)).toBeVisible()
+  await expect(intern.getByRole('heading', { name: 'План адаптации' })).toBeVisible()
+  await expect(intern.getByRole('link', { name: 'Отчёт за стажировку' })).toHaveCount(0)
+  await intern.goto('/team/intern.anna/report')
+  await expect(intern).toHaveURL(/\/chat/)
 })

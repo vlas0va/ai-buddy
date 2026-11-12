@@ -15,14 +15,14 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'go
   )
 }
 
-function Body({ r, self }: { r: Report; self: boolean }) {
+function Body({ r }: { r: Report }) {
   const t = r.tasks
   return (
     <div className="report">
       <p className="hint">
         {r.final ? 'Итоговый отчёт' : 'Промежуточный отчёт'}: день {Math.min(r.days, r.total_days)} из {r.total_days}
         {r.cohort_start ? `, стажировка с ${shortDate(r.cohort_start)}` : ''}. Это факты из плана и чата, а не оценка —
-        выводы делает наставник вместе со стажёром. {self ? 'Этот же отчёт видит твой наставник.' : 'Этот же отчёт видит стажёр.'}
+        выводы делает наставник. Отчёт видят только наставник и руководитель.
       </p>
 
       <Card className="report-card" aria-label="Задачи плана">
@@ -104,12 +104,12 @@ function Body({ r, self }: { r: Report; self: boolean }) {
   )
 }
 
-/** Internship report (idea 12.11). Without `userId` — the signed-in intern's own report. */
-export function ReportView({ userId }: { userId?: string }) {
+/** Internship report of an intern (idea 12.11), for the mentor and the lead of the team. */
+export function ReportView({ userId }: { userId: string }) {
   const q = useQuery({ queryKey: keys.report(userId), queryFn: () => getReport(userId) })
   return (
     <QueryState isLoading={q.isLoading} error={q.error} onRetry={() => void q.refetch()}>
-      {q.data && <Body r={q.data} self={!userId} />}
+      {q.data && <Body r={q.data} />}
     </QueryState>
   )
 }

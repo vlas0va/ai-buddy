@@ -30,7 +30,7 @@ const report = {
   discuss: ['Просрочена задача «Познакомься с командой» — что мешает и чем помочь.'],
 }
 
-const wrap = (userId?: string) => {
+const wrap = (userId: string) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -55,15 +55,15 @@ describe('Idea 12.11: internship report', () => {
     expect(within(tasks).getByText('Задачи плана: выполнено 2 из 16')).toBeInTheDocument()
     expect(within(tasks).getByText('раньше срока').previousSibling).toHaveTextContent('1')
     expect(within(tasks).getByText(/Вступи в каналы — срок 09\.11/)).toBeInTheDocument()
-    expect(screen.getByText(/Промежуточный отчёт: день 10 из 90/)).toHaveTextContent('Этот же отчёт видит стажёр.')
+    expect(screen.getByText(/Промежуточный отчёт: день 10 из 90/)).toHaveTextContent('Отчёт видят только наставник и руководитель.')
     expect(screen.getByText('ответов добавлено в базу знаний').previousSibling).toHaveTextContent('1')
     expect(screen.getByText(/что мешает и чем помочь/)).toBeInTheDocument()
   })
 
-  it('the intern sees the same report, marked final after three months', async () => {
-    signInAs('intern.anna')
+  it('after three months the report is final', async () => {
+    signInAs('mentor.oleg')
     server.use(http.get('*/api/plan/report', () => HttpResponse.json({ ...report, final: true, days: 95 })))
-    wrap()
-    expect(await screen.findByText(/Итоговый отчёт: день 90 из 90/)).toHaveTextContent('Этот же отчёт видит твой наставник.')
+    wrap('intern.anna')
+    expect(await screen.findByText(/Итоговый отчёт: день 90 из 90/)).toBeInTheDocument()
   })
 })

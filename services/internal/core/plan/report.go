@@ -14,7 +14,7 @@ import (
 const InternshipDays = 90
 
 // Report is the internship report (idea 12.11): facts from the plan, the questions and the actions of one intern. It is
-// not an assessment: buddy counts, the mentor draws conclusions. The intern sees the same report (no hidden scoring), and
+// not an assessment: buddy counts, the mentor draws conclusions. It is for the mentor and the lead only (feedback 12.11), and
 // absences are not part of it (R72).
 type Report struct {
 	UserID        string         `json:"user_id"`
@@ -68,15 +68,19 @@ type ReportQuestion struct {
 	AddedToKB int `json:"added_to_kb"`
 }
 
-// getReport: GET /api/plan/report[?user_id=] — the intern reads their own report, the mentor and the lead of the team
-// read the report of an intern of their team (same rules as the plan, R71).
+// getReport: GET /api/plan/report?user_id= — the mentor and the lead of the team read the report of an intern of their
+// team (same rules as the plan, R71). The report is not for the intern (feedback 12.11): 403.
 func (h *Handler) getReport(w http.ResponseWriter, r *http.Request) {
 	c, ok := claims(w, r)
 	if !ok {
 		return
 	}
 	userID := r.URL.Query().Get("user_id")
-	if c.Role != "intern" && userID == "" {
+	if c.Role != "mentor" && c.Role != "lead" {
+		apierr.WriteJSON(w, apierr.Forbidden())
+		return
+	}
+	if userID == "" {
 		apierr.WriteJSON(w, apierr.Validation().WithMessage("Укажите user_id стажёра"))
 		return
 	}

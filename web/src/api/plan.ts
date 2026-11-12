@@ -55,8 +55,7 @@ export const reportSchema = z.object({
 })
 export type Report = z.infer<typeof reportSchema>
 
-/** Internship report (idea 12.11): own report without arguments; a mentor or lead passes the intern's `userId`. */
-export function getReport(userId?: string) {
-  const query = userId ? `?user_id=${encodeURIComponent(userId)}` : ''
-  return apiRequest(`/api/plan/report${query}`, reportSchema)
+/** Internship report (idea 12.11): the mentor or lead of the team passes the intern's `userId` (R71: 403 otherwise). */
+export function getReport(userId: string) {
+  return apiRequest(`/api/plan/report?user_id=${encodeURIComponent(userId)}`, reportSchema)
 }

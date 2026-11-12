@@ -171,9 +171,9 @@ paths:
   /api/plan/report:
     get:
       tags: [plan]
-      summary: Internship report over 3 months (facts, not an assessment) — own for an intern, an intern of the team for mentor and lead
+      summary: Internship report over 3 months (facts, not an assessment) — for the mentor and the lead of the team only; an intern gets 403
       parameters:
-        - { name: user_id, in: query, required: false, schema: { type: string }, description: Required for mentor and lead }
+        - { name: user_id, in: query, required: true, schema: { type: string }, description: The intern of the caller's team }
       responses:
         "200":
           description: Report
@@ -213,7 +213,7 @@ paths:
                   accesses_requested: { type: integer }
                   goals: { type: integer }
                   discuss: { type: array, items: { type: string } }
-        "400": { description: user_id is missing for a mentor or lead }
+        "400": { description: user_id is missing }
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/team/interns:

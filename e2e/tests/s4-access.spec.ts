@@ -15,6 +15,9 @@ test('S4: required accesses are listed with statuses; a missing one is requested
     await list.getByRole('button', { name: /Запросить выбранные/ }).click()
     // results land in the rows of the list; every request is saved and listed in «Мои заявки» (R66)
     await expect(list).toContainText(/выдан · ACC-\d+/)
+    // a fresh base also offers the elevated incident space, unchecked: the intern declines it, and the list is done
+    const rest = list.getByRole('button', { name: 'Отменить остальные' })
+    if (await rest.isVisible()) await rest.click()
     await expect(list).toContainText('Готово', { timeout: 20000 })
     await page.reload()
     await expect(page.getByLabel('Набор заявок на доступ').last()).toContainText(/выдан · ACC-\d+/)

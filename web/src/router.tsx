@@ -80,15 +80,7 @@ const internRoute = createRoute({
   },
 })
 
-// Internship report (idea 12.11): the intern reads their own, the mentor and the lead read an intern's of their team.
-const reportRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: '/plan/report',
-  beforeLoad: () => {
-    if (useSession.getState().user?.role !== 'intern') throw redirect({ to: '/chat' })
-  },
-  component: () => <ReportPage />,
-})
+// Internship report (idea 12.11): for the mentor and the lead of the team only.
 const internReportRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/team/$internId/report',
@@ -111,7 +103,7 @@ const questionsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute, teamRoute, internRoute, reportRoute, internReportRoute, questionsRoute]),
+  appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute, teamRoute, internRoute, internReportRoute, questionsRoute]),
 ])
 
 export function createAppRouter(history?: RouterHistory) {
