@@ -66,3 +66,23 @@ test('S1: reminders arrive in the notifications bell', async ({ page }) => {
   await page.getByRole('button', { name: /Уведомления/ }).click()
   await expect(page.getByRole('region', { name: 'Уведомления' })).toBeVisible()
 })
+
+test('Report: the mentor opens the intern report, the intern sees the same facts (idea 12.11)', async ({ browser }) => {
+  const mentor = await (await browser.newContext()).newPage()
+  await login(mentor, 'mentor.oleg')
+  await mentor.goto('/team/intern.anna')
+  await mentor.getByRole('link', { name: 'Отчёт за стажировку' }).click()
+  await expect(mentor.getByRole('heading', { name: 'Отчёт за стажировку: Анна Котова' })).toBeVisible()
+  const tasks = mentor.getByLabel('Задачи плана')
+  await expect(tasks).toContainText(/Задачи плана: выполнено \d+ из \d+/)
+  await expect(tasks).toContainText('раньше срока')
+  await expect(mentor.getByText(/Промежуточный отчёт: день \d+ из 90/)).toBeVisible()
+  await expect(mentor.getByLabel('Что обсудить на 1:1')).toContainText(/Просрочена задача|Просрочек нет/)
+
+  const intern = await (await browser.newContext()).newPage()
+  await login(intern, 'intern.anna')
+  await intern.goto('/plan')
+  await intern.getByRole('link', { name: 'Отчёт за стажировку' }).click()
+  await expect(intern.getByRole('heading', { name: 'Мой отчёт за стажировку' })).toBeVisible()
+  await expect(intern.getByText(/Этот же отчёт видит твой наставник/)).toBeVisible()
+})

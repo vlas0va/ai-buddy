@@ -79,6 +79,67 @@
       }
     },
     {
+      "name": "get",
+      "description": "Один документ базы знаний по doc_id, если он доступен роли и команде (тот же ACL, что у search). Ответы наставника, добавленные в базу знаний, тоже здесь.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead",
+        "hrbp",
+        "alumni",
+        "hr_admin"
+      ],
+      "write": false,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "doc_id"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "doc_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "source_type": {
+            "const": "test"
+          },
+          "kind": {
+            "enum": [
+              "doc",
+              "faq",
+              "note"
+            ]
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "body",
+          "source_type",
+          "kind"
+        ]
+      }
+    },
+    {
       "name": "add_faq",
       "description": "Добавить ответ наставника в базу знаний его команды (сценарий S2, флаг escalation_to_kb). Документ виден ролям intern, mentor, lead этой команды.",
       "roles": [

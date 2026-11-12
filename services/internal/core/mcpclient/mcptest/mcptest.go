@@ -100,7 +100,7 @@ func New(t testing.TB, jwtSecret, confirmationSecret []byte) *Server {
 			"request_access": s.requestAccess,
 		},
 		"approvals": {"list_pending": s.listPending, "decide": s.decide},
-		"kb":        {"search": s.search, "add_faq": s.addFAQ},
+		"kb":        {"search": s.search, "get": s.getDoc, "add_faq": s.addFAQ},
 	} {
 		srv, err := mcpx.NewServer(name, cfg)
 		if err != nil {
@@ -477,6 +477,10 @@ func (s *Server) applyDecision(a mcpclient.Approval) {
 
 func (s *Server) search(context.Context, mcpx.Caller, json.RawMessage) (any, error) {
 	return map[string]any{"items": []any{}}, nil
+}
+
+func (s *Server) getDoc(context.Context, mcpx.Caller, json.RawMessage) (any, error) {
+	return nil, apierr.NotFound()
 }
 
 func (s *Server) addFAQ(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {

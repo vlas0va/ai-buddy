@@ -206,6 +206,21 @@ def create_app(
         user = _user()
         doc = agent.kb.get(doc_id, user.role, user.team_id) if agent.kb else None
         if doc is None:
+            # A mentor answer added to the KB lives in mcp-kb only: the source link under an answer must open it too.
+            try:
+                d = agent.gateway(user).read("kb.get", doc_id=doc_id)
+            except AgentError:
+                d = None
+            if isinstance(d, dict) and d.get("body"):
+                return jsonify(
+                    {
+                        "doc_id": d.get("doc_id", doc_id),
+                        "title": d.get("title", ""),
+                        "body": d["body"],
+                        "source_type": "test",
+                        "badge": "Тестовая инструкция прототипа",
+                    }
+                )
             return jsonify(
                 {"error": {"code": "not_found", "message": "Документ не найден или недоступен.", "retryable": False}}
             ), 404  # type: ignore[return-value]

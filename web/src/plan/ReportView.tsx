@@ -1,0 +1,115 @@
+import { useQuery } from '@tanstack/react-query'
+import { keys } from '@/api/keys'
+import { getReport, type Report } from '@/api/plan'
+import { QueryState } from '@/components/QueryState'
+import { Card } from '@/components/ui/Card'
+import { shortDate } from './format'
+import { PERIOD_LABELS } from './periods'
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'bad' }) {
+  return (
+    <div className={`report-stat${tone ? ` report-stat--${tone}` : ''}`}>
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function Body({ r, self }: { r: Report; self: boolean }) {
+  const t = r.tasks
+  return (
+    <div className="report">
+      <p className="hint">
+        {r.final ? 'Итоговый отчёт' : 'Промежуточный отчёт'}: день {Math.min(r.days, r.total_days)} из {r.total_days}
+        {r.cohort_start ? `, стажировка с ${shortDate(r.cohort_start)}` : ''}. Это факты из плана и чата, а не оценка —
+        выводы делает наставник вместе со стажёром. {self ? 'Этот же отчёт видит твой наставник.' : 'Этот же отчёт видит стажёр.'}
+      </p>
+
+      <Card className="report-card" aria-label="Задачи плана">
+        <h3>Задачи плана: выполнено {t.done} из {t.total}</h3>
+        <div className="report-stats">
+          <Stat label="раньше срока" value={t.early} tone="good" />
+          <Stat label="в срок" value={t.on_time} tone="good" />
+          <Stat label="с опозданием" value={t.late} tone="warn" />
+          <Stat label="просрочено сейчас" value={t.overdue_now} tone="bad" />
+          <Stat label="срок ещё не наступил" value={t.upcoming} />
+        </div>
+        <table className="report-table">
+          <thead>
+            <tr>
+              <th>Этап</th>
+              <th>Выполнено</th>
+              <th>С опозданием</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.periods.map((p) => (
+              <tr key={p.period}>
+                <td>{PERIOD_LABELS[p.period] ?? p.period}</td>
+                <td>
+                  {p.done} из {p.total}
+                </td>
+                <td>{p.late}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {r.overdue.length > 0 && (
+          <>
+            <h4>Просрочено сейчас</h4>
+            <ul>
+              {r.overdue.map((x) => (
+                <li key={x.title}>
+                  {x.title} — срок {shortDate(x.due_at)}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        {r.late.length > 0 && (
+          <>
+            <h4>Выполнено с опозданием</h4>
+            <ul>
+              {r.late.map((x) => (
+                <li key={x.title}>
+                  {x.title} — срок {shortDate(x.due_at)}, выполнено {shortDate(x.completed_at)}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Card>
+
+      <Card className="report-card" aria-label="Вопросы и доступы">
+        <h3>Вопросы и доступы</h3>
+        <div className="report-stats">
+          <Stat label="вопросов buddy" value={r.questions.asked} />
+          <Stat label="передано наставнику" value={r.questions.escalated} />
+          <Stat label="получили ответ" value={r.questions.answered} />
+          <Stat label="ответов добавлено в базу знаний" value={r.questions.added_to_kb} tone="good" />
+          <Stat label="заявок на доступы" value={r.accesses_requested} />
+          <Stat label="целей на стажировку" value={r.goals} />
+        </div>
+      </Card>
+
+      <Card className="report-card" aria-label="Что обсудить на 1:1">
+        <h3>Что обсудить на 1:1</h3>
+        <ul>
+          {r.discuss.map((d) => (
+            <li key={d}>{d}</li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  )
+}
+
+/** Internship report (idea 12.11). Without `userId` — the signed-in intern's own report. */
+export function ReportView({ userId }: { userId?: string }) {
+  const q = useQuery({ queryKey: keys.report(userId), queryFn: () => getReport(userId) })
+  return (
+    <QueryState isLoading={q.isLoading} error={q.error} onRetry={() => void q.refetch()}>
+      {q.data && <Body r={q.data} self={!userId} />}
+    </QueryState>
+  )
+}

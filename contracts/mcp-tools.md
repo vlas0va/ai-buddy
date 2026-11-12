@@ -48,6 +48,7 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | access | `list_team_channels` | intern, mentor | no | S4 step 4, CL-04 |
 | access | `request_access` | intern, mentor | **yes** | S4 steps 2–3 |
 | kb (`/mcp/kb`) | `search` | all | no | S2 |
+| kb | `get` | all | no | S2: the source link opens the document, a mentor answer added to the KB included |
 | trips (`/mcp/trips`) | `get_policy` | intern, mentor, lead | no | командировка: порядок, офисы |
 | trips | `list_my_requests` | intern, mentor, lead | no | командировка: статус |
 | trips | `validate_request` | intern, mentor, lead | no | командировка: проверка города и дат |

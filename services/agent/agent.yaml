@@ -149,6 +149,11 @@ tools:
     write: false
     description: Поиск по базе знаний (результаты уже отфильтрованы по правам роли и команды).
     input_schema: {type: object, properties: {query: {type: string}, k: {type: integer, minimum: 1, maximum: 10}}, required: [query]}
+  - name: kb.get
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
+    write: false
+    description: Один документ базы знаний по doc_id (тот же ACL, что у поиска); ответы наставника, добавленные в базу, тоже здесь.
+    input_schema: {type: object, properties: {doc_id: {type: string}}, required: [doc_id]}
   - name: trips.get_policy
     roles: [intern, mentor, lead]
     write: false
