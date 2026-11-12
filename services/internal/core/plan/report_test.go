@@ -53,15 +53,16 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 		t.Fatal("completed_at must be cleared and was_overdue kept")
 	}
 
-	// Questions: one asked in chat, one sent to the mentor, answered and added to the KB.
+	// Questions: two asked in chat, one of them sent to the mentor (one closed by buddy = 10 minutes of the mentor saved), answered and added to the KB.
 	e.exec(`INSERT INTO core.chat_sessions (id, user_id) VALUES ('00000000-0000-0000-0000-0000000000a1', 'intern.anna')`)
 	e.exec(`INSERT INTO core.chat_messages (session_id, author, text) VALUES ('00000000-0000-0000-0000-0000000000a1', 'user', 'как дела?'),
-		('00000000-0000-0000-0000-0000000000a1', 'assistant', 'хорошо')`)
+		('00000000-0000-0000-0000-0000000000a1', 'assistant', 'хорошо'),
+		('00000000-0000-0000-0000-0000000000a1', 'user', 'где логи?')`)
 	e.exec(`INSERT INTO core.escalations (from_user_id, to_user_id, to_role, text, status, answer, added_to_kb)
 		VALUES ('intern.anna', 'mentor.oleg', 'mentor', 'где логи?', 'answered', 'в Grafana', true)`)
 	_, m = e.report(oleg, "?user_id=intern.anna")
-	if num(m, "questions", "asked") != 1 || num(m, "questions", "escalated") != 1 || num(m, "questions", "answered") != 1 ||
-		num(m, "questions", "added_to_kb") != 1 {
+	if num(m, "questions", "asked") != 2 || num(m, "questions", "escalated") != 1 || num(m, "questions", "answered") != 1 ||
+		num(m, "questions", "added_to_kb") != 1 || num(m, "questions", "self_served") != 1 || num(m, "questions", "saved_minutes") != 10 {
 		t.Fatalf("questions: %v", m["questions"])
 	}
 }

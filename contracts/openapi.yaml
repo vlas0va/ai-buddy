@@ -210,6 +210,8 @@ paths:
                       escalated: { type: integer }
                       answered: { type: integer }
                       added_to_kb: { type: integer }
+                      self_served: { type: integer, description: asked buddy and did not go to a person }
+                      saved_minutes: { type: integer, description: "self_served × 10 minutes of the mentor (estimate)" }
                   accesses_requested: { type: integer }
                   goals: { type: integer }
                   discuss: { type: array, items: { type: string } }

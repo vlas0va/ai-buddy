@@ -60,12 +60,18 @@ type ReportTask struct {
 	CompletedAt *string `json:"completed_at"`
 }
 
+// MinutesPerQuestion is the estimate of a mentor's time per question that buddy closed on its own (an explanation in a
+// chat with context switching). The organizers put a mentor's load at 40–48 hours per 6-month internship (Q&A 12.11).
+const MinutesPerQuestion = 10
+
 // ReportQuestion counts the intern's chat questions and the questions sent to people.
 type ReportQuestion struct {
-	Asked     int `json:"asked"`
-	Escalated int `json:"escalated"`
-	Answered  int `json:"answered"`
-	AddedToKB int `json:"added_to_kb"`
+	Asked        int `json:"asked"`
+	Escalated    int `json:"escalated"`
+	Answered     int `json:"answered"`
+	AddedToKB    int `json:"added_to_kb"`
+	SelfServed   int `json:"self_served"`   // asked buddy and did not go to a person
+	SavedMinutes int `json:"saved_minutes"` // SelfServed × MinutesPerQuestion: the mentor's time buddy saved (estimate)
 }
 
 // getReport: GET /api/plan/report?user_id= — the mentor and the lead of the team read the report of an intern of their
@@ -195,6 +201,8 @@ func (h *Handler) buildReport(ctx context.Context, ref planRef) (Report, error) 
 	if err != nil {
 		return rep, fmt.Errorf("report counters: %w", err)
 	}
+	rep.Questions.SelfServed = max(rep.Questions.Asked-rep.Questions.Escalated, 0)
+	rep.Questions.SavedMinutes = rep.Questions.SelfServed * MinutesPerQuestion
 	rep.Discuss = discuss(rep)
 	return rep, nil
 }

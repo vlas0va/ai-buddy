@@ -24,7 +24,7 @@ const report = {
   periods: [{ period: 'week_1', total: 5, done: 2, late: 1 }],
   late: [{ title: 'Вступи в каналы', due_at: '2026-11-09', completed_at: '2026-11-12' }],
   overdue: [{ title: 'Познакомься с командой', due_at: '2026-11-09', completed_at: null }],
-  questions: { asked: 12, escalated: 2, answered: 1, added_to_kb: 1 },
+  questions: { asked: 12, escalated: 2, answered: 1, added_to_kb: 1, self_served: 10, saved_minutes: 100 },
   accesses_requested: 3,
   goals: 0,
   discuss: ['Просрочена задача «Познакомься с командой» — что мешает и чем помочь.'],
@@ -58,6 +58,8 @@ describe('Idea 12.11: internship report', () => {
     expect(screen.getByText(/Промежуточный отчёт: день 10 из 90/)).toHaveTextContent('Отчёт видят только наставник и руководитель.')
     expect(screen.getByText('ответов добавлено в базу знаний').previousSibling).toHaveTextContent('1')
     expect(screen.getByText(/что мешает и чем помочь/)).toBeInTheDocument()
+    // organizers 12.11: a mentor spends 40–48 hours per internship; the report shows what buddy saved
+    expect(screen.getByLabelText('Время наставника')).toHaveTextContent('≈ 1 ч 40 мин сэкономил buddy: 10 вопросов стажёр закрыл сам')
   })
 
   it('after three months the report is final', async () => {
