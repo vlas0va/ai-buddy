@@ -9,7 +9,8 @@
         "mentor",
         "lead",
         "hrbp",
-        "alumni"
+        "alumni",
+        "hr_admin"
       ],
       "write": false,
       "inputSchema": {
@@ -86,7 +87,8 @@
         "mentor",
         "lead",
         "hrbp",
-        "alumni"
+        "alumni",
+        "hr_admin"
       ],
       "write": true,
       "inputSchema": {

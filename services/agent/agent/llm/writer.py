@@ -4,6 +4,8 @@ OpenAI-compatible model and may call READ tools of the user's role. Both receive
 from __future__ import annotations
 
 import json
+import logging
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -12,6 +14,12 @@ from ..config import AgentConfig
 from ..errors import LLMError, ToolError
 from ..tools.base import ToolGateway
 from .openai_compat import OpenAICompatClient
+
+log = logging.getLogger("agent.llm")
+
+# «В базе знаний я этого не нашёл» while a document covers the question: a small local model sometimes gives up
+NOT_FOUND = re.compile(r"не\s+нашёл|не\s+нашел|нет\s+(информации|конкретн|данных)|не\s+содерж|не\s+указан", re.I)
+STRONG_COVERAGE = 0.75
 
 ROLE_RU = {
     "intern": "стажёр",
@@ -27,7 +35,8 @@ def user_block(user: User, open_tasks: list[str]) -> str:
     tasks = "; ".join(open_tasks[:5]) or "нет данных"
     return (
         f"Имя: {user.display_name or 'не указано'}. Роль: {ROLE_RU.get(user.role, user.role)}. "
-        f"Команда: {TEAM_RU.get(user.team_id, user.team_id)}. Этап: {user.stage or 'не указан'}. "
+        f"Команда: {TEAM_RU.get(user.team_id, user.team_id)}. Офис: {user.location or 'не указан'}. "
+        f"Этап: {user.stage or 'не указан'}. "
         f"Открытые задачи плана: {tasks}."
     )
 
@@ -73,7 +82,12 @@ class LLMWriter:
     ) -> list[dict[str, Any]]:
         open_tasks = [t.title for t in user.tasks if t.status != "done"]
         system = self.config.prompt_text("system").replace("{user_block}", user_block(user, open_tasks))
-        docs = "\n\n".join(f'<doc id="{h["doc_id"]}" title="{h["title"]}">\n{h["snippet"]}\n</doc>' for h in hits)
+        # the paragraph that answers (picked by the question and the user's office) first, then the whole document;
+        # no doc ids: the chat shows the sources as chips, the model must not print ids
+        docs = "\n\n".join(
+            f'<doc title="{h["title"]}">\nГлавное по вопросу:\n{h["snippet"]}\n\nВесь документ:\n{h.get("body") or h["snippet"]}\n</doc>'
+            for h in hits
+        )
         prompt = (
             self.config.prompt_text("answer")
             .replace("{question}", question)
@@ -114,8 +128,26 @@ class LLMWriter:
         try:
             if self.tool_calling and gateway is not None:
                 msgs = self._run_tools(msgs, user, gateway)
-            yield from self.client.stream(msgs)
-        except LLMError:
+            strong = bool(hits) and float(hits[0].get("coverage", 0) or 0) >= STRONG_COVERAGE
+            stream = self.client.stream(msgs)
+            head = ""
+            for chunk in stream:  # hold the first sentence: a «not found» over a strong document is replaced
+                head += chunk
+                if len(head) >= 120 or any(p in head for p in ".!?\n"):
+                    break
+            if strong and self.fallback and NOT_FOUND.search(head):
+                log.info("LLM said «not found» over a covering document; answering from the document")
+                if meta is not None:
+                    meta["llm_not_found_override"] = True
+                yield from self.fallback.answer(question, hits, user, task_hint)
+                return
+            yield head
+            yield from stream
+        except LLMError as exc:
+            # the reason goes to the log, so «упрощённый режим» can be diagnosed (model name, address, timeout)
+            log.warning(
+                "LLM failed, answering with the stub: %s (url=%s model=%s)", exc, self.client.url, self.client.model
+            )
             if not self.fallback:
                 raise
             if meta is not None:
@@ -160,6 +192,7 @@ def make_writer(config: AgentConfig, api_key: str, client: Any = None) -> StubWr
         temperature=float(llm.get("temperature", 0.2)),
         max_tokens=int(llm.get("max_tokens", 700)),
         client=client,
+        no_think=str(llm.get("no_think", "true")).lower() in ("1", "true", "yes", "on"),
     )
     fallback = StubWriter() if str(llm.get("fallback_to_stub", "true")).lower() in ("1", "true", "yes", "on") else None
     return LLMWriter(config, oc, fallback)

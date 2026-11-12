@@ -53,6 +53,22 @@ type turnState struct {
 	doneLatencyMS *int64
 	doneEscalated bool
 	tooLarge      bool // text or sources over the per-turn bounds
+	// cards shown with the message and restored by the history: proposal, escalation, refusal, next_step
+	cards     map[string]json.RawMessage
+	proposals []json.RawMessage // every stored proposal of the turn (a list of accesses has several)
+}
+
+// maxCard bounds one stored card; a bigger one is relayed but not kept.
+const maxCard = 32 << 10
+
+func (s *turnState) card(name string, data json.RawMessage) {
+	if len(data) == 0 || len(data) > maxCard {
+		return
+	}
+	if s.cards == nil {
+		s.cards = map[string]json.RawMessage{}
+	}
+	s.cards[name] = data
 }
 
 // addText appends assistant text unless the turn would exceed maxTurnText (then tooLarge is set).
@@ -93,6 +109,7 @@ func (s *turnState) collect(ev agentclient.Event) {
 		if json.Unmarshal(ev.Data, &r) == nil {
 			s.refusal, s.refusalText = r.Reason, r.Text
 		}
+		s.card("refusal", ev.Data)
 	case agentclient.EventEscalationDraft:
 		var d struct {
 			ToRole string `json:"to_role"`
@@ -100,6 +117,11 @@ func (s *turnState) collect(ev agentclient.Event) {
 		if json.Unmarshal(ev.Data, &d) == nil {
 			s.escalatedTo = d.ToRole
 		}
+		s.card("escalation", ev.Data)
+	case agentclient.EventNextStep:
+		s.card("next_step", ev.Data)
+	case "date_picker": // feedback 12.11: the calendar under an absence answer comes back with the history
+		s.card("date_picker", ev.Data)
 	case agentclient.EventDone:
 		s.done = ev.Data
 		var d struct {
@@ -165,7 +187,7 @@ func (h *Handler) postMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	userMsgID := newUUID()
-	if err := insertMessage(ctx, h.pool, userMsgID, sid, "user", text, nil); err != nil {
+	if err := insertMessage(ctx, h.pool, userMsgID, sid, "user", text, nil, nil); err != nil {
 		apierr.WriteJSON(w, err)
 		return
 	}
@@ -234,6 +256,12 @@ loop:
 				return
 			}
 			st.summary = summary
+			if len(ev.Data) <= maxCard && len(st.proposals) < 10 {
+				st.proposals = append(st.proposals, ev.Data) // only a proposal core stored can be restored and confirmed
+				if raw, err := json.Marshal(st.proposals); err == nil {
+					st.card("proposals", raw)
+				}
+			}
 			if sse.Send(ev.Name, ev.Data) != nil {
 				return
 			}
@@ -291,7 +319,7 @@ func (h *Handler) saveAssistant(ctx context.Context, id, sessionID string, st *t
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	if err := insertMessage(ctx, h.pool, id, sessionID, "assistant", text, st.sources); err != nil {
+	if err := insertMessage(ctx, h.pool, id, sessionID, "assistant", text, st.sources, st.cards); err != nil {
 		h.log.Error("save assistant message failed", "session", sessionID, "err", err)
 		return false
 	}

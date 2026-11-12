@@ -11,7 +11,7 @@ def test_S3_01_explains_procedure_with_test_source_and_asks_dates(anna):
     src = first(ev, "sources")
     assert src["items"][0]["doc_id"] == "absence-policy"
     assert src["items"][0]["source_type"] == "test" and src["items"][0]["badge"] == "Тестовая инструкция прототипа"
-    assert "На какие даты" in text_of(ev)
+    assert "Выбери даты в календаре" in text_of(ev) and first(ev, "date_picker")["kind"] == "day_off"
     assert "Мария Лебедева" in text_of(ev)  # approver from the directory
     assert ev[-1].name == "done"
 
@@ -93,7 +93,7 @@ def test_S3_08_confirm_by_text_requires_button(anna):
 def test_S3_09_cancel_clears_draft(anna):
     anna.say("хочу отгул в пятницу")
     assert "отменил" in text_of(anna.say("отмена"))
-    assert "На какие даты" in text_of(anna.say("хочу отгул"))
+    assert "Выбери даты в календаре" in text_of(anna.say("хочу отгул"))
 
 
 def test_S3_10_service_timeout_does_not_duplicate_request(app_factory):
@@ -140,7 +140,7 @@ def test_S3_13_vacation_is_a_request_with_its_type_not_a_day_off(anna):
 
 
 def test_S3_14_short_notice_warning(anna):
-    assert "за 2 рабочих дня" in text_of(anna.say("отгул завтра"))
+    assert "не позже чем за 3 рабочих дня" in text_of(anna.say("отгул завтра"))
 
 
 def test_S3_15_scenario_flag_off_disables_flow(anna):

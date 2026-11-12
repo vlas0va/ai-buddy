@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"aibuddy/services/internal/core/analytics"
@@ -130,6 +131,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ToRole    string  `json:"to_role"`
 		Text      string  `json:"text"`
 		SessionID *string `json:"session_id"`
+		MessageID *string `json:"message_id"` // the assistant message whose draft is sent (feedback 12.11)
 	}
 	if err := httpx.ReadJSON(w, r, &body); err != nil {
 		apierr.WriteJSON(w, err)
@@ -165,12 +167,31 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		}
 		session = *body.SessionID
 	}
+	var message any
+	if body.MessageID != nil {
+		if !uuidRE.MatchString(*body.MessageID) {
+			apierr.WriteJSON(w, apierr.Validation().WithMessage("Некорректный message_id"))
+			return
+		}
+		var sid string
+		err := h.pool.QueryRow(ctx, `SELECT m.session_id::text FROM core.chat_messages m JOIN core.chat_sessions s ON s.id = m.session_id
+			WHERE m.id = $1 AND s.user_id = $2 AND m.author = 'assistant'`, *body.MessageID, c.Sub).Scan(&sid)
+		if errors.Is(err, pgx.ErrNoRows) {
+			apierr.WriteJSON(w, apierr.Forbidden())
+			return
+		}
+		if err != nil {
+			apierr.WriteJSON(w, fmt.Errorf("check message: %w", err))
+			return
+		}
+		message, session = *body.MessageID, sid
+	}
 	to, err := h.target(ctx, c, body.ToRole)
 	if err != nil {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	out, err := h.insert(ctx, c, to, body.ToRole, text, session)
+	out, err := h.insert(ctx, c, to, body.ToRole, text, session, message)
 	if err != nil {
 		apierr.WriteJSON(w, err)
 		return
@@ -178,15 +199,20 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, out)
 }
 
-func (h *Handler) insert(ctx context.Context, c authn.Claims, to, toRole, text string, session any) (Escalation, error) {
+func (h *Handler) insert(ctx context.Context, c authn.Claims, to, toRole, text string, session, message any) (Escalation, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return Escalation{}, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var id string
-	if err := tx.QueryRow(ctx, `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id::text`, c.Sub, to, toRole, session, text).Scan(&id); err != nil {
+	err = tx.QueryRow(ctx, `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text, message_id)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id::text`, c.Sub, to, toRole, session, text, message).Scan(&id)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return Escalation{}, apierr.Conflict().WithMessage("Это сообщение уже отправлено")
+	}
+	if err != nil {
 		return Escalation{}, fmt.Errorf("insert escalation: %w", err)
 	}
 	if err := h.notify.Create(ctx, tx, notify.Notification{UserID: to, Kind: notify.KindReminder,

@@ -1,13 +1,13 @@
 import { z } from 'zod'
 import { apiRequest } from './client'
-import { proposalSchema, resultSchema } from '@/chat/events'
+import { datePickerSchema, escalationDraftSchema, nextStepSchema, proposalSchema, refusalSchema, resultSchema } from '@/chat/events'
 import { chatHistorySchema, chatMessageSchema, chatSessionSchema, escalationSchema } from './schemas'
 
 export function createSession() {
   return apiRequest('/api/chat/sessions', chatSessionSchema, { method: 'POST' })
 }
 
-export function sendEscalation(body: { to_role: string; text: string; session_id?: string }) {
+export function sendEscalation(body: { to_role: string; text: string; session_id?: string; message_id?: string }) {
   return apiRequest('/api/escalations', escalationSchema, { method: 'POST', body })
 }
 
@@ -21,11 +21,32 @@ const historySchema = chatHistorySchema.extend({
     chatMessageSchema.extend({
       proposal: proposalSchema.optional(),
       proposal_state: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
+      proposals: z.array(z.object({ proposal: proposalSchema, state: z.enum(['pending', 'confirmed', 'cancelled']) })).optional(),
       result: resultSchema.optional(),
+      // feedback 11.11: the draft to the mentor, a refusal and the next step survive leaving the chat
+      escalation: escalationDraftSchema.optional().catch(undefined),
+      escalation_sent: z.boolean().optional(),
+      refusal: refusalSchema.optional().catch(undefined),
+      next_step: nextStepSchema.optional().catch(undefined),
+      date_picker: datePickerSchema.optional().catch(undefined),
     }),
   ),
 })
 export type ChatHistory = z.infer<typeof historySchema>
+
+// feedback 12.11: a source chip opens the test document (core asks the agent, which checks the ACL)
+export const kbDocSchema = z.object({ doc_id: z.string(), title: z.string(), body: z.string(), badge: z.string().optional() })
+
+export function getKBDoc(docId: string) {
+  return apiRequest(`/api/kb/${encodeURIComponent(docId)}`, kbDocSchema)
+}
+
+const sessionsListSchema = z.array(z.object({ session_id: z.string(), title: z.string(), created_at: z.string(), updated_at: z.string() }))
+export type SessionSummary = z.infer<typeof sessionsListSchema>[number]
+
+export function listSessions() {
+  return apiRequest('/api/chat/sessions', sessionsListSchema)
+}
 
 export function getSession(sessionId: string) {
   return apiRequest(`/api/chat/sessions/${sessionId}`, historySchema)

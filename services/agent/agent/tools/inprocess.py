@@ -40,8 +40,8 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "trips.list_my_requests": {"intern", "mentor", "lead"},
     "trips.validate_request": {"intern", "mentor", "lead"},
     "trips.create_request": {"intern", "mentor", "lead"},
-    "consents.list": {"intern", "mentor", "lead", "hrbp", "alumni"},
-    "consents.sign": {"intern", "mentor", "lead", "hrbp", "alumni"},
+    "consents.list": {"intern", "mentor", "lead", "hrbp", "alumni", "hr_admin"},
+    "consents.sign": {"intern", "mentor", "lead", "hrbp", "alumni", "hr_admin"},
 }
 ABSENCE_TYPES = {"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 MAX_VACATION_DAYS, VACATION_NOTICE_DAYS, MAX_ABSENCE_DAYS, MAX_DOCUMENTS = 28, 14, 5, 3  # = B's mocks/absence

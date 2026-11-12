@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { attachmentKind, formatSize, readAttachment, safeUrl } from '@/chat/attachments'
 import type { Proposal } from '@/chat/events'
 import { absenceSteps } from '@/chat/statusText'
-import { fromHistory, initialState, restartTurn, startTurn } from '@/chat/stream'
+import { fromHistory, initialState, reduce, restartTurn, startConfirm, startTurn } from '@/chat/stream'
+import { AccessBundleCard } from './AccessBundleCard'
 import { ActionProposalCard } from './ActionProposalCard'
 import { ActionResultCard } from './ActionResultCard'
 import { ActionsPanel } from './ActionsPanel'
@@ -261,4 +262,96 @@ describe('Checkpoint 11.11: access to a concrete resource', () => {
     expect(screen.getByText('чтение')).toBeInTheDocument()
     expect(screen.getByText('руководитель команды, права выдаёт DevOps')).toBeInTheDocument()
   })
+})
+
+describe('Feedback 12.11: missing accesses as one list with checkboxes', () => {
+  const access = (id: string, name: string, elevated = false) =>
+    ({
+      proposal_id: id,
+      kind: 'access_request',
+      draft: { tool: 'access.request_access', args: { resource_id: id, level: 'read' }, display: { resource_name: name, elevated } },
+    }) as unknown as Proposal
+
+  it('the reducer turns several access drafts of one answer into a list and tracks each state', () => {
+    let s = startTurn(initialState, 'какие доступы мне нужны')
+    s = reduce(s, { type: 'action_proposal', data: access('a', 'Jira') })
+    expect(s.messages.at(-1)?.proposal?.proposal_id).toBe('a')
+    s = reduce(s, { type: 'action_proposal', data: access('b', 'Закрытое пространство', true) })
+    const m = s.messages.at(-1)!
+    expect(m.proposal).toBeNull()
+    expect(m.bundle?.map((p) => p.proposal_id)).toEqual(['a', 'b'])
+    s = startConfirm(s, 'a')
+    s = reduce(s, { type: 'action_result', data: { action_id: 'x', kind: 'access_request', status: 'granted' } as never })
+    expect(s.messages.find((x) => x.bundle)?.bundle?.map((p) => p.state)).toEqual(['confirmed', 'pending'])
+    expect(fromHistory({ session_id: 's', messages: [{ id: '1', author: 'assistant', text: '', created_at: '', proposals: [{ proposal: access('c', 'X'), state: 'cancelled' }] }] } as never).messages[0]?.bundle?.[0]?.state).toBe('cancelled')
+  })
+
+  it('ordinary accesses are checked, the ones needing approval are not; the button sends the checked ones', async () => {
+    const onConfirmMany = vi.fn()
+    const items = [access('a', 'Jira'), access('b', 'Закрытое пространство', true)].map((p) => ({ ...p, state: 'pending' as const }))
+    render(<AccessBundleCard proposals={items} onConfirmMany={onConfirmMany} onCancel={vi.fn()} />)
+    expect(screen.getByLabelText('Jira · чтение')).toBeChecked()
+    expect(screen.getByLabelText('Закрытое пространство · чтение')).not.toBeChecked()
+    expect(screen.getByText('согласует руководитель')).toBeInTheDocument()
+    await userEvent.click(screen.getByLabelText('Закрытое пространство · чтение'))
+    await userEvent.click(screen.getByRole('button', { name: 'Запросить выбранные (2)' }))
+    expect(onConfirmMany).toHaveBeenCalledWith(['a', 'b'])
+  })
+
+  it('finished lists show the states and no buttons', () => {
+    const items = [{ ...access('a', 'Jira'), state: 'confirmed' as const }, { ...access('b', 'Bitbucket'), state: 'cancelled' as const }]
+    render(<AccessBundleCard proposals={items} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByText('отправлено')).toBeInTheDocument()
+    expect(screen.getByText('отменено')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Запросить/ })).not.toBeInTheDocument()
+  })
+})
+
+it('feedback 12.11: drafts that arrive later in the stream are checked too', () => {
+  const mk = (id: string, elevated = false) =>
+    ({ proposal_id: id, kind: 'access_request', state: 'pending',
+      draft: { tool: 'access.request_access', args: { resource_id: id, level: 'read' }, display: { resource_name: id, elevated } } }) as never
+  const { rerender } = render(<AccessBundleCard proposals={[mk('a'), mk('b')]} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  rerender(<AccessBundleCard proposals={[mk('a'), mk('b'), mk('c'), mk('d', true)]} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.getByRole('button', { name: 'Запросить выбранные (3)' })).toBeInTheDocument()
+})
+
+it('feedback 12.11: a list draft sent from the list shows its result in the list, not as a new message', () => {
+  const mk = (id: string) =>
+    ({ proposal_id: id, kind: 'access_request', draft: { tool: 'access.request_access', args: { resource_id: id }, display: { resource_name: id } } }) as never
+  let s = startTurn(initialState, 'какие доступы мне нужны')
+  s = reduce(s, { type: 'action_proposal', data: mk('a') })
+  s = reduce(s, { type: 'action_proposal', data: mk('b') })
+  s = reduce(s, { type: 'done', data: {} })
+  const before = s.messages.length
+  s = startConfirm(s, 'b')
+  expect(s.messages.length).toBe(before)
+  s = reduce(s, { type: 'token', data: { text: 'Доступ выдан.' } })
+  s = reduce(s, { type: 'action_result', data: { action_id: 'x', kind: 'access_request', status: 'granted', external_id: 'ACC-000041', proposal_id: 'b' } })
+  s = reduce(s, { type: 'done', data: {} })
+  const list = s.messages.at(-1)!
+  expect(s.messages.length).toBe(before)
+  expect(list.text).not.toContain('Доступ выдан')
+  expect(list.bundle?.map((p) => p.state)).toEqual(['pending', 'confirmed'])
+  render(<AccessBundleCard proposals={list.bundle!} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.getByText('выдан · ACC-000041')).toBeInTheDocument()
+  const history = fromHistory({ session_id: 's', messages: [
+    { id: '1', author: 'assistant', text: 'список', created_at: '', proposals: [{ proposal: mk('a'), state: 'pending' }, { proposal: mk('b'), state: 'confirmed' }] },
+    { id: '2', author: 'assistant', text: 'Доступ: b — выдан', created_at: '', result: { action_id: 'x', kind: 'access_request', status: 'granted', proposal_id: 'b' } },
+  ] } as never)
+  expect(history.messages).toHaveLength(1)
+  expect(history.messages[0]?.bundle?.[1]?.result?.status).toBe('granted')
+})
+
+it('QA 12.11: the query cache is dropped when another user signs in', async () => {
+  const { QueryClient: QC } = await import('@tanstack/react-query')
+  const { clearOnUserChange } = await import('@/queryClient')
+  const { useSession } = await import('@/store/session')
+  const client = new QC()
+  const stop = clearOnUserChange(client)
+  useSession.setState({ user: { id: 'intern.anna' } as never })
+  client.setQueryData(['notifications'], [{ id: 'n1' }])
+  useSession.setState({ user: { id: 'hradmin.olga' } as never })
+  expect(client.getQueryData(['notifications'])).toBeUndefined()
+  stop()
 })

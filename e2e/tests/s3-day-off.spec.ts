@@ -32,7 +32,7 @@ test('S3: day off from question to lead approval, visible after reload', async (
 
   const lead = await (await browser.newContext()).newPage()
   await login(lead, 'lead.dmitry')
-  await lead.getByRole('link', { name: 'Согласования' }).click()
+  await lead.getByRole('link', { name: 'Согласования', exact: true }).click()
   const card = lead.getByLabel('Заявка: Иван Белов').filter({ hasText: day.slice(0, 5) }).first()
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: 'Согласовать' }).click()
@@ -44,7 +44,7 @@ test('S3: day off from question to lead approval, visible after reload', async (
   await expect(panel.locator('li, .ui-card').filter({ hasText: id }).first()).toContainText('Ждёт HR-администратора')
   const admin = await (await browser.newContext()).newPage()
   await login(admin, 'hradmin.olga')
-  await admin.getByRole('link', { name: 'Согласования' }).click()
+  await admin.getByRole('link', { name: 'Согласования', exact: true }).click()
   const hrCard = admin.getByLabel('Заявка: Иван Белов').filter({ hasText: day.slice(0, 5) }).first()
   await expect(hrCard).toContainText('Этап: HR-администратор')
   await hrCard.getByRole('button', { name: 'Согласовать' }).click()

@@ -585,7 +585,7 @@ func TestChat_S2_HistoryIsLastTenMessages(t *testing.T) {
 	sid := e.session(anna)
 	for i := 0; i < 12; i++ {
 		author := []string{"user", "assistant"}[i%2]
-		if err := insertMessage(context.Background(), e.pool, agenttest.NewID(), sid, author, "m"+itoa(i), nil); err != nil {
+		if err := insertMessage(context.Background(), e.pool, agenttest.NewID(), sid, author, "m"+itoa(i), nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -771,5 +771,168 @@ func TestAgentError(t *testing.T) {
 	}
 	if e := agentError(&agentclient.UnavailableError{Status: 502, Code: "x"}); e.Code != "upstream_unavailable" || !e.Retryable {
 		t.Fatalf("%+v", e)
+	}
+}
+
+// Feedback 11.11: leaving the chat and coming back keeps the cards — the draft to the mentor, the draft of a request
+// with its state and the result with the current status of the action.
+func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	draft := map[string]any{"to_role": "mentor", "to_name": "Олег Смирнов", "text": "Олег, подскажи по задаче"}
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Подготовил сообщение."}},
+			{Name: "escalation_draft", Data: draft}, {Name: "next_step", Data: map[string]any{"title": "Шаг"}}, agenttest.Done()}
+	})
+	e.message(sid, anna, "помоги написать наставнику")
+	e.agent.OnMessage(nil)
+	pid := e.propose(sid, anna)
+
+	type msg struct {
+		ID             string         `json:"id"`
+		Author         string         `json:"author"`
+		Escalation     map[string]any `json:"escalation"`
+		EscalationSent bool           `json:"escalation_sent"`
+		NextStep       map[string]any `json:"next_step"`
+		Proposal       map[string]any `json:"proposal"`
+		ProposalState  string         `json:"proposal_state"`
+		Result         map[string]any `json:"result"`
+	}
+	history := func() []msg {
+		var h struct {
+			Messages []msg `json:"messages"`
+		}
+		e.do(http.MethodGet, "/api/chat/sessions/"+sid, anna, nil).json(t, &h)
+		return h.Messages
+	}
+	m := history()
+	if m[1].Escalation["text"] != draft["text"] || m[1].NextStep["title"] != "Шаг" || m[0].Escalation != nil {
+		t.Fatalf("escalation card %+v", m)
+	}
+	if m[3].Proposal["proposal_id"] != pid || m[3].ProposalState != "pending" {
+		t.Fatalf("proposal card %+v", m[3])
+	}
+	ar := e.stream(e.confirmPath(sid, pid), anna, nil).find("action_result")
+	m = history()
+	if m[3].ProposalState != "confirmed" || m[4].Result["action_id"] != ar["action_id"] || m[4].Result["status"] != "pending_approval" {
+		t.Fatalf("after confirm %+v %+v", m[3], m[4])
+	}
+	if m[1].EscalationSent {
+		t.Fatal("not sent yet")
+	}
+	// a message sent from another draft of the session does not mark this one
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text)
+		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'другое')`, sid); err != nil {
+		t.Fatal(err)
+	}
+	if history()[1].EscalationSent {
+		t.Fatal("marked by another escalation")
+	}
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text, message_id)
+		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'Олег, подскажи', $2)`, sid, m[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if !history()[1].EscalationSent {
+		t.Fatal("a sent draft must not offer «Отправить» again")
+	}
+	if proposalState("expired") != "cancelled" || proposalState("failed") != "pending" {
+		t.Fatal("proposalState")
+	}
+}
+
+// Feedback 12.11: the list of accesses comes as several drafts in one message (checkboxes); the history keeps all of
+// them, each with its own state.
+func TestChat_Feedback_HistoryKeepsAllDraftsOfAMessage_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	draft := func(resource string) agenttest.Event {
+		return agenttest.Event{Name: "action_proposal", Data: map[string]any{"proposal_id": agenttest.NewID(), "kind": "access_request",
+			"summary": "Доступ: " + resource, "draft": map[string]any{"tool": "access.request_access",
+				"args": map[string]any{"resource_id": resource, "reason": "онбординг", "level": "read"}}}}
+	}
+	first, second := draft("confluence"), draft("space-delivery")
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Отметь нужные."}}, first, second, agenttest.Done()}
+	})
+	e.message(sid, anna, "какие доступы мне нужны")
+	e.agent.OnMessage(nil)
+	e.stream(e.confirmPath(sid, first.Data.(map[string]any)["proposal_id"].(string)), anna, nil)
+
+	var h struct {
+		Messages []struct {
+			Proposals []struct {
+				Proposal map[string]any `json:"proposal"`
+				State    string         `json:"state"`
+			} `json:"proposals"`
+		} `json:"messages"`
+	}
+	e.do(http.MethodGet, "/api/chat/sessions/"+sid, anna, nil).json(t, &h)
+	got := h.Messages[1].Proposals
+	if len(got) != 2 || got[0].State != "confirmed" || got[1].State != "pending" ||
+		got[1].Proposal["proposal_id"] != second.Data.(map[string]any)["proposal_id"] {
+		t.Fatalf("drafts %+v", got)
+	}
+	if restoreProposals(json.RawMessage(`{}`), []byte(`{}`)) != nil {
+		t.Fatal("broken cards")
+	}
+}
+
+// Feedback 12.11: a source chip opens the test document — only one the user may read (the agent checks the ACL).
+func TestChat_Feedback_SourceChipOpensDocument_R69(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	r := e.do(http.MethodGet, "/api/kb/common-laptop", anna, nil)
+	var doc map[string]any
+	r.json(t, &doc)
+	if r.status != http.StatusOK || doc["doc_id"] != "common-laptop" || doc["badge"] != "Тестовая инструкция прототипа" {
+		t.Fatalf("%d %v", r.status, doc)
+	}
+	for id, want := range map[string]int{"mentor-only": 404, "Bad%20id": 404, "broken": 502} {
+		if got := e.do(http.MethodGet, "/api/kb/"+id, anna, nil).status; got != want {
+			t.Errorf("%s: %d, want %d", id, got, want)
+		}
+	}
+	if got := e.do(http.MethodGet, "/api/kb/common-laptop", "", nil).status; got != http.StatusUnauthorized {
+		t.Errorf("anonymous: %d", got)
+	}
+}
+
+// Feedback 12.11: «Новый диалог» keeps the old conversation: the list of dialogs names each by its first question;
+// the calendar under an absence answer comes back with the history.
+func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	first := e.session(anna)
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Выбери даты."}},
+			{Name: "date_picker", Data: map[string]any{"purpose": "absence", "kind": "day_off", "min": "2026-11-10", "max": "2027-11-09", "label": "Даты отгула"}},
+			agenttest.Done()}
+	})
+	e.message(first, anna, "Как оформить отгул?")
+	e.agent.OnMessage(nil)
+	second := e.session(anna)
+	e.message(second, anna, "кто мой наставник?")
+	_ = e.session(anna) // an empty dialog is not listed
+
+	var list []map[string]any
+	e.do(http.MethodGet, "/api/chat/sessions", anna, nil).json(t, &list)
+	if len(list) != 2 || list[0]["session_id"] != second || list[1]["title"] != "Как оформить отгул?" {
+		t.Fatalf("dialogs %v", list)
+	}
+	var other []map[string]any
+	e.do(http.MethodGet, "/api/chat/sessions", e.maria(), nil).json(t, &other)
+	if len(other) != 0 {
+		t.Fatalf("another user sees the dialogs: %v", other)
+	}
+	var h struct {
+		Messages []struct {
+			DatePicker map[string]any `json:"date_picker"`
+		} `json:"messages"`
+	}
+	e.do(http.MethodGet, "/api/chat/sessions/"+first, anna, nil).json(t, &h)
+	if h.Messages[1].DatePicker["label"] != "Даты отгула" {
+		t.Fatalf("date picker %v", h.Messages[1])
 	}
 }

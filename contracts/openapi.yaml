@@ -183,6 +183,24 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/chat/sessions:
+    get:
+      tags: [chat]
+      summary: Earlier dialogs of the user with messages, newest first (title = first question)
+      responses:
+        "200":
+          description: Dialogs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [session_id, title, created_at, updated_at]
+                  properties:
+                    session_id: { type: string, format: uuid }
+                    title: { type: string }
+                    created_at: { type: string, format: date-time }
+                    updated_at: { type: string, format: date-time }
     post:
       tags: [chat]
       summary: Start a chat session
@@ -347,6 +365,27 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /api/kb/{doc_id}:
+    get:
+      summary: Test KB document behind a source chip (only one the user may read; the agent checks the ACL)
+      parameters:
+        - { name: doc_id, in: path, required: true, schema: { type: string, pattern: "^[a-z0-9][a-z0-9-]{0,99}$" } }
+      responses:
+        "200":
+          description: Document
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [doc_id, title, body]
+                properties:
+                  doc_id: { type: string }
+                  title: { type: string }
+                  body: { type: string, description: markdown }
+                  source_type: { type: string, enum: [test] }
+                  badge: { type: string }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/escalations:
     post:
       tags: [escalations]
@@ -362,6 +401,7 @@ paths:
                 to_role: { $ref: "#/components/schemas/ContactRole" }
                 text: { type: string, minLength: 1, maxLength: 4000 }
                 session_id: { type: string, format: uuid }
+                message_id: { type: string, format: uuid, description: "assistant message whose draft is sent; sent once (409 again)" }
       responses:
         "201":
           description: Created

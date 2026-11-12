@@ -217,22 +217,24 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
             st = "по запросу"
         who = "согласование: " + (r.get("approver_label") or "руководитель") if r["elevated"] else "чтение — сразу"
         rows.append(f"| {r['name']} | {envs} | {levels} | {st} | {who} |")
-        if r["status"] == "not_requested" and not r["elevated"] and not r.get("optional"):
-            missing.append(r)
+        if r["status"] == "not_requested" and not r.get("optional"):
+            missing.append(r)  # elevated ones too: the chat shows one list with checkboxes (feedback 12.11)
     intro = "Для работы в команде нужны такие доступы:" if turn.user.role == "intern" else "Доступы команды:"
     table = "| Ресурс | Окружения | Права | Статус | Кто согласует |\n|---|---|---|---|---|\n" + "\n".join(rows)
     rules = (
         "\n\nЧтение выдаётся сразу. Запись, администрирование и любой доступ к prod согласует руководитель. "
         "Пример: «доступ на запись в репозиторий delivery-api» или «доступ к БД на stage на чтение»."
     )
+    approval = [r for r in missing if r["elevated"]]
     tail = (
-        f"\n\nПодготовил заявки на недостающие доступы на чтение ({len(missing)}) — отправь нужные карточками. "
-        "Доступ с повышенными правами запрошу по отдельной просьбе, например «запроси закрытое пространство»."
+        f"\n\nНиже список недостающих доступов ({len(missing)}): отметь галочками нужные и нажми «Запросить выбранные». "
+        "Чтение выдаётся сразу"
+        + (", а доступы с согласованием уйдут руководителю — они по умолчанию не отмечены." if approval else ".")
         if missing
-        else "\n\nВсе обычные доступы уже есть или запрошены."
+        else "\n\nВсе нужные доступы уже есть или запрошены."
     )
     yield from say(f"{intro}\n\n{table}{rules}{tail}")
-    for r in missing[:5]:
+    for r in missing[:8]:
         yield Event("action_proposal", _proposal(turn, r))
 
 

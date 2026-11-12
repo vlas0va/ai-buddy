@@ -245,17 +245,18 @@ def handle_task_message(turn: Turn, text: str) -> Iterator[Event]:
     title = m.group(4).strip() if m else ""
     task = next((t for t in turn.user.tasks if not t.parent_task_id and t.title.lower() == title.lower()), None)
     open_subs = [t.title for t in turn.user.tasks if task and t.parent_task_id == task.task_id and t.status != "done"]
-    mentor = first_name(turn.contact("mentor"), "наставнику")
+    name = first_name(turn.contact("mentor"), "")
+    mentor = f"наставнику ({name})" if name else "наставнику"  # no declension of a name: «для Олег» read wrong
     if open_subs:
         points = "\n".join(f"— {s}" for s in open_subs[:4])
         body = f"Сейчас занимаюсь задачей «{title}» из плана адаптации. Хочу обсудить с тобой:\n{points}\nКогда тебе удобно?"
-        lead = f"Подготовил сообщение для {mentor} про задачу «{title}» — в нём пункты, которые ещё не сделаны."
+        lead = f"Подготовил сообщение {mentor} про задачу «{title}» — в нём пункты, которые ещё не сделаны."
     else:
         body = (
             f"Сейчас занимаюсь задачей «{title}» из плана адаптации. Уже сделал: <что>. "
             "Нужна помощь с: <вопрос>. Когда тебе удобно обсудить?"
         )
-        lead = f"Подготовил сообщение для {mentor} про задачу «{title}»."
+        lead = f"Подготовил сообщение {mentor} про задачу «{title}»."
     yield from say(
         lead
         + " Допиши, что уже сделал, и нажми «Отправить» — сообщение уйдёт наставнику, а ответ появится в «Мои вопросы»."

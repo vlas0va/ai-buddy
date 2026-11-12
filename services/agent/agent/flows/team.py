@@ -78,6 +78,20 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
         yield Event("action_proposal", proposal)
         return
 
+    how = re.search(r"\bкак\b|порядок|правил", t) and not decision
+    if how:  # «как согласовывать заявки стажёров?»: the process, then the queue (QA 12.11)
+        stage = (
+            "Ты — второй этап: заявки на отсутствие приходят после согласования руководителя. Согласованная заявка "
+            "оформлена, HR BP получает уведомление."
+            if turn.user.role == "hr_admin"
+            else "Отсутствия после тебя согласует HR-администратор; пока он не согласовал, стажёр может перенести даты. "
+            "Доступы на запись, администрирование и к prod выдаются только с твоего согласия."
+        )
+        yield from say(
+            "Как согласовывать: открой раздел «Согласования» — там видно, кто, что и на какие даты, и кнопки "
+            "«Согласовать» / «Отклонить» с комментарием. В чате можно написать «согласуй ABS-000101» или «отклони … "
+            f"потому что …» — решение уйдёт после подтверждения на карточке. {stage}\n\n"
+        )
     if not pending:
         yield from say("Заявок, ожидающих твоего согласования, нет.")
         return
@@ -119,16 +133,26 @@ def handle_mentee(turn: Turn, text: str) -> Iterator[Event]:
         yield from say(msg)
         return
     selected = selected or mentees
-    blocks, missing = [], 0
+    blocks, missing, idle = [], 0, []
     for m in selected:
         acc = m.get("accesses", [])
         missing += sum(1 for a in acc if a.get("status") == "not_requested")
-        acc_lines = "\n".join(
-            f"  - {a['name']}: {ACCESS_LABEL.get(a.get('status', ''), a.get('status', ''))}" for a in acc
+        acc_lines = (
+            "\n".join(f"  - {a['name']}: {ACCESS_LABEL.get(a.get('status', ''), a.get('status', ''))}" for a in acc)
+            or "  через buddy пока ничего не запрашивал(а)"
         )
+        if not acc:
+            idle.append(m.get("display_name", ""))  # nothing requested yet is not «all requested» (QA 12.11)
         tasks = m.get("open_tasks") or []
         task_line = f"\n  Открытых задач плана: {len(tasks)}" if tasks else ""
         blocks.append(f"{m.get('display_name', '')} — доступы:\n{acc_lines}{task_line}")
+    if idle:
+        tail = (
+            f"\n\nЕщё не запрашивали доступы: {', '.join(idle)}. Чек-лист наставника (CL-01) просит проверить их в первую "
+            "неделю — напомни стажёру написать мне «какие доступы мне нужны»: я покажу список и подготовлю заявки."
+        )
+        yield from say("\n".join(blocks) + tail)
+        return
     tail = (
         f"\n\nНе запрошено доступов: {missing}. Чек-лист наставника (CL-01) просит проверить их в первую неделю — "
         "напомни стажёру или предложи написать мне «какие доступы мне нужны» — я подготовлю заявки."

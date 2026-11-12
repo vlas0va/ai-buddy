@@ -3,6 +3,7 @@ import type { ChatHistory } from '@/api/chat'
 import type { AttachmentMeta, sourceSchema } from '@/api/schemas'
 import type {
   ActionResult,
+  DatePicker,
   EscalationDraftData,
   NextStep,
   Proposal,
@@ -23,11 +24,16 @@ export interface ChatMessage {
   /** files attached to a user message (metadata only) */
   attachments?: AttachmentMeta[]
   proposal: (Proposal & { state: ProposalState }) | null
+  /** several drafts of one message (the missing accesses with checkboxes); then `proposal` is null */
+  bundle?: BundleItem[]
   result: ActionResult | null
   escalation: EscalationDraftData | null
+  /** the draft was already sent (restored from the history) */
+  escalationSent?: boolean
   refusal: Refusal | null
   error: StreamError | null
   nextStep?: NextStep | null
+  datePicker?: DatePicker | null
   /** server id of a saved assistant message (done.message_id or history), used for «Полезно / Не полезно» */
   serverId?: string
   /** user text that produced this assistant message, used by "Повторить" */
@@ -36,10 +42,21 @@ export interface ChatMessage {
   retryAttachments?: unknown[]
 }
 
+export type BundleItem = Proposal & { state: ProposalState; result?: ActionResult; errorText?: string }
+
 export interface ChatState {
   messages: ChatMessage[]
   streaming: boolean
   stage: Stage | null
+  /** a draft of a list is being sent: its result goes into the list, no new chat message (feedback 12.11) */
+  quiet?: boolean
+}
+
+const inBundle = (messages: ChatMessage[], proposalId: string) =>
+  messages.some((m) => m.bundle?.some((p) => p.proposal_id === proposalId))
+
+function patchBundle(messages: ChatMessage[], pick: (p: BundleItem) => boolean, patch: (p: BundleItem) => BundleItem): ChatMessage[] {
+  return messages.map((m) => (m.bundle?.some(pick) ? { ...m, bundle: m.bundle.map((p) => (pick(p) ? patch(p) : p)) } : m))
 }
 
 export const initialState: ChatState = { messages: [], streaming: false, stage: null }
@@ -55,14 +72,32 @@ export function fromHistory(history: ChatHistory): ChatState {
       sources: m.sources ?? [],
       attachments: m.attachments ?? [],
       proposal: m.proposal ? { ...m.proposal, state: proposalState } : null,
+      bundle: m.proposals?.length ? m.proposals.map((p) => ({ ...p.proposal, state: p.state })) : undefined,
       result: m.result ?? null,
-      escalation: null,
-      refusal: null,
+      escalation: m.escalation ?? null,
+      escalationSent: m.escalation_sent ?? false,
+      refusal: m.refusal ?? null,
+      nextStep: m.next_step ?? null,
+      datePicker: m.date_picker ?? null,
       error: null,
       serverId: m.author === 'assistant' ? m.id : undefined,
     }
   })
-  return { messages, streaming: false, stage: null }
+  // results of a list's drafts go back into the list instead of separate messages (the live chat shows them so too)
+  const listed = new Map<string, number>()
+  messages.forEach((m, i) => m.bundle?.forEach((p) => listed.set(p.proposal_id, i)))
+  const kept: ChatMessage[] = []
+  for (const m of messages) {
+    const res = m.result
+    const owner = res?.proposal_id !== undefined ? listed.get(res.proposal_id) : undefined
+    const list = owner === undefined ? undefined : messages[owner]
+    if (!res || !list?.bundle) {
+      kept.push(m)
+      continue
+    }
+    list.bundle = list.bundle.map((p) => (p.proposal_id === res.proposal_id ? { ...p, state: 'confirmed', result: res } : p))
+  }
+  return { messages: kept, streaming: false, stage: null }
 }
 
 let counter = 0
@@ -109,6 +144,9 @@ export function restartTurn(state: ChatState, assistantId: string): ChatState {
 
 /** Confirm turn streams into a fresh assistant message so the proposal card stays above it. */
 export function startConfirm(state: ChatState, proposalId: string): ChatState {
+  if (inBundle(state.messages, proposalId)) {
+    return { messages: updateProposal(state.messages, proposalId, 'confirming'), streaming: true, stage: 'calling_service', quiet: true }
+  }
   return {
     messages: [...updateProposal(state.messages, proposalId, 'confirming'), blank('assistant')],
     streaming: true,
@@ -117,7 +155,22 @@ export function startConfirm(state: ChatState, proposalId: string): ChatState {
 }
 
 export function updateProposal(messages: ChatMessage[], proposalId: string, next: ProposalState): ChatMessage[] {
-  return messages.map((m) => (m.proposal?.proposal_id === proposalId ? { ...m, proposal: { ...m.proposal, state: next } } : m))
+  return messages.map((m) => {
+    if (m.proposal?.proposal_id === proposalId) return { ...m, proposal: { ...m.proposal, state: next } }
+    if (m.bundle?.some((p) => p.proposal_id === proposalId)) {
+      return { ...m, bundle: m.bundle.map((p) => (p.proposal_id === proposalId ? { ...p, state: next } : p)) }
+    }
+    return m
+  })
+}
+
+/** Moves every draft in `from` state to `to` (single cards and bundles). */
+function moveStates(messages: ChatMessage[], from: ProposalState, to: ProposalState): ChatMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    proposal: m.proposal?.state === from ? { ...m.proposal, state: to } : m.proposal,
+    bundle: m.bundle?.map((p) => (p.state === from ? { ...p, state: to } : p)),
+  }))
 }
 
 export function setProposalState(state: ChatState, proposalId: string, next: ProposalState): ChatState {
@@ -135,27 +188,44 @@ function patchLast(state: ChatState, patch: (m: ChatMessage) => ChatMessage): Ch
 
 export const handlers = {
   status: (s: ChatState, d: { stage: Stage }): ChatState => ({ ...s, stage: d.stage }),
-  token: (s: ChatState, d: { text: string }): ChatState => patchLast(s, (m) => ({ ...m, text: m.text + d.text })),
+  token: (s: ChatState, d: { text: string }): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, text: m.text + d.text }))),
   sources: (s: ChatState, d: { items: Source[] }): ChatState =>
-    patchLast(s, (m) => ({ ...m, sources: [...m.sources, ...d.items] })),
+    s.quiet ? s : patchLast(s, (m) => ({ ...m, sources: [...m.sources, ...d.items] })),
   action_proposal: (s: ChatState, d: Proposal): ChatState =>
-    patchLast(s, (m) => ({ ...m, proposal: { ...d, state: 'pending' } })),
+    patchLast(s, (m) => {
+      const item = { ...d, state: 'pending' as const }
+      // a second access draft in the same answer turns the cards into one list with checkboxes (feedback 12.11)
+      if (d.kind === 'access_request' && (m.bundle || m.proposal?.kind === 'access_request')) {
+        return { ...m, proposal: null, bundle: [...(m.bundle ?? (m.proposal ? [m.proposal] : [])), item] }
+      }
+      return { ...m, proposal: item }
+    }),
   action_result: (s: ChatState, d: ActionResult): ChatState => {
+    if (s.quiet) {
+      const pick = (p: BundleItem) => (d.proposal_id ? p.proposal_id === d.proposal_id : p.state === 'confirming')
+      return { ...s, messages: patchBundle(s.messages, pick, (p) => ({ ...p, state: 'confirmed', result: d, errorText: undefined })) }
+    }
     const next = patchLast(s, (m) => ({ ...m, result: d }))
-    return { ...next, messages: next.messages.map((m) => (m.proposal?.state === 'confirming' ? { ...m, proposal: { ...m.proposal, state: 'confirmed' as const } } : m)) }
+    return { ...next, messages: moveStates(next.messages, 'confirming', 'confirmed') }
   },
-  escalation_draft: (s: ChatState, d: EscalationDraftData): ChatState => patchLast(s, (m) => ({ ...m, escalation: d })),
-  refusal: (s: ChatState, d: Refusal): ChatState => patchLast(s, (m) => ({ ...m, refusal: d })),
+  escalation_draft: (s: ChatState, d: EscalationDraftData): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, escalation: d }))),
+  refusal: (s: ChatState, d: Refusal): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, refusal: d }))),
   error: (s: ChatState, d: StreamError): ChatState => {
+    if (s.quiet) {
+      const messages = patchBundle(s.messages, (p) => p.state === 'confirming', (p) => ({ ...p, state: 'pending', errorText: d.message }))
+      return { messages, streaming: false, stage: null }
+    }
     const next = patchLast(s, (m) => ({ ...m, error: d }))
     return {
-      messages: next.messages.map((m) => (m.proposal?.state === 'confirming' ? { ...m, proposal: { ...m.proposal, state: 'pending' as const } } : m)),
+      messages: moveStates(next.messages, 'confirming', 'pending'),
       streaming: false,
       stage: null,
     }
   },
-  next_step: (s: ChatState, d: NextStep): ChatState => patchLast(s, (m) => ({ ...m, nextStep: d })),
+  next_step: (s: ChatState, d: NextStep): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, nextStep: d }))),
+  date_picker: (s: ChatState, d: DatePicker): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, datePicker: d }))),
   done: (s: ChatState, d: { message_id?: string } = {}): ChatState => {
+    if (s.quiet) return { messages: s.messages, streaming: false, stage: null }
     const next = d.message_id ? patchLast(s, (m) => ({ ...m, serverId: d.message_id })) : s
     return { ...next, streaming: false, stage: null }
   },
@@ -181,6 +251,8 @@ export function reduce(state: ChatState, event: StreamEvent): ChatState {
       return handlers.error(state, event.data)
     case 'next_step':
       return handlers.next_step(state, event.data)
+    case 'date_picker':
+      return handlers.date_picker(state, event.data)
     case 'done':
       return handlers.done(state, event.data)
     case 'ignored':

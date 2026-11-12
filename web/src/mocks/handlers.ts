@@ -149,6 +149,13 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
+  // feedback 12.11: a source chip opens the test document
+  http.get('*/api/kb/:docId', ({ request, params }) => {
+    if (!userByToken(request.headers.get('Authorization'))) return unauthorized()
+    const id = String(params.docId)
+    return HttpResponse.json({ doc_id: id, title: id, body: `# ${id}\n\nТестовая инструкция прототипа: текст документа.`, badge: 'Тестовая инструкция прототипа' })
+  }),
+
   http.get('*/api/actions', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     return user ? HttpResponse.json(state.actions.get(user.id) ?? []) : unauthorized()

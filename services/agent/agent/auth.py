@@ -81,7 +81,8 @@ def bearer(headers: Any) -> str:
 
 
 def check_service_token(expected: str, headers: Any) -> None:
-    if expected and not hmac.compare_digest(headers.get("X-Service-Token", ""), expected):
+    got = headers.get("X-Service-Token", "")
+    if expected and not hmac.compare_digest(got.encode(), expected.encode()):  # bytes: a non-ASCII value must not crash
         raise Unauthorized("Неверный сервисный токен.")
 
 

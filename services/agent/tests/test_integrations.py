@@ -9,7 +9,7 @@ import pytest
 
 from agent.config import load_agent_config
 from agent.errors import LLMError, ToolDenied, ToolError, ToolValidationError
-from agent.llm.openai_compat import EmbeddingsClient, OpenAICompatClient
+from agent.llm.openai_compat import EmbeddingsClient, OpenAICompatClient, ThinkFilter, strip_think
 from agent.llm.writer import LLMWriter, StubWriter, make_writer
 from agent.orchestrator import build_agent
 from agent.tools.mcp_client import McpHttpServer
@@ -177,6 +177,29 @@ def test_LLM_01_stream_and_complete():
         OpenAICompatClient("", "", "")
 
 
+def test_LLM_05_avibe_reasoning_is_never_shown():
+    """A-Vibe (Qwen3) may answer with <think>…</think>: the block is cut out, also when a tag is split between chunks;
+    with no_think the request asks the model not to reason."""
+    seen: list[dict] = []
+    chunks = ["<thi", "nk>план ответа", "</th", "ink>\n\nПри", "вет <", "b>"]
+    inner = llm_transport(chunks, [{"content": "<think>x</think>Ответ"}])
+
+    def spy(req: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(req.content))
+        return inner.handle_request(req)
+
+    c = OpenAICompatClient(
+        "http://llm/v1", "", "m", client=httpx.Client(transport=httpx.MockTransport(spy)), no_think=True
+    )
+    assert "".join(c.stream([{"role": "system", "content": "s"}, {"role": "user", "content": "x"}])) == "Привет <b>"
+    assert c.complete([{"role": "system", "content": "s"}]).content == "Ответ"
+    assert seen[0]["messages"][0]["content"].endswith("/no_think")
+    assert seen[0]["chat_template_kwargs"] == {"enable_thinking": False}
+    unfinished = ThinkFilter()
+    assert unfinished.feed("<think>долго думаю") == "" and unfinished.flush() == ""
+    assert strip_think("<think>a</think> b") == "b"
+
+
 @pytest.mark.parametrize("status,retryable", [(429, True), (500, True), (400, False)])
 def test_LLM_02_http_errors(status, retryable):
     c = OpenAICompatClient("http://llm/v1", "", "m", client=httpx.Client(transport=llm_transport(status=status)))
@@ -294,3 +317,51 @@ def test_MCP_15_mcp_base_url_routes_every_server(monkeypatch):
     agent = build_agent(settings, load_agent_config())
     assert {k: v.url for k, v in agent.backends.items()}["absence"] == "http://mcp-mocks:8100/mcp/absence"
     assert load_agent_config().sanitized("intern")["mcp_servers"]["kb"] == "http"
+
+
+def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
+    """A small local model (A-Vibe Q4) sometimes says «не нашёл» although the document answers: the answer then comes
+    from the document; a «not found» over a weak hit and a normal answer are streamed as they are."""
+    from agent.auth import User
+    from agent.llm.writer import LLMWriter, StubWriter
+
+    cfg = load_agent_config(env={"LLM_PROVIDER": "openai_compat", "LLM_BASE_URL": "http://llm/v1", "LLM_MODEL": "m"})
+    user = User(user_id="intern.anna", role="intern", team_id="delivery", token="t")
+    hit = {
+        "doc_id": "common-laptop",
+        "title": "Ноутбук и техника",
+        "snippet": "Забери ноутбук на стойке поддержки.",
+        "score": 3,
+    }
+
+    def writer(chunks):  # noqa: ANN001, ANN202
+        client = OpenAICompatClient("http://llm/v1", "", "m", client=httpx.Client(transport=llm_transport(chunks)))
+        return LLMWriter(cfg, client, StubWriter())
+
+    meta: dict = {}
+    out = "".join(
+        writer(["В базе знаний команды я этого не нашёл."]).answer(
+            "где ноут?", [{**hit, "coverage": 1.0}], user, meta=meta
+        )
+    )
+    assert "стойке поддержки" in out and "не нашёл" not in out and meta["llm_not_found_override"]
+    weak = "".join(writer(["Я этого не нашёл."]).answer("где ноут?", [{**hit, "coverage": 0.3}], user))
+    assert weak == "Я этого не нашёл."
+    ok = "".join(writer(["Забери ноутбук", " на стойке."]).answer("где ноут?", [{**hit, "coverage": 1.0}], user))
+    assert ok == "Забери ноутбук на стойке."
+
+
+def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, client):
+    """QA 12.11: «уточни у наставника» in the answer → a ready message to the mentor, sent through buddy so the answer
+    can go to the knowledge base."""
+    from agent.llm.writer import StubWriter
+
+    def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
+        yield "Открой пространство команды. Уточни у наставника, какие разделы изучить."
+
+    monkeypatch.setattr(StubWriter, "answer", fake)
+    anna = client.login("intern.anna")
+    ev = anna.say("какие документы и мануалы по работе в моей команде мне нужно изучить")
+    draft = first(ev, "escalation_draft")
+    assert draft and draft["to_role"] == "mentor" and "документы и мануалы" in draft["text"]
+    assert "добавит его в базу знаний" in "".join(e.data["text"] for e in ev if e.name == "token")

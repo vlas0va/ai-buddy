@@ -345,7 +345,7 @@ func (h *Handler) saveResult(ctx context.Context, at attempt, res toolResult, me
 			messageID = a.MessageID // a concurrent confirm saved it first
 		}
 		a.MessageID, out = messageID, &a
-		if err := insertMessage(ctx, tx, messageID, sessionID, "assistant", a.Summary, nil); err != nil {
+		if err := insertMessage(ctx, tx, messageID, sessionID, "assistant", a.Summary, nil, nil); err != nil {
 			return "", err
 		}
 		return `UPDATE core.proposals SET status = 'executed' WHERE id = $1`, nil
@@ -401,7 +401,7 @@ func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, me
 				return "", fmt.Errorf("emit action.status_changed: %w", err)
 			}
 		}
-		if err := insertMessage(ctx, tx, messageID, sessionID, "assistant", text, nil); err != nil {
+		if err := insertMessage(ctx, tx, messageID, sessionID, "assistant", text, nil, nil); err != nil {
 			return "", err
 		}
 		note, _ := json.Marshal(map[string]map[string]string{"_core": {"action_id": actionID, "message_id": messageID}})

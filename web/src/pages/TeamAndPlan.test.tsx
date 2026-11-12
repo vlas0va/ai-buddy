@@ -177,7 +177,7 @@ describe('questions and notifications', () => {
     expect(await screen.findByText('Новых вопросов нет.')).toBeInTheDocument()
   })
 
-  it('R54: the bell shows unread reminders and marks them read', async () => {
+  it('R54: the bell shows unread reminders; opening the panel reads them (QA 12.11)', async () => {
     signInAs('intern.anna')
     mountAt('/plan')
     const bell = await screen.findByRole('button', { name: /Уведомления/ })
@@ -185,7 +185,7 @@ describe('questions and notifications', () => {
     await userEvent.click(bell)
     const panel = screen.getByRole('region', { name: 'Уведомления' })
     expect(within(panel).getByText('Напоминание: вторая неделя')).toBeInTheDocument()
-    await userEvent.click(within(panel).getByRole('button', { name: 'Прочитано' }))
+    expect(within(panel).queryByRole('button', { name: 'Прочитано' })).not.toBeInTheDocument()
     await waitFor(() => expect(within(bell).queryByLabelText(/Непрочитанных/)).not.toBeInTheDocument())
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('region', { name: 'Уведомления' })).not.toBeInTheDocument()

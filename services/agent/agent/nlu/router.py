@@ -100,6 +100,20 @@ def looks_like_log(original: str) -> bool:
 
 
 RULES: list[tuple[str, re.Pattern[str]]] = [
+    (  # «не понимаю задачу» is help with understanding a task, not a summary or a plan (QA 12.11)
+        "task_help",
+        re.compile(
+            r"не\s+(понимаю|понятн\w*|ясн\w*|разобрал\w*)\s+(\w+\s+){0,2}задач|задач\w*\s+(\w+\s+){0,2}не\s+(понимаю|понятн\w*|ясн\w*)"
+            r"|как\s+(разобраться|подступиться|начать)\s+(\w+\s+){0,2}задач|застрял\w*\s+(на|с)\s+задач"
+        ),
+    ),
+    (  # «упали тесты в CI» — troubleshooting steps, not the code review document
+        "troubleshoot",
+        re.compile(
+            r"(упал\w*|красн\w*|не\s+проход\w*|сломал\w*)\s+(\w+\s+){0,2}(тест\w*|ci|пайплайн\w*|сборк\w*|билд\w*)"
+            r"|(тест\w*|ci|пайплайн\w*|сборк\w*|билд\w*)\s+(\w+\s+){0,2}(упал\w*|красн\w*|не\s+проход\w*)"
+        ),
+    ),
     (
         "one_on_one",
         re.compile(r"подготов\w*\s+(меня\s+)?к\s+(встрече\s+)?1\s*[:\-]\s*1|повестк\w*\s+(для\s+|к\s+)?1\s*[:\-]\s*1"),
@@ -128,7 +142,9 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ),
     (
         "absence",  # «перенеси отпуск на …», «перенеси заявку ABS-000101» (checkpoint 11.11)
-        re.compile(r"(перенес|перенос|сдвин|подвин)\w*\s+(\w+\s+){0,2}(отгул|отпуск|заявк|отсутств|декрет|abs-)"),
+        re.compile(
+            r"(перенес|перенос|сдвин|подвин|измен|поменя)\w*\s+(\w+\s+){0,2}(отгул|отпуск|заявк|отсутств|декрет|abs-)"
+        ),
     ),
     (
         "absence_status",
@@ -139,7 +155,7 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     (
         "approvals",
         re.compile(
-            r"(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}(заявк|отгул|abs-|acc-)|на\s+согласовани|ожида\w+\s+(моего\s+)?согласован|заявки\s+(моей\s+)?команды|abs-\d+|acc-\d+|trp-\d+"
+            r"(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}(заявк|отгул|abs-|acc-)|на\s+согласовани|заявк\w*\s+(\w+\s+){0,1}жд\w*\s+(меня|моего)|ожида\w+\s+(моего\s+)?согласован|заявки\s+(моей\s+)?команды|abs-\d+|acc-\d+|trp-\d+"
             r"|(согласу|одобр|отклон|утверд)\w*\s+(\w+\s+){0,2}командировк"
         ),
     ),
@@ -294,10 +310,13 @@ class IntentRouter:
     def _is_info_question(text: str, intent: str) -> bool:
         """«Сколько дней отпуска у стажёра?» → knowledge question, not a request flow."""
         if intent == "absence":
-            return bool(re.search(r"(больничн|заболел)", text))
+            # «можно ли совмещать стажировку с учёбой?» asks about the rules, not for an absence
+            return bool(re.search(r"(больничн|заболел|совмещ)", text))
         if intent == "access":
-            # «как склонировать репозиторий?» is engineering onboarding (KB), not an access request
+            # «как склонировать репозиторий?» is engineering onboarding (KB), not an access request; «что такое Jira и
+            # зачем она мне?» asks what the tool is for
+            asks_what = re.search(r"(что\s+такое|зачем|для\s+чего|как\s+пользоваться|как\s+работать\s+в)", text)
             return bool(
-                re.search(r"(клонир|ssh|ветк|pull\s+request|пулл?\s*реквест|коммит|запуш|структур)", text)
+                re.search(r"(клонир|ssh|ветк|pull\s+request|пулл?\s*реквест|коммит|запуш|структур)", text) or asks_what
             ) and not (re.search(r"доступ|права\s+на|запроси|оформи|выдай", text))
         return False

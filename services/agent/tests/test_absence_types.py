@@ -101,3 +101,21 @@ def test_S3_29_reschedule_edge_cases(anna):
 def test_S3_13_sick_leave_is_not_created(anna):
     ev = anna.say("я заболел, нужен больничный")
     assert first(ev, "action_proposal") is None
+
+
+def test_S3_30_calendar_bare_day_and_change_after_the_lead(client, anna):
+    """Feedback 12.11: a calendar under the explanation, «13» is a date, «хочу изменить отгул» moves the request even
+    after the lead approved it (until the HR admin approves)."""
+    ev = anna.say("Как оформить отгул?")
+    picker = first(ev, "date_picker")
+    assert picker["purpose"] == "absence" and picker["min"] == "2026-11-10" and "не позже чем за 3" in text_of(ev)
+    p = first(anna.say("13"), "action_proposal")
+    assert p["draft"]["args"]["start_date"] == "2026-11-13"
+    r = first(anna.confirm(p), "tool_result")
+    lead = client.login("lead.maria")
+    lead.confirm(first(lead.say(f"согласуй {r['external_id']}"), "action_proposal"))
+    ev = anna.say("хочу изменить отгул")
+    picker = first(ev, "date_picker")
+    assert picker["purpose"] == "reschedule" and picker["ref_id"] == r["external_id"]
+    moved = first(anna.say(f"перенеси заявку {r['external_id']} на 17 ноября"), "action_proposal")
+    assert moved["kind"] == "absence_reschedule" and moved["draft"]["args"]["start_date"] == "2026-11-17"

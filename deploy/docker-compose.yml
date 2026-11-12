@@ -114,6 +114,10 @@ services:
         required: false
     environment:
       AGENT_PORT: "8090"
+      # the image has the KB and the checklist at /data (Dockerfile); a KB_DIR from ../.env (mcp-mocks' /app/data/kb)
+      # must not leave the agent with an empty local KB copy (no source documents, weaker ranking)
+      KB_DIR: /data/kb
+      CHECKLIST_PATH: /data/checklist/checklist.yaml
       JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
       CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
       REDIS_URL: redis://redis:6379/1
@@ -124,6 +128,8 @@ services:
       WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-curated}
       WEB_SEARCH_URL: ${WEB_SEARCH_URL:-}
       # LLM_* come from ../.env (see .env.example).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Ollama running on the laptop itself (A-Vibe on the laptop GPU)
     depends_on:
       redis:
         condition: service_healthy

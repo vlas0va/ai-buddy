@@ -9,12 +9,16 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   await waitAnswer(page)
   await expect(lastTurn(page)).toContainText('Confluence')
   await expect(lastTurn(page)).toContainText('Bitbucket')
-  const draft = page.getByLabel('Черновик заявки').last()
-  if (await draft.count()) {
-    await draft.getByRole('button', { name: 'Отправить' }).click()
-    const result = page.getByLabel('Результат заявки').last()
-    await expect(result).toContainText(/ACC-\d+/)
-    await expect(result).toContainText('Сохранено в журнале действий')
+  // feedback 12.11: the missing accesses are one list with checkboxes; ordinary ones are checked
+  const list = page.getByLabel('Набор заявок на доступ').last()
+  if (await list.count()) {
+    await list.getByRole('button', { name: /Запросить выбранные/ }).click()
+    // results land in the rows of the list; every request is saved and listed in «Мои заявки» (R66)
+    await expect(list).toContainText(/выдан · ACC-\d+/)
+    await expect(list).toContainText('Готово', { timeout: 20000 })
+    await page.reload()
+    await expect(page.getByLabel('Набор заявок на доступ').last()).toContainText(/выдан · ACC-\d+/)
+    await expect(page.getByRole('complementary', { name: 'Мои заявки' })).toContainText(/ACC-\d+/)
   } else {
     await expect(lastTurn(page)).toContainText(/уже|запрошен/)
   }

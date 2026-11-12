@@ -101,6 +101,22 @@ func (a *Agent) Last(kind string) Request {
 }
 
 func (a *Agent) serve(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/kb/") {
+		// test KB documents: «mentor-only» is not readable (404), «broken» is a failure of the agent (500)
+		switch id := strings.TrimPrefix(r.URL.Path, "/v1/kb/"); {
+		case r.Header.Get("Authorization") == "":
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		case id == "mentor-only":
+			http.NotFound(w, r)
+		case id == "broken":
+			http.Error(w, "boom", http.StatusInternalServerError)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"doc_id": id, "title": "Документ " + id, "body": "# Текст",
+				"source_type": "test", "badge": "Тестовая инструкция прототипа"})
+		}
+		return
+	}
 	if r.Method != http.MethodPost || r.URL.Path != "/v1/turn" {
 		http.NotFound(w, r)
 		return

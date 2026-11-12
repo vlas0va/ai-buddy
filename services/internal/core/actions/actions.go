@@ -90,12 +90,14 @@ type Result struct {
 	Summary             string  `json:"summary"`
 	ApproverDisplayName *string `json:"approver_display_name"`
 	TaskID              *string `json:"task_id"`
+	// ProposalID ties the result to its draft (a list of accesses shows the results inside its own card)
+	ProposalID string `json:"proposal_id,omitempty"`
 }
 
 // Result returns the action_result event of a.
 func (a Action) Result() Result {
 	return Result{ActionID: a.ID, Kind: a.Kind, ExternalID: a.ExternalID, Status: a.Status, Summary: a.Summary,
-		ApproverDisplayName: a.ApproverDisplayName, TaskID: a.TaskID}
+		ApproverDisplayName: a.ApproverDisplayName, TaskID: a.TaskID, ProposalID: a.ProposalID}
 }
 
 // SaveInput is a successful MCP write to record.

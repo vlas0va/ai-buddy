@@ -5,7 +5,7 @@ source_type: test
 acl: {roles: [intern, mentor, lead, alumni], teams: ["*"]}
 checklist_item_id: CL-07
 checklist: [CL-07]
-tags: [ветка, dev-ветка, branch, коммит, pull request, пулл реквест, pr, merge]
+tags: [ветка, dev-ветка, branch, коммит, коммиты, как писать коммиты, сообщение коммита, pull request, пулл реквест, pr, merge]
 updated: 2026-11-10
 ---
 # Ветки, коммиты и pull request

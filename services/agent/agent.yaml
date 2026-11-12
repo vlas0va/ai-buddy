@@ -19,6 +19,7 @@ llm:
   tool_calling: ${LLM_TOOL_CALLING:-false}  # let the LLM call READ tools of the user's role (never write tools)
   max_tool_iterations: 3
   fallback_to_stub: ${LLM_FALLBACK_TO_STUB:-true}
+  no_think: ${LLM_NO_THINK:-true}           # reasoning models (A-Vibe/Qwen3): no <think> in answers
 
 embeddings:                     # optional hybrid retrieval (BM25 + vectors, RRF)
   base_url: ${EMBEDDINGS_BASE_URL:-}
@@ -110,17 +111,17 @@ tools:
     write: true
     proposal_kind: approval_decision
   - name: directory.whoami
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: false
     description: Кто я — имя, роль, команда, текущий этап стажировки.
     input_schema: {type: object, properties: {}}
   - name: directory.get_my_contacts
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: false
     description: Мои контакты — наставник, руководитель, HR BP, куратор стажировки и с чем к ним идти.
     input_schema: {type: object, properties: {}}
   - name: checklist.get_plan_template
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: false
     description: Шаблон плана адаптации по чек-листу (пункты CL-xx, периоды, шаги).
     input_schema: {type: object, properties: {role: {type: string, enum: [intern, mentor]}}, required: [role]}
@@ -144,7 +145,7 @@ tools:
     write: true
     proposal_kind: access_request
   - name: kb.search
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: false
     description: Поиск по базе знаний (результаты уже отфильтрованы по правам роли и команды).
     input_schema: {type: object, properties: {query: {type: string}, k: {type: integer, minimum: 1, maximum: 10}}, required: [query]}
@@ -171,12 +172,12 @@ tools:
     write: true
     proposal_kind: trip_request
   - name: consents.list
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: false
     description: Мои согласия (персональные данные, NDA, фото, опросы) и их статусы.
     input_schema: {type: object, properties: {}}
   - name: consents.sign
-    roles: [intern, mentor, lead, hrbp, alumni]
+    roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
     write: true
     proposal_kind: consent
 
@@ -197,6 +198,7 @@ intents:
   code_review:  {roles: [intern, mentor, lead], flag: scenario_s2}
   troubleshoot: {roles: [intern, mentor, lead], flag: scenario_s2}
   learning:     {roles: [intern, mentor, lead, alumni], flag: scenario_s2}
+  task_help:    {roles: [intern, mentor, lead, alumni], flag: scenario_s2}
   benefit:      {roles: [intern, mentor, lead, hrbp, alumni], flag: scenario_s2}
   trip:         {roles: [intern, mentor, lead]}
   consents:     {roles: [intern, mentor, lead, hrbp, alumni]}

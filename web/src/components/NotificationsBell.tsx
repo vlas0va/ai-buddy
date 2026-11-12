@@ -24,6 +24,19 @@ export function NotificationsBell() {
     },
   })
 
+  // QA 12.11: opening the panel reads everything in it; what was new stays highlighted until the panel closes
+  const [fresh, setFresh] = useState<Set<string>>(() => new Set())
+  function toggle() {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    const unreadIds = (list.data ?? []).filter((n) => !n.read).map((n) => n.id)
+    setFresh(new Set(unreadIds))
+    unreadIds.forEach((id) => read.mutate(id))
+    setOpen(true)
+  }
+
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
@@ -44,7 +57,7 @@ export function NotificationsBell() {
   const unread = items.filter((n) => !n.read).length
   return (
     <div className="notif" ref={box}>
-      <button type="button" className="notif-btn" aria-expanded={open} aria-haspopup="true" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="notif-btn" aria-expanded={open} aria-haspopup="true" onClick={toggle}>
         <BellIcon />
         Уведомления
         {unread > 0 && (
@@ -58,14 +71,9 @@ export function NotificationsBell() {
           {list.isError && <p className="ui-field-error">Не удалось загрузить уведомления.</p>}
           {items.length === 0 && !list.isError && <p className="hint">Уведомлений нет.</p>}
           {items.map((n) => (
-            <div key={n.id} className={`notif-item${n.read ? '' : ' is-unread'}`}>
+            <div key={n.id} className={`notif-item${fresh.has(n.id) || !n.read ? ' is-unread' : ''}`}>
               <strong>{n.title}</strong>
               {n.body && <p>{n.body}</p>}
-              {!n.read && (
-                <button type="button" onClick={() => read.mutate(n.id)}>
-                  Прочитано
-                </button>
-              )}
             </div>
           ))}
         </Card>

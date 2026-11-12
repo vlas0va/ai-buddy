@@ -16,6 +16,7 @@ EVENT_NAMES = frozenset(
         "action_result",
         "escalation_draft",
         "next_step",
+        "date_picker",  # feedback 12.11: a calendar to pick absence dates
         "refusal",
         "tool_result",
         "error",

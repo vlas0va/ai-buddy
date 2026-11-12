@@ -132,6 +132,26 @@ def _mentor_draft(turn: Turn, topic: str, body: str) -> Event:
     )
 
 
+# ----------------------------------------------------------------------------- «не понимаю задачу»
+def handle_task_help(turn: Turn, text: str) -> Iterator[Event]:
+    """How to get unstuck on a task without doing it for the intern; the first-task guide of the team as a source."""
+    hit = _doc_hit(turn, f"{turn.user.team_id}-first-task")
+    if hit:
+        yield _source_event([hit])
+    mentor = turn.contact("mentor")
+    who = person_name(mentor, "наставнику")
+    yield from say(
+        "Давай разберёмся по шагам — так ты быстрее поймёшь задачу и сможешь объяснить решение на ревью:\n"
+        "1. Перечитай описание задачи в Jira и найди критерии готовности: что должно получиться и как это проверить.\n"
+        "2. Сформулируй задачу одним-двумя предложениями своими словами: что на входе, что на выходе.\n"
+        "3. Найди похожие pull request в репозитории команды и посмотри, как решали такие задачи.\n"
+        "4. Выпиши конкретные вопросы: какой шаг непонятен и что ты уже попробовал.\n"
+        f"5. С этим списком напиши {who} — вопросы с контекстом решаются за пару минут.\n\n"
+        "Пришли мне описание задачи своими словами — помогу разбить её на шаги. Код за тебя я писать не буду, но "
+        "подскажу, где искать для каждого шага."
+    )
+
+
 # ----------------------------------------------------------------------------- «сделай за меня»
 def handle_learning(turn: Turn, text: str) -> Iterator[Event]:
     hit = _doc_hit(turn, "common-ai-usage")
@@ -188,8 +208,27 @@ def handle_code_review(turn: Turn, text: str) -> Iterator[Event]:
 
 
 # ----------------------------------------------------------------------------- logs
+CI_STEPS = (
+    "Что делать, если CI красный:\n"
+    "1. Открой упавший шаг пайплайна в pull request и найди первую ошибку — дальше обычно последствия.\n"
+    "2. Посмотри, зелёная ли ветка `main`: если нет — упало не из-за тебя, напиши в чат команды.\n"
+    "3. Запусти упавший тест локально (`make test` или команда из README сервиса) и воспроизведи ошибку.\n"
+    "4. Тест «моргает» (то падает, то нет) — перезапусти шаг один раз; повторяется — это баг, не перезапускай бесконечно.\n"
+    "5. Порог покрытия — 80% для нового кода: если упало на нём, допиши тесты.\n\n"
+    "Пришли сюда текст ошибки из лога — разберу главную строку. Если не получится за 30 минут, напиши наставнику: "
+    "ссылка на пайплайн, текст ошибки и что уже попробовал."
+)
+
+
 def handle_troubleshoot(turn: Turn, text: str) -> Iterator[Event]:
     masked, secrets = mask_secrets(text)
+    if not ERROR_LINE.search(masked) and len(masked.strip().splitlines()) <= 2:
+        # a question about a failure («упали тесты в CI»), not a log: the steps, the CI/CD guide as a source
+        hit = _doc_hit(turn, "eng-cicd-gitops")
+        if hit:
+            yield _source_event([hit])
+        yield from say(CI_STEPS)
+        return
     yield status("searching_kb", "Разбираю ошибку")
     hint = next(((doc, why) for rx, doc, why in ERROR_HINTS if rx.search(masked)), None)
     hit = _doc_hit(turn, hint[0]) if hint else None

@@ -83,6 +83,7 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 | Вариант | Как |
 |---|---|
 | Внешний OpenAI-совместимый API (ключ организаторов) | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=https://<provider>/v1` `LLM_API_KEY=…` `LLM_MODEL=…` |
+| **A-Vibe на ноутбуке** (GPU от 6 ГБ) через Ollama | `ollama pull hf.co/NightForger/avibe-GGUF:Q4_K_M`, затем `make up`; `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=http://host.docker.internal:11434/v1` `LLM_MODEL=hf.co/NightForger/avibe-GGUF:Q4_K_M` `LLM_TIMEOUT_S=90` |
 | **A-Vibe** (`AvitoTech/avibe`) на своей GPU через vLLM | профиль `avibe`: `docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d`, `LLM_BASE_URL=http://avibe:8000/v1` `LLM_MODEL=AvitoTech/avibe` |
 | Ollama на ноутбуке | профиль `ollama`, `LLM_BASE_URL=http://ollama:11434/v1` `LLM_MODEL=qwen2.5:7b-instruct` |
 

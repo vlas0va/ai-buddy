@@ -53,11 +53,12 @@ def escalation_event(turn: Turn, question: str, role: str, topic: str = "questio
             "to_user_id": (person or {}).get("user_id"),
             "to_name": person_name(person),
             "topic": topic,
-            "text": f"{hello} Подскажи, пожалуйста: {q} Не нашёл ответа в базе знаний команды.",
+            "text": f"{hello} Подскажи, пожалуйста: {q} В базе знаний команды ответа не нашёл.",
         },
     )
 
 
+ASK_MENTOR = re.compile(r"(уточни|спроси|обратись|напиши)\w*\s+(\w+\s+){0,2}(у\s+|к\s+)?наставник", re.I)
 CITY_WORDS = re.compile(r"москв|петербург|питер|спб|удал[её]н|казан|новосибирск|екатеринбург")
 
 
@@ -97,7 +98,19 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
             # the local copy gives clean paragraphs (no ts_headline fragments or markdown) and lets the user's office
             # city pick the right section («Москва» / «Санкт-Петербург» / «Удалённо») when the question has none
             snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
-        out.append({**h, "snippet": sanitize_snippet(snippet), "score": score, "checklist": checklist})
+        # the LLM gets the whole readable document (not only the snippet), so A-Vibe answers with its details
+        body = sanitize_snippet(doc.body[:2500]) if doc is not None else ""
+        coverage = kb.coverage(query, doc.doc_id) if doc is not None and query else 0.0
+        out.append(
+            {
+                **h,
+                "snippet": sanitize_snippet(snippet),
+                "score": score,
+                "checklist": checklist,
+                "body": body,
+                "coverage": coverage,
+            }
+        )
     return sorted(out, key=lambda h: h["score"], reverse=True)
 
 
@@ -135,9 +148,10 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     if remote and not raw and _or_query(text):
         raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
-    if remote and turn.kb is not None and _weak(turn, hits, text):
-        # Postgres FTS misses short terms (CI/CD) and synonyms; the agent's own copy of the same test KB, filtered by the
-        # same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking used in eval
+    if remote and turn.kb is not None:
+        # Postgres FTS misses short terms (CI/CD), synonyms and loose wording («у меня будет свой ноутбук?»); the agent's
+        # own copy of the same test KB, filtered by the same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking
+        # used in eval. The set whose best document covers more of the question wins.
         local = [
             {**hit.source(), "score": hit.score, "snippet": hit.snippet}
             for hit in turn.kb.search(text, turn.user.role, turn.user.team_id, k=k)
@@ -145,7 +159,7 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         local_hits = [
             h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
         ]
-        if local_hits:
+        if local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
             hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
@@ -163,7 +177,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ):
             yield from handle_offtopic(turn, text)
             return
-        role = _addressee(asked)
+        # a mentor or a lead asks the curator of the internship, not «the mentor» (QA 12.11)
+        role = _addressee(asked, "curator" if turn.user.role in ("mentor", "lead") else "mentor")
         label = CONTACT_LABELS.get(role, "наставник")
         near = _nearby(turn, text)
         if near:
@@ -210,10 +225,20 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             task_hint = f"Это относится к задаче твоего плана «{t.title}»."
             break
     yield status("composing", "Формулирую ответ")
+    answer = []
     for chunk in turn.writer.answer(
         asked, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
     ):
+        answer.append(chunk)
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
+    if turn.user.role == "intern" and ASK_MENTOR.search("".join(answer)):
+        # the answer sends the intern to the mentor: give the message ready to send through buddy, so the mentor's
+        # answer can go to the knowledge base for the next interns (QA 12.11)
+        yield from say(
+            "\n\nНиже черновик вопроса наставнику — отправь его здесь, а не в личку: если ответ пригодится другим, "
+            "наставник одной галочкой добавит его в базу знаний."
+        )
+        yield escalation_event(turn, asked, "mentor")
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."
