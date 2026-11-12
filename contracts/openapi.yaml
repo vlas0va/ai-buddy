@@ -912,7 +912,7 @@ components:
         team_absent:
           type: array
           items: { type: string }
-          description: absence requests — teammates away on the same days («Имя: отгул 10.11»)
+          description: "absence requests — teammates away on the same days («Имя: отгул 10.11»)"
 
     Escalation:
       type: object
