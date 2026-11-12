@@ -35,6 +35,7 @@ class Doc:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def readable_by(self, role: str, team_id: str) -> bool:
+        role = "hrbp" if role == "hr_admin" else role  # = B's kb.aclRole: the HR admin reads the HR BP documents
         return role in self.roles and ("*" in self.teams or team_id in self.teams)
 
     @property
@@ -248,5 +249,9 @@ class KnowledgeBase:
             return ""
         scored = sorted(((len(qs.intersection(stems(b))), -n, b) for n, b in enumerate(blocks)), reverse=True)
         top = [b for score, _, b in scored[:max_blocks] if score > 0] or [blocks[0]]
+        if len(top) == 1 and len(top[0]) < 160:
+            # a short note («все цифры — тестовые») alone answers nothing: add the block after it (a table, a list)
+            i = blocks.index(top[0])
+            top += blocks[i + 1 : i + 2]
         ordered = [b for b in blocks if b in top]
         return sanitize_snippet("\n\n".join(ordered))[:1200]

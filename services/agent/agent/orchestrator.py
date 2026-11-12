@@ -71,8 +71,12 @@ QUIZ_BREAK_INTENTS = {
     "learning",
     "benefit",
 }
+INFO_ASK = re.compile(r"^(как|что|сколько|можно\s+ли|где|когда|кто)\b|\?\s*$")
+
 SLOT_INTENTS_BLOCKING = {
     "task_message",
+    "task_help",
+    "trip",  # «оформи командировку с … по …» while an absence draft is open is a trip, not new absence dates
     "one_on_one",
     "absence_status",
     "trip_status",
@@ -283,6 +287,16 @@ class Agent:
             yield from qa.handle_refusal(turn, route.reason, route.redirect_role, route.detail.get("topic", ""))
             return
         cfg_intent = INTENT_ALIAS.get(intent, intent)
+        if (
+            not self.config.intent_allowed(cfg_intent, turn.user.role)
+            and cfg_intent in ("absence", "trip", "access", "channels")
+            and INFO_ASK.search(normalize(message))
+            and self.config.intent_allowed("kb_question", turn.user.role)
+        ):
+            # «как оформляется отпуск?» from the HR admin or an alumni: a question about the rules, answered from the
+            # knowledge base, not a refused request (QA 12.11)
+            yield from qa.handle_question(turn, message)
+            return
         if not self.config.intent_allowed(cfg_intent, turn.user.role):
             self.metrics.inc("agent_refusals_total", reason="no_rights")
             text = ROLE_DENIED.get(cfg_intent, "Это действие недоступно для твоей роли.")
@@ -315,6 +329,7 @@ class Agent:
             "offtopic": qa.handle_offtopic,
             "kb_question": qa.handle_question,
             "learning": coach.handle_learning,
+            "task_help": coach.handle_task_help,
             "code_review": coach.handle_code_review,
             "troubleshoot": coach.handle_troubleshoot,
             "quiz": coach.handle_quiz,

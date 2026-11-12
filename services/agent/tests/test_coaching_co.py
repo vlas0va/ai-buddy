@@ -252,3 +252,34 @@ def test_CO_22_unsure_classifier_but_the_kb_knows(anna, client):
     assert first(ev, "sources")["items"][0]["doc_id"] == "common-laptop"
     assert "Я помогаю с адаптацией" not in "".join(e.data["text"] for e in ev if e.name == "token")
     assert first(anna.say("расскажи анекдот"), "sources") is None  # a real off-topic question stays off-topic
+
+
+def test_CO_23_unclear_task_gets_steps_not_a_summary(anna):
+    """QA 12.11: «не понимаю задачу» was routed to the equator summary."""
+    from tests.conftest import first, text_of
+
+    ev = anna.say("не понимаю задачу, помоги")
+    assert first(ev, "done")["intent"] == "task_help" and "критерии готовности" in text_of(ev)
+    assert first(ev, "sources")["items"][0]["doc_id"] == "delivery-first-task"
+
+
+def test_CO_24_red_ci_question_gets_steps(anna):
+    """QA 12.11: a question about failed tests is not a log to parse."""
+    from tests.conftest import first, text_of
+
+    ev = anna.say("что делать если упали тесты в ci?")
+    t = text_of(ev)
+    assert "Что делать, если CI красный" in t and "Главная строка ошибки" not in t
+    assert first(ev, "sources")["items"][0]["doc_id"] == "eng-cicd-gitops"
+
+
+def test_CO_25_trip_while_an_absence_draft_is_open(anna):
+    """QA 12.11: «оформи командировку с … по …» after an absence draft became a new absence."""
+    from tests.conftest import first
+
+    first(anna.say("мне нужно отсутствие на учёбу 20 ноября"), "action_proposal")
+    p = first(
+        anna.say("оформи командировку в Казань с 01.12.2026 по 03.12.2026, цель — встреча с командой"),
+        "action_proposal",
+    )
+    assert p["kind"] == "trip_request"

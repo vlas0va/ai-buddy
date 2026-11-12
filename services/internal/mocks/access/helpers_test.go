@@ -135,10 +135,10 @@ VALUES ($1, $2, $3, gen_random_uuid(), now() - make_interval(mins => $4))`, empl
 }
 
 type statusItem struct {
-	ResourceID      string `json:"resource_id"`
-	Name            string `json:"name"`
-	Kind            string `json:"kind"`
-	Elevated        bool   `json:"elevated"`
+	ResourceID      string   `json:"resource_id"`
+	Name            string   `json:"name"`
+	Kind            string   `json:"kind"`
+	Elevated        bool     `json:"elevated"`
 	Status          string   `json:"status"`
 	ChecklistItemID string   `json:"checklist_item_id"`
 	Environments    []string `json:"environments"`

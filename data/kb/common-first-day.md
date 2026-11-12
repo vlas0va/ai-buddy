@@ -5,7 +5,7 @@ source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
 checklist_item_id: null
 checklist: []
-tags: [первый день, ноутбук, учётная запись, пропуск]
+tags: [первый день, ноутбук, учётная запись, пропуск, как попасть в офис, офис, вход в офис]
 updated: 2026-11-01
 ---
 # Первый день: техника, учётки, пропуск

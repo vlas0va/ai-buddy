@@ -79,12 +79,12 @@ contact = obj({"role": {"type":"string","enum":["mentor","lead","hrbp","curator"
                "display_name": {"type":"string"}, "channel": {"type":"string","description":"Название канала или чата, без личных контактов"},
                "ask_about": {"type":"array","items":{"type":"string"}}}, ["role","employee_id","display_name"])
 directory = [
-  tool("whoami", "Профиль пользователя из JWT: команда, роль, начало стажировки, текущий период.", ["intern","mentor","lead","hrbp","alumni"], False,
+  tool("whoami", "Профиль пользователя из JWT: команда, роль, начало стажировки, текущий период.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], False,
        obj({}), obj({"employee_id":{"type":"string"},"display_name":{"type":"string"},"role":{"type":"string"},
                      "team_id":{"type":"string"},"team_name":{"type":"string"},"cohort_start":date,
                      "current_period":{"type":"string","enum":["week_1","week_2","month_1","month_2","after_3_months"]}},
                     ["employee_id","display_name","role","team_id"])),
-  tool("get_my_contacts", "Свои наставник, руководитель, HR BP и куратор стажировки и с чем к ним идти.", ["intern","mentor","lead","hrbp","alumni"], False,
+  tool("get_my_contacts", "Свои наставник, руководитель, HR BP и куратор стажировки и с чем к ним идти.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], False,
        obj({}), obj({"items":{"type":"array","items":contact}}, ["items"])),
 ]
 cl_item = obj({"id":{"type":"string","pattern":"^CL-[0-9]{2}$"}, "role":{"type":"string","enum":["intern","mentor","both"]},
@@ -94,7 +94,7 @@ cl_item = obj({"id":{"type":"string","pattern":"^CL-[0-9]{2}$"}, "role":{"type":
                "scenarios":{"type":"array","items":{"type":"string","enum":["S1","S2","S3","S4"]}},
                "human_only":{"type":"boolean"}}, ["id","role","period","title","scenarios","human_only"])
 checklist = [
-  tool("get_plan_template", "Пункты чек-листа Авито для роли (data/checklist/checklist.yaml) с учётом команды.", ["intern","mentor","lead","hrbp","alumni"], False,
+  tool("get_plan_template", "Пункты чек-листа Авито для роли (data/checklist/checklist.yaml) с учётом команды.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], False,
        obj({"role": {"type":"string","enum":["intern","mentor"]}}, ["role"]),
        obj({"periods":{"type":"array","items":obj({"id":{"type":"string"},"label":{"type":"string"}},["id","label"])},
             "items":{"type":"array","items":cl_item}}, ["periods","items"])),
@@ -130,7 +130,7 @@ access = [
        acc_req),
 ]
 kb = [
-  tool("search", "Поиск по базе знаний среди документов, доступных роли и команде пользователя (ACL до LLM). Все документы — тестовые.", ["intern","mentor","lead","hrbp","alumni"], False,
+  tool("search", "Поиск по базе знаний среди документов, доступных роли и команде пользователя (ACL до LLM). Все документы — тестовые.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], False,
        obj({"query":{"type":"string","minLength":2,"maxLength":500},"k":{"type":"integer","minimum":1,"maximum":10,"default":5}}, ["query"]),
        obj({"items":{"type":"array","items":obj({"doc_id":{"type":"string"},"title":{"type":"string"},"snippet":{"type":"string"},
             "source_type":{"const":"test"},"url":{"type":"string"},"score":{"type":"number"}},["doc_id","title","snippet","source_type"])}}, ["items"])),
@@ -168,9 +168,9 @@ signature = obj({"id":{"type":"string","pattern":"^CNS-[0-9]{6}$"},"consent_id":
                  "status":{"const":"signed"},"signed_at":{"type":"string","format":"date-time"},"replayed":{"type":"boolean"}},
                 ["id","consent_id","title","status","signed_at"])
 consents = [
-  tool("list", "Согласия сотрудника со статусами: подписанные в кадровом портале при оформлении и добровольные.", ["intern","mentor","lead","hrbp","alumni"], False,
+  tool("list", "Согласия сотрудника со статусами: подписанные в кадровом портале при оформлении и добровольные.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], False,
        obj({}), obj({"items":{"type":"array","items":consent}}, ["items"])),
-  tool("sign", "Подписать добровольное согласие от имени пользователя из JWT. Только после подтверждения.", ["intern","mentor","lead","hrbp","alumni"], True,
+  tool("sign", "Подписать добровольное согласие от имени пользователя из JWT. Только после подтверждения.", ["intern","mentor","lead","hrbp","alumni","hr_admin"], True,
        obj({"consent_id":{"type":"string"},"idempotency_key":idem,"confirmation_token":conf}, ["consent_id","idempotency_key","confirmation_token"]),
        signature),
 ]

@@ -13,10 +13,12 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   const list = page.getByLabel('Набор заявок на доступ').last()
   if (await list.count()) {
     await list.getByRole('button', { name: /Запросить выбранные/ }).click()
-    const result = page.getByLabel('Результат заявки').last()
-    await expect(result).toContainText(/ACC-\d+/)
-    await expect(result).toContainText('Сохранено в журнале действий')
-    await expect(list).toContainText('отправлено')
+    // results land in the rows of the list; every request is saved and listed in «Мои заявки» (R66)
+    await expect(list).toContainText(/выдан · ACC-\d+/)
+    await expect(list).toContainText('Готово', { timeout: 20000 })
+    await page.reload()
+    await expect(page.getByLabel('Набор заявок на доступ').last()).toContainText(/выдан · ACC-\d+/)
+    await expect(page.getByRole('complementary', { name: 'Мои заявки' })).toContainText(/ACC-\d+/)
   } else {
     await expect(lastTurn(page)).toContainText(/уже|запрошен/)
   }

@@ -306,3 +306,39 @@ describe('Feedback 12.11: missing accesses as one list with checkboxes', () => {
     expect(screen.queryByRole('button', { name: /Запросить/ })).not.toBeInTheDocument()
   })
 })
+
+it('feedback 12.11: drafts that arrive later in the stream are checked too', () => {
+  const mk = (id: string, elevated = false) =>
+    ({ proposal_id: id, kind: 'access_request', state: 'pending',
+      draft: { tool: 'access.request_access', args: { resource_id: id, level: 'read' }, display: { resource_name: id, elevated } } }) as never
+  const { rerender } = render(<AccessBundleCard proposals={[mk('a'), mk('b')]} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  rerender(<AccessBundleCard proposals={[mk('a'), mk('b'), mk('c'), mk('d', true)]} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.getByRole('button', { name: 'Запросить выбранные (3)' })).toBeInTheDocument()
+})
+
+it('feedback 12.11: a list draft sent from the list shows its result in the list, not as a new message', () => {
+  const mk = (id: string) =>
+    ({ proposal_id: id, kind: 'access_request', draft: { tool: 'access.request_access', args: { resource_id: id }, display: { resource_name: id } } }) as never
+  let s = startTurn(initialState, 'какие доступы мне нужны')
+  s = reduce(s, { type: 'action_proposal', data: mk('a') })
+  s = reduce(s, { type: 'action_proposal', data: mk('b') })
+  s = reduce(s, { type: 'done', data: {} })
+  const before = s.messages.length
+  s = startConfirm(s, 'b')
+  expect(s.messages.length).toBe(before)
+  s = reduce(s, { type: 'token', data: { text: 'Доступ выдан.' } })
+  s = reduce(s, { type: 'action_result', data: { action_id: 'x', kind: 'access_request', status: 'granted', external_id: 'ACC-000041', proposal_id: 'b' } })
+  s = reduce(s, { type: 'done', data: {} })
+  const list = s.messages.at(-1)!
+  expect(s.messages.length).toBe(before)
+  expect(list.text).not.toContain('Доступ выдан')
+  expect(list.bundle?.map((p) => p.state)).toEqual(['pending', 'confirmed'])
+  render(<AccessBundleCard proposals={list.bundle!} onConfirmMany={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.getByText('выдан · ACC-000041')).toBeInTheDocument()
+  const history = fromHistory({ session_id: 's', messages: [
+    { id: '1', author: 'assistant', text: 'список', created_at: '', proposals: [{ proposal: mk('a'), state: 'pending' }, { proposal: mk('b'), state: 'confirmed' }] },
+    { id: '2', author: 'assistant', text: 'Доступ: b — выдан', created_at: '', result: { action_id: 'x', kind: 'access_request', status: 'granted', proposal_id: 'b' } },
+  ] } as never)
+  expect(history.messages).toHaveLength(1)
+  expect(history.messages[0]?.bundle?.[1]?.result?.status).toBe('granted')
+})

@@ -63,6 +63,15 @@ type hit struct {
 	Score      float64 `json:"score"`
 }
 
+// aclRole maps the HR admin to the HR BP audience of the test documents (the HR admin decides absence requests and
+// reads the same HR instructions).
+func aclRole(role string) string {
+	if role == "hr_admin" {
+		return "hrbp"
+	}
+	return role
+}
+
 // search returns documents the caller may see: role and team ACL, and private notes of the caller only.
 func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string, k int) (any, error) {
 	rows, err := pool.Query(ctx, `
@@ -75,7 +84,7 @@ func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string
 		  AND ('*' = ANY(d.acl_teams) OR $3 = ANY(d.acl_teams))
 		  AND (d.owner_id IS NULL OR d.owner_id = $4)
 		ORDER BY 6 DESC, d.doc_id
-		LIMIT $5`, query, c.Role, c.TeamID, c.Sub, k)
+		LIMIT $5`, query, aclRole(c.Role), c.TeamID, c.Sub, k)
 	if err != nil {
 		return nil, fmt.Errorf("searching knowledge base: %w", err)
 	}

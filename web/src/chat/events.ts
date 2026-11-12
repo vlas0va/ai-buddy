@@ -29,6 +29,7 @@ export const resultSchema = z.object({
   summary: z.string().optional(),
   approver_display_name: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
+  proposal_id: z.string().optional(),
 })
 export type ActionResult = z.infer<typeof resultSchema>
 

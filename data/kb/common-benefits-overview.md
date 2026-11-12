@@ -5,7 +5,7 @@ source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
 checklist_item_id: null
 checklist: []
-tags: [бенефиты, ДМС, компенсации]
+tags: [бенефиты, бенефиты стажёров, льготы, ДМС, компенсации, что положено стажёру, обед, питание, столовая, еда, поесть]
 updated: 2026-11-01
 ---
 # Бенефиты: общая справка

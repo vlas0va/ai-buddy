@@ -24,7 +24,7 @@ export interface ChatMessage {
   attachments?: AttachmentMeta[]
   proposal: (Proposal & { state: ProposalState }) | null
   /** several drafts of one message (the missing accesses with checkboxes); then `proposal` is null */
-  bundle?: (Proposal & { state: ProposalState })[]
+  bundle?: BundleItem[]
   result: ActionResult | null
   escalation: EscalationDraftData | null
   /** the draft was already sent (restored from the history) */
@@ -40,10 +40,21 @@ export interface ChatMessage {
   retryAttachments?: unknown[]
 }
 
+export type BundleItem = Proposal & { state: ProposalState; result?: ActionResult; errorText?: string }
+
 export interface ChatState {
   messages: ChatMessage[]
   streaming: boolean
   stage: Stage | null
+  /** a draft of a list is being sent: its result goes into the list, no new chat message (feedback 12.11) */
+  quiet?: boolean
+}
+
+const inBundle = (messages: ChatMessage[], proposalId: string) =>
+  messages.some((m) => m.bundle?.some((p) => p.proposal_id === proposalId))
+
+function patchBundle(messages: ChatMessage[], pick: (p: BundleItem) => boolean, patch: (p: BundleItem) => BundleItem): ChatMessage[] {
+  return messages.map((m) => (m.bundle?.some(pick) ? { ...m, bundle: m.bundle.map((p) => (pick(p) ? patch(p) : p)) } : m))
 }
 
 export const initialState: ChatState = { messages: [], streaming: false, stage: null }
@@ -69,7 +80,21 @@ export function fromHistory(history: ChatHistory): ChatState {
       serverId: m.author === 'assistant' ? m.id : undefined,
     }
   })
-  return { messages, streaming: false, stage: null }
+  // results of a list's drafts go back into the list instead of separate messages (the live chat shows them so too)
+  const listed = new Map<string, number>()
+  messages.forEach((m, i) => m.bundle?.forEach((p) => listed.set(p.proposal_id, i)))
+  const kept: ChatMessage[] = []
+  for (const m of messages) {
+    const res = m.result
+    const owner = res?.proposal_id !== undefined ? listed.get(res.proposal_id) : undefined
+    const list = owner === undefined ? undefined : messages[owner]
+    if (!res || !list?.bundle) {
+      kept.push(m)
+      continue
+    }
+    list.bundle = list.bundle.map((p) => (p.proposal_id === res.proposal_id ? { ...p, state: 'confirmed', result: res } : p))
+  }
+  return { messages: kept, streaming: false, stage: null }
 }
 
 let counter = 0
@@ -116,6 +141,9 @@ export function restartTurn(state: ChatState, assistantId: string): ChatState {
 
 /** Confirm turn streams into a fresh assistant message so the proposal card stays above it. */
 export function startConfirm(state: ChatState, proposalId: string): ChatState {
+  if (inBundle(state.messages, proposalId)) {
+    return { messages: updateProposal(state.messages, proposalId, 'confirming'), streaming: true, stage: 'calling_service', quiet: true }
+  }
   return {
     messages: [...updateProposal(state.messages, proposalId, 'confirming'), blank('assistant')],
     streaming: true,
@@ -157,9 +185,9 @@ function patchLast(state: ChatState, patch: (m: ChatMessage) => ChatMessage): Ch
 
 export const handlers = {
   status: (s: ChatState, d: { stage: Stage }): ChatState => ({ ...s, stage: d.stage }),
-  token: (s: ChatState, d: { text: string }): ChatState => patchLast(s, (m) => ({ ...m, text: m.text + d.text })),
+  token: (s: ChatState, d: { text: string }): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, text: m.text + d.text }))),
   sources: (s: ChatState, d: { items: Source[] }): ChatState =>
-    patchLast(s, (m) => ({ ...m, sources: [...m.sources, ...d.items] })),
+    s.quiet ? s : patchLast(s, (m) => ({ ...m, sources: [...m.sources, ...d.items] })),
   action_proposal: (s: ChatState, d: Proposal): ChatState =>
     patchLast(s, (m) => {
       const item = { ...d, state: 'pending' as const }
@@ -170,12 +198,20 @@ export const handlers = {
       return { ...m, proposal: item }
     }),
   action_result: (s: ChatState, d: ActionResult): ChatState => {
+    if (s.quiet) {
+      const pick = (p: BundleItem) => (d.proposal_id ? p.proposal_id === d.proposal_id : p.state === 'confirming')
+      return { ...s, messages: patchBundle(s.messages, pick, (p) => ({ ...p, state: 'confirmed', result: d, errorText: undefined })) }
+    }
     const next = patchLast(s, (m) => ({ ...m, result: d }))
     return { ...next, messages: moveStates(next.messages, 'confirming', 'confirmed') }
   },
-  escalation_draft: (s: ChatState, d: EscalationDraftData): ChatState => patchLast(s, (m) => ({ ...m, escalation: d })),
-  refusal: (s: ChatState, d: Refusal): ChatState => patchLast(s, (m) => ({ ...m, refusal: d })),
+  escalation_draft: (s: ChatState, d: EscalationDraftData): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, escalation: d }))),
+  refusal: (s: ChatState, d: Refusal): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, refusal: d }))),
   error: (s: ChatState, d: StreamError): ChatState => {
+    if (s.quiet) {
+      const messages = patchBundle(s.messages, (p) => p.state === 'confirming', (p) => ({ ...p, state: 'pending', errorText: d.message }))
+      return { messages, streaming: false, stage: null }
+    }
     const next = patchLast(s, (m) => ({ ...m, error: d }))
     return {
       messages: moveStates(next.messages, 'confirming', 'pending'),
@@ -183,8 +219,9 @@ export const handlers = {
       stage: null,
     }
   },
-  next_step: (s: ChatState, d: NextStep): ChatState => patchLast(s, (m) => ({ ...m, nextStep: d })),
+  next_step: (s: ChatState, d: NextStep): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, nextStep: d }))),
   done: (s: ChatState, d: { message_id?: string } = {}): ChatState => {
+    if (s.quiet) return { messages: s.messages, streaming: false, stage: null }
     const next = d.message_id ? patchLast(s, (m) => ({ ...m, serverId: d.message_id })) : s
     return { ...next, streaming: false, stage: null }
   },

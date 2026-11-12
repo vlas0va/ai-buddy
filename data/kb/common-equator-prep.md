@@ -5,7 +5,7 @@ source_type: test
 acl: {roles: [intern, mentor, lead, hrbp, alumni], teams: ["*"]}
 checklist_item_id: CL-10
 checklist: [CL-10]
-tags: [экватор, презентация, подготовка]
+tags: [экватор, презентация, подготовка, подготовить стажёра к экватору, как готовиться к экватору]
 updated: 2026-11-01
 ---
 # Подготовка к экваторной встрече

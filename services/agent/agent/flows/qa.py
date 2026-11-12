@@ -176,7 +176,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ):
             yield from handle_offtopic(turn, text)
             return
-        role = _addressee(asked)
+        # a mentor or a lead asks the curator of the internship, not «the mentor» (QA 12.11)
+        role = _addressee(asked, "curator" if turn.user.role in ("mentor", "lead") else "mentor")
         label = CONTACT_LABELS.get(role, "наставник")
         near = _nearby(turn, text)
         if near:
