@@ -49,6 +49,8 @@ export function SourceChips({ sources }: { sources: Source[] }) {
     <>
       {kb.length > 0 && (
         <div className="chat-sources" aria-label="Источники">
+          {/* R69: where the answer comes from; a click opens the document, to read it in full or check the answer */}
+          <span className="chat-sources-label">{kb.length > 1 ? 'Источники:' : 'Источник:'}</span>
           {kb.map((s) => (
             <button key={s.doc_id} type="button" className="chat-chip chat-chip-doc" onClick={() => setOpen(s)} title="Открыть документ">
               {s.title}
