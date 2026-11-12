@@ -38,7 +38,7 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 | `alumni.petr` | Выпускник стажировки | buddy остаётся точкой входа после стажировки |
 
 Пароль у всех — `demo`. Порты: web 5173, core API 8080, agent 8090 и mcp-mocks 8100 (только localhost).
-Сброс данных: `make reset`. Windows без `make`: команды `docker compose` выше, подробности — [docs/dev-setup-windows.md](docs/dev-setup-windows.md).
+Сброс данных: `make reset` (база пересоздаётся, скачанная модель остаётся). Windows без `make`: `docker compose -f deploy/docker-compose.yml --profile core down`, `docker volume rm aibuddy_pgdata`, затем команда запуска выше; `down -v` удалит и модель. Подробности — [docs/dev-setup-windows.md](docs/dev-setup-windows.md).
 
 ## Сценарии
 
