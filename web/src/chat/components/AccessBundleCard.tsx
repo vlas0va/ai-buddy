@@ -9,7 +9,7 @@ function str(v: unknown): string {
 
 const LEVEL_TEXT: Record<string, string> = {
   read: "чтение",
-  write: "запись",
+  write: "редактирование",
   admin: "администрирование",
 };
 
@@ -46,6 +46,56 @@ interface Props {
   /** sends the chosen drafts one after another: plain reading is granted at once, the rest goes to the lead */
   onConfirmMany: (proposalIds: string[]) => void;
   onCancel: (proposalId: string) => void;
+  /** organizers 12.11: a justification for an access with approval, or a question to the mentor whether it is needed */
+  onAsk?: (text: string) => void;
+}
+
+function ApprovalExtras({ p, onAsk, disabled }: { p: Item; onAsk: (text: string) => void; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [why, setWhy] = useState("");
+  const name = str(p.draft.display?.resource_name) || str(p.draft.args.resource_id);
+  const level = str(p.draft.display?.level_label);
+  return (
+    <div className="bundle-extras">
+      {open ? (
+        <form
+          className="bundle-why"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!why.trim()) return;
+            onAsk(`запроси доступ к ${name}${level ? ` на ${level}` : ""}, обоснование: ${why.trim()}`);
+            setOpen(false);
+          }}
+        >
+          <input
+            className="ui-input"
+            value={why}
+            onChange={(e) => setWhy(e.target.value)}
+            placeholder="Зачем нужен доступ, например: задача из плана"
+            aria-label={`Обоснование: ${name}`}
+            maxLength={200}
+          />
+          <Button type="submit" disabled={!why.trim() || disabled}>
+            Запросить
+          </Button>
+        </form>
+      ) : (
+        <>
+          <button type="button" className="chat-link" disabled={disabled} onClick={() => setOpen(true)}>
+            Запросить с обоснованием
+          </button>
+          <button
+            type="button"
+            className="chat-link"
+            disabled={disabled}
+            onClick={() => onAsk(`нужен ли мне доступ к ${name}?`)}
+          >
+            Нужен ли? Спросить наставника
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 /** Feedback 12.11: the missing accesses are one list with checkboxes instead of a card per access. */
@@ -54,6 +104,7 @@ export function AccessBundleCard({
   disabled,
   onConfirmMany,
   onCancel,
+  onAsk,
 }: Props) {
   const open = proposals.filter((p) => p.state === "pending");
   // drafts arrive one by one while the answer streams: keep only what the user flipped, so every new ordinary draft
@@ -102,6 +153,7 @@ export function AccessBundleCard({
                           ? `согласует ${str(p.draft.display?.approver_display_name) || str(p.draft.display?.approver_label) || "руководитель"}`
                           : "выдаётся сразу"}
               </span>
+              {pending && needsApproval(p) && onAsk && <ApprovalExtras p={p} onAsk={onAsk} disabled={busy || disabled} />}
             </li>
           );
         })}

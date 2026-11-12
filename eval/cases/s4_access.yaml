@@ -1,6 +1,6 @@
 # S4 «Доступы и каналы».
 - {id: s4-01, category: s4, user: intern.anna, turns: ["Какие доступы мне нужны?"],
-   expect: {intent: access, events: [action_proposal], text_contains: ["| Jira | — | чтение, запись | не запрошен |", "согласование: руководитель"]}}
+   expect: {intent: access, events: [action_proposal], text_contains: ["| Jira | — | чтение, редактирование | не запрошен |", "согласование: руководитель"]}}
 - {id: s4-02, category: s4, user: intern.anna, turns: ["запроси доступ в jira"], confirm: true,
    expect: {args: {resource_id: jira}}, expect_result: {status: granted}}
 - {id: s4-03, category: s4, user: intern.anna, turns: ["запроси закрытое пространство инцидентов"], confirm: true,

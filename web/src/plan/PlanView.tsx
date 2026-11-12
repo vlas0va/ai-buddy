@@ -10,7 +10,7 @@ import { STATUS_LABELS } from '@/components/ui/badgeText'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAsk } from '@/store/ask'
-import { askText, canToggle, NEXT_STEP_PROMPT, progress, shortDate, withTaskStatus } from './format'
+import { askLabel, askText, canToggle, NEXT_STEP_PROMPT, progress, shortDate, withTaskStatus } from './format'
 import { GoalsSection } from './GoalsSection'
 import './plan.css'
 
@@ -228,7 +228,7 @@ function TaskRow({
       )}
       {!readOnly && !done && (
         <button type="button" className="plan-ask" onClick={onAsk}>
-          {task.source === 'action' ? 'Что с заявкой?' : 'Спросить buddy'}
+          {askLabel(task)}
         </button>
       )}
     </Card>

@@ -567,9 +567,9 @@ func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action,
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
 }
 
-var accessLevels = map[string]string{"read": "чтение", "write": "запись", "admin": "администрирование"}
+var accessLevels = map[string]string{"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 
-// accessScope is « (stage, чтение)» or « (запись)»; empty for plain read access without an environment.
+// accessScope is « (stage, чтение)» or « (редактирование)»; empty for plain read access without an environment.
 func accessScope(env *string, level string) string {
 	switch {
 	case env != nil && *env != "":

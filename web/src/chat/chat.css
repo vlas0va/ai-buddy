@@ -155,3 +155,8 @@
 .dialogs-item:hover, .dialogs-item:focus-visible { background: var(--color-tile); }
 .dialogs-item.is-current { background: var(--color-accent-soft); }
 .dialogs-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* organizers 12.11: justification and «нужен ли?» under an access with approval */
+.bundle-extras { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 2px 0 6px 28px; font-size: 13px; }
+.bundle-why { display: flex; gap: 8px; flex: 1; min-width: 0; }
+.bundle-why .ui-input { flex: 1; min-width: 0; }

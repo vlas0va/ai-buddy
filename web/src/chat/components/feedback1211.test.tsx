@@ -7,7 +7,7 @@ import { setupServer } from 'msw/node'
 import type { ReactNode } from 'react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { handlers } from '@/mocks/handlers'
-import { askText } from '@/plan/format'
+import { askLabel, askText } from '@/plan/format'
 import { signInAs } from '@/test/mockWorld'
 import { ApprovalsHint } from './ApprovalsHint'
 import { DatePickerCard } from './DatePickerCard'
@@ -88,5 +88,10 @@ describe('Feedback 12.11: «Спросить buddy» on an action task asks abou
     expect(askText({ source: 'action', title: 'Отгул 13.11.2026' })).toBe('Что с моей заявкой «Отгул 13.11.2026»?')
     expect(askText({ source: 'action', title: 'Доступ: Jira' })).toBe('Какие доступы мне нужны?')
     expect(askText({ source: 'checklist', title: 'Познакомься с командой' })).toBe('Как выполнить задачу «Познакомься с командой»?')
+    // organizers 12.11: the access task of the checklist leads straight to the request
+    expect(askText({ source: 'checklist', title: 'Запроси доступ', checklist_item_id: 'CL-05' })).toBe('Какие доступы мне нужны?')
+    expect(askLabel({ source: 'checklist', checklist_item_id: 'CL-05' })).toBe('Подать заявку')
+    expect(askLabel({ source: 'checklist', checklist_item_id: 'CL-03' })).toBe('Спросить buddy')
+    expect(askLabel({ source: 'action' })).toBe('Что с заявкой?')
   })
 })

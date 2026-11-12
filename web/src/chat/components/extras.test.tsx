@@ -355,3 +355,33 @@ it('QA 12.11: the query cache is dropped when another user signs in', async () =
   expect(client.getQueryData(['notifications'])).toBeUndefined()
   stop()
 })
+
+it('organizers 12.11: an access with approval can be requested with a justification or checked with the mentor', async () => {
+  const mk = (id: string, elevated = false) =>
+    ({ proposal_id: id, kind: 'access_request', state: 'pending',
+      draft: { tool: 'access.request_access', args: { resource_id: id, level: 'read' },
+        display: { resource_name: id === 'inc' ? 'Пространство инцидентов' : id, elevated, level_label: 'чтение' } } }) as never
+  const onAsk = vi.fn()
+  render(<AccessBundleCard proposals={[mk('jira'), mk('inc', true)]} onConfirmMany={vi.fn()} onCancel={vi.fn()} onAsk={onAsk} />)
+  expect(screen.getAllByRole('button', { name: 'Нужен ли? Спросить наставника' })).toHaveLength(1)
+  await userEvent.click(screen.getByRole('button', { name: 'Нужен ли? Спросить наставника' }))
+  expect(onAsk).toHaveBeenLastCalledWith('нужен ли мне доступ к Пространство инцидентов?')
+  await userEvent.click(screen.getByRole('button', { name: 'Запросить с обоснованием' }))
+  await userEvent.type(screen.getByLabelText('Обоснование: Пространство инцидентов'), 'разбор инцидента по задаче')
+  await userEvent.click(screen.getByRole('button', { name: 'Запросить' }))
+  expect(onAsk).toHaveBeenLastCalledWith('запроси доступ к Пространство инцидентов на чтение, обоснование: разбор инцидента по задаче')
+})
+
+it('organizers 12.11: the access draft shows the justification', () => {
+  render(
+    <ActionProposalCard
+      proposal={{ proposal_id: 'p', kind: 'access_request', state: 'pending',
+        draft: { tool: 'access.request_access', args: { resource_id: 'x', level: 'write', reason: 'задача DLV-12' },
+          display: { resource_name: 'Репозиторий', elevated: true, level_label: 'редактирование' } } } as never}
+      onConfirm={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  )
+  expect(screen.getByText('задача DLV-12')).toBeInTheDocument()
+  expect(screen.getByText('редактирование')).toBeInTheDocument()
+})

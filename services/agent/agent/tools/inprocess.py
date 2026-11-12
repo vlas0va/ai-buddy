@@ -45,7 +45,7 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
 }
 ABSENCE_TYPES = {"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 MAX_VACATION_DAYS, VACATION_NOTICE_DAYS, MAX_ABSENCE_DAYS, MAX_DOCUMENTS = 28, 14, 5, 3  # = B's mocks/absence
-LEVEL_LABELS = {"read": "чтение", "write": "запись", "admin": "администрирование"}
+LEVEL_LABELS = {"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 TRIP_OFFICES = ["Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"]  # = B's mocks/trips.Offices
 TRIP_MIN_NOTICE_DAYS = 5
 TRIP_MAX_DAYS = 14

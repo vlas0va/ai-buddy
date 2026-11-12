@@ -97,6 +97,7 @@ export function ChatPage() {
                       disabled={state.streaming}
                       onConfirmMany={(ids) => void confirmMany(ids)}
                       onCancel={(id) => void cancel(id)}
+                      onAsk={send}
                     />
                   )}
                   {m.result && <ActionResultCard result={m.result} />}

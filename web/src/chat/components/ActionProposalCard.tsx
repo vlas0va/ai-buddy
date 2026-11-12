@@ -5,7 +5,7 @@ import type { ProposalState } from '../stream'
 
 const TYPE_TEXT: Record<string, string> = { day_off: 'Отгул', vacation: 'Отпуск', absence: 'Отсутствие', parental_leave: 'Декрет' }
 
-const LEVEL_TEXT: Record<string, string> = { read: 'чтение', write: 'запись', admin: 'администрирование' }
+const LEVEL_TEXT: Record<string, string> = { read: 'чтение', write: 'редактирование', admin: 'администрирование' }
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
@@ -66,6 +66,7 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
     { label: 'Права', value: str(display?.level_label) || (args.level ? LEVEL_TEXT[str(args.level)] ?? str(args.level) : '') },
     { label: 'Повышенные права', value: display?.elevated ? 'Да, нужно согласование' : 'Нет' },
     { label: 'Кто согласует', value: display?.elevated ? str(display?.approver_label) : '' },
+    { label: 'Обоснование', value: str(display?.reason) || str(args.reason) },
   ]
 }
 

@@ -43,7 +43,11 @@ export function canToggle(t: Task): boolean {
 }
 
 /** QA 12.11: a task made by a request (an absence, an access) asks for its status, not «how to do it» again */
-export function askText(t: Pick<Task, 'source' | 'title'>): string {
+/** Access tasks of the checklist: organizers 12.11 — the checklist has direct links to the request forms. */
+const ACCESS_ITEMS = new Set(['CL-05'])
+
+export function askText(t: Pick<Task, 'source' | 'title'> & { checklist_item_id?: string | null }): string {
+  if (t.source !== 'action' && t.checklist_item_id && ACCESS_ITEMS.has(t.checklist_item_id)) return 'Какие доступы мне нужны?'
   if (t.source !== 'action') return `Как выполнить задачу «${t.title}»?`
   return t.title.startsWith('Доступ') ? 'Какие доступы мне нужны?' : `Что с моей заявкой «${t.title}»?`
 }
@@ -54,4 +58,9 @@ export const NEXT_STEP_PROMPT: Record<string, (title: string) => string> = {
   absence_request: () => 'Как оформить отгул?',
   draft_message: (title) => `Помоги написать наставнику про задачу «${title}»`,
   mark_done: (title) => `Как понять, что задача «${title}» выполнена?`,
+}
+
+export function askLabel(t: Pick<Task, 'source'> & { checklist_item_id?: string | null }): string {
+  if (t.source === 'action') return 'Что с заявкой?'
+  return t.checklist_item_id && ACCESS_ITEMS.has(t.checklist_item_id) ? 'Подать заявку' : 'Спросить buddy'
 }

@@ -11,7 +11,7 @@ from typing import Any
 
 from ..sse import Event, status
 from ..text import normalize
-from .common import Turn, items, person_name, say
+from .common import Turn, first_name, items, person_name, say
 
 REQUEST_VERB = re.compile(r"(запрос|оформ|дай|выда|нуж|подключ|открой|получ|хочу)")
 ALL_WORDS = re.compile(r"\b(все|всё|недостающ\w*|остальн\w*)\b")
@@ -39,7 +39,7 @@ ENVS = [
     ("stage", re.compile(r"\bstag\w*|\bстейдж\w*|\bстэйдж\w*|\bпредпрод|\bтестов\w+\s+стенд")),
     ("dev", re.compile(r"\bdev\b|\bдев\w*|разработ\w*\s+стенд|dev-стенд")),
 ]
-LEVEL_LABEL = {"read": "чтение", "write": "запись", "admin": "администрирование"}
+LEVEL_LABEL = {"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 KIND_LABEL = {
     "tool": "сервис",
     "project": "проект Jira",
@@ -103,14 +103,35 @@ def _mentions_other_team(text: str, own_team: str) -> bool:
     return any(rx.search(t) for team, rx in TEAM_NAMES.items() if team != own_team) and not (own and own.search(t))
 
 
+# Organizers 12.11: a request names the project, the level of rights and a justification; before asking for an access the
+# intern may check with the mentor whether it is needed at all.
+REASON = re.compile(
+    r"(?:обосновани\w*|причин\w*|зачем)\s*[:—–-]?\s*(.+)$|[,—–-]\s*(?:потому\s+что|так\s+как|нужно?\s+для|для\s+задач\w*)\s+(.+)$",
+    re.I,
+)
+ASK_IF_NEEDED = re.compile(
+    r"нуж\w+\s+ли\s+(мне\s+)?(\w+\s+){0,2}доступ|спроси\w*\s+(у\s+)?наставник\w*.{0,40}доступ", re.I
+)
+
+
+def parse_reason(text: str) -> str:
+    m = REASON.search(text.strip())
+    if not m:
+        return ""
+    reason = (m.group(1) or m.group(2) or "").strip().rstrip(".")
+    return reason[:200]
+
+
 def needs_approval(r: dict[str, Any], env: str, level: str) -> bool:
     """= the access service: elevated resources, write/admin rights and prod go to the lead (checkpoint 11.11)."""
     return bool(r["elevated"]) or level != "read" or env == "prod"
 
 
-def _proposal(turn: Turn, r: dict[str, Any], env: str = "", level: str = "read") -> dict[str, Any]:
+def _proposal(turn: Turn, r: dict[str, Any], env: str = "", level: str = "read", reason: str = "") -> dict[str, Any]:
     lead = turn.contact("lead") or {}
-    reason = "Онбординг стажёра: доступы первой недели (чек-лист)" if turn.user.role == "intern" else "Работа в команде"
+    reason = reason or (
+        "Онбординг стажёра: доступы первой недели (чек-лист)" if turn.user.role == "intern" else "Работа в команде"
+    )
     approval = needs_approval(r, env, level)
     display = {
         "resource_name": r["name"],
@@ -121,6 +142,7 @@ def _proposal(turn: Turn, r: dict[str, Any], env: str = "", level: str = "read")
         "level_label": LEVEL_LABEL[level],
         "approver_label": r.get("approver_label", "") if approval else "",
         "approver_display_name": lead.get("name", "") if approval else "",
+        "reason": reason,
     }
     args: dict[str, Any] = {"resource_id": r["resource_id"], "reason": reason, "level": level}
     if env:
@@ -167,6 +189,28 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         yield from say(msg)
         return
 
+    if target is not None and ASK_IF_NEEDED.search(text):
+        person = turn.contact("mentor")
+        mentor = person_name(person, "наставник")
+        yield from say(
+            f"Хороший вопрос до заявки: лишние доступы запрашивать не стоит. Ниже черновик вопроса наставнику ({mentor}) — "
+            "отправь его здесь. Если доступ нужен, напиши, например: "
+            f"«запроси доступ к {target['name']}, обоснование: задача из плана»."
+        )
+        hello = f"{first_name(person)}, привет!" if person else "Привет!"
+        yield Event(
+            "escalation_draft",
+            {
+                "to_role": "mentor",
+                "to_user_id": (person or {}).get("user_id"),
+                "to_name": mentor,
+                "topic": "access",
+                "text": f"{hello} Нужен ли мне доступ «{target['name']}»? Если да — с какими правами и для каких задач, "
+                "чтобы я указал это в обосновании заявки.",
+            },
+        )
+        return
+
     if target is not None:
         envs, levels = target.get("environments") or [], target.get("levels") or ["read"]
         level = parse_level(text) or "read"
@@ -186,10 +230,17 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         if target["status"] == "pending_approval" or (target["status"] == "granted" and same_scope):
             yield from say(f"{target['name']}: {STATUS_LABEL[target['status']]}. Повторная заявка не нужна.")
             return
-        proposal = _proposal(turn, target, env, level)
+        reason = parse_reason(text)
+        proposal = _proposal(turn, target, env, level, reason)
         who = target.get("approver_label") or "руководитель"
         approval = (
             f" Это повышенные права — согласует {who} ({person_name(turn.contact('lead'), 'руководитель')})."
+            + (
+                f" Обоснование: «{reason}»."
+                if reason
+                else " Добавь обоснование, чтобы согласующему было понятно, зачем доступ: например, "
+                f"«доступ к {target['name']}, обоснование: задача из плана»."
+            )
             if needs_approval(target, env, level)
             else " Чтение выдаётся сразу после заявки."
         )
@@ -222,8 +273,8 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     intro = "Для работы в команде нужны такие доступы:" if turn.user.role == "intern" else "Доступы команды:"
     table = "| Ресурс | Окружения | Права | Статус | Кто согласует |\n|---|---|---|---|---|\n" + "\n".join(rows)
     rules = (
-        "\n\nЧтение выдаётся сразу. Запись, администрирование и любой доступ к prod согласует руководитель. "
-        "Пример: «доступ на запись в репозиторий delivery-api» или «доступ к БД на stage на чтение»."
+        "\n\nЧтение выдаётся сразу. Редактирование, администрирование и любой доступ к prod согласует руководитель. "
+        "Пример: «доступ на редактирование в репозиторий delivery-api» или «доступ к БД на stage на чтение»."
     )
     approval = [r for r in missing if r["elevated"]]
     tail = (
