@@ -185,7 +185,7 @@ paths:
                 properties:
                   user_id: { type: string }
                   name: { type: string }
-                  cohort_start: { type: string, format: date, nullable: true }
+                  cohort_start: { type: [string, "null"], format: date }
                   days: { type: integer }
                   total_days: { type: integer }
                   final: { type: boolean }
