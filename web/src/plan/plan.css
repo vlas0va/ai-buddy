@@ -2,7 +2,7 @@
 .plan-summary { display: grid; gap: var(--space-3); }
 .plan-progress-text { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .plan-progress { height: 8px; border-radius: 999px; background: var(--color-neutral-soft); overflow: hidden; }
-.plan-progress > span { display: block; height: 100%; background: var(--color-accent); transition: width var(--transition); }
+.plan-progress > span { display: block; height: 100%; background: linear-gradient(90deg, var(--avito-blue), var(--avito-green)); transition: width var(--transition); }
 .plan-progress-text strong { font-size: 20px; font-weight: 800; }
 .plan-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .plan-timeline li { padding: 6px 12px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; background: var(--color-neutral-soft); color: var(--color-text-muted); }
@@ -70,7 +70,7 @@
 .report-stat--bad strong { color: #c62828; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
 .report-table th, .report-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-border, #e6e6e3); }
-.report-saved { background: var(--color-accent-soft, #e8f2ff); }
+.report-saved { background: var(--color-accent-soft, #e8f2ff); box-shadow: inset 4px 0 0 var(--avito-blue); }
 .report-saved-main { margin: 0 0 6px; font-size: 16px; }
 .report-saved-main strong { font-size: 22px; color: var(--color-accent-ink, #004a99); }
 
