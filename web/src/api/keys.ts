@@ -7,4 +7,5 @@ export const keys = {
   escalations: ['escalations'] as const,
   notifications: ['notifications'] as const,
   chatSessions: ['chat-sessions'] as const,
+  report: (userId: string) => ['report', userId] as const,
 }

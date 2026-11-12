@@ -25,3 +25,37 @@ export function saveGoals(userId: string, goals: GoalInput[]) {
 export function listInterns() {
   return apiRequest('/api/team/interns', z.array(internProgressSchema))
 }
+
+const reportTaskSchema = z.object({ title: z.string(), due_at: z.string().nullable(), completed_at: z.string().nullable() })
+
+export const reportSchema = z.object({
+  user_id: z.string(),
+  name: z.string(),
+  cohort_start: z.string().nullable(),
+  days: z.number(),
+  total_days: z.number(),
+  final: z.boolean(),
+  current_period: z.string(),
+  tasks: z.object({
+    total: z.number(),
+    done: z.number(),
+    early: z.number(),
+    on_time: z.number(),
+    late: z.number(),
+    overdue_now: z.number(),
+    upcoming: z.number(),
+  }),
+  periods: z.array(z.object({ period: z.string(), total: z.number(), done: z.number(), late: z.number() })),
+  late: z.array(reportTaskSchema),
+  overdue: z.array(reportTaskSchema),
+  questions: z.object({ asked: z.number(), escalated: z.number(), answered: z.number(), added_to_kb: z.number() }),
+  accesses_requested: z.number(),
+  goals: z.number(),
+  discuss: z.array(z.string()),
+})
+export type Report = z.infer<typeof reportSchema>
+
+/** Internship report (idea 12.11): the mentor or lead of the team passes the intern's `userId` (R71: 403 otherwise). */
+export function getReport(userId: string) {
+  return apiRequest(`/api/plan/report?user_id=${encodeURIComponent(userId)}`, reportSchema)
+}

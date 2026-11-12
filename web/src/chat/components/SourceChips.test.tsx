@@ -33,4 +33,15 @@ describe('Feedback 12.11: source chips open the test document (R69)', () => {
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
+
+  it('a mentor answer added to the KB is marked as such', () => {
+    signInAs('intern.anna')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <SourceChips sources={[{ doc_id: 'faq-delivery-1a2b3c4d', title: 'Где логи стенда', source_type: 'test', url: '' }]} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('button', { name: 'Ответ наставника: Где логи стенда' })).toBeInTheDocument()
+  })
 })

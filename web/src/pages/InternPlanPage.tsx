@@ -15,9 +15,14 @@ export function InternPlanPage({ internId }: { internId: string }) {
         title={`План: ${name}`}
         hint="Задачи отмечает сам стажёр. Вы задаёте цели и видите, что просрочено."
         actions={
-          <Link to="/team" className="chat-link">
-            Все стажёры
-          </Link>
+          <span className="page-links">
+            <Link to="/team/$internId/report" params={{ internId }} className="chat-link">
+              Отчёт за стажировку
+            </Link>
+            <Link to="/team" className="chat-link">
+              Все стажёры
+            </Link>
+          </span>
         }
       />
       <PlanView userId={internId} canEditGoals />

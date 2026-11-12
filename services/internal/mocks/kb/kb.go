@@ -40,6 +40,15 @@ func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 		}
 		return search(ctx, pool, c, in.Query, in.K)
 	})
+	srv.Handle("get", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
+		var in struct {
+			DocID string `json:"doc_id"`
+		}
+		if err := mcpx.DecodeArgs(args, &in); err != nil {
+			return nil, err
+		}
+		return get(ctx, pool, c, in.DocID)
+	})
 	srv.Handle("add_faq", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 		var in struct {
 			Title string `json:"title"`
@@ -102,6 +111,32 @@ func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string
 		return nil, fmt.Errorf("reading search hits: %w", err)
 	}
 	return map[string]any{"items": items}, nil
+}
+
+// get returns one document the caller may see (same ACL as search); a mentor answer added to the KB is found here, so
+// the source link under an answer opens it (feedback 12.11). Not visible and missing look the same: not_found.
+func get(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, docID string) (any, error) {
+	if docID == "" {
+		return nil, apierr.Validation().WithMessage("Укажите doc_id")
+	}
+	var d struct {
+		DocID      string `json:"doc_id"`
+		Title      string `json:"title"`
+		Body       string `json:"body"`
+		SourceType string `json:"source_type"`
+		Kind       string `json:"kind"`
+	}
+	err := pool.QueryRow(ctx, `SELECT doc_id, title, body, source_type, kind FROM kb.documents d
+		WHERE d.doc_id = $1 AND $2 = ANY(d.acl_roles) AND ('*' = ANY(d.acl_teams) OR $3 = ANY(d.acl_teams))
+		  AND (d.owner_id IS NULL OR d.owner_id = $4)`, docID, aclRole(c.Role), c.TeamID, c.Sub).
+		Scan(&d.DocID, &d.Title, &d.Body, &d.SourceType, &d.Kind)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, apierr.NotFound().WithMessage("Документ не найден или недоступен")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading document: %w", err)
+	}
+	return d, nil
 }
 
 func truncateRunes(s string, n int) string {

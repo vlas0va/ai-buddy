@@ -33,6 +33,7 @@ type Result struct {
 	MarkedOverdue int `json:"marked_overdue"`
 	Overdue       int `json:"overdue_notifications"`
 	Reminders     int `json:"reminders"`
+	Reports       int `json:"reports"`
 }
 
 // Runner executes the job.
@@ -77,6 +78,7 @@ func (r *Runner) Run(ctx context.Context) {
 
 type planRow struct {
 	id, userID, role string
+	internID, intern string
 	cohort           *string
 }
 
@@ -91,7 +93,7 @@ type taskRow struct {
 // (already processed plans stay committed; the job is idempotent, so the next run continues).
 func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 	var res Result
-	rows, err := r.pool.Query(ctx, `SELECT p.id::text, p.user_id, p.plan_role, u.cohort_start::text
+	rows, err := r.pool.Query(ctx, `SELECT p.id::text, p.user_id, p.plan_role, u.id, u.display_name, u.cohort_start::text
 		FROM core.plans p JOIN core.users u ON u.id = p.intern_id ORDER BY p.created_at, p.id`)
 	if err != nil {
 		return res, fmt.Errorf("select plans: %w", err)
@@ -99,7 +101,7 @@ func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 	var plans []planRow
 	for rows.Next() {
 		var p planRow
-		if err := rows.Scan(&p.id, &p.userID, &p.role, &p.cohort); err != nil {
+		if err := rows.Scan(&p.id, &p.userID, &p.role, &p.internID, &p.intern, &p.cohort); err != nil {
 			rows.Close()
 			return res, fmt.Errorf("scan plan: %w", err)
 		}
@@ -185,10 +187,38 @@ func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error {
 			return err
 		}
 	}
+	if p.cohort != nil && p.role == "mentor" {
+		if start, err := period.ParseDate(*p.cohort); err == nil && now.Sub(start) >= ReportAfter {
+			title, body := reportText(p)
+			n := notify.Notification{UserID: p.userID, Kind: notify.KindReminder, DedupeKey: "report:3m:" + p.internID,
+				Title: title, Body: body}
+			created, err := r.notify.CreateIfNew(ctx, tx, n)
+			if err != nil {
+				return err
+			}
+			if created {
+				res.Reports++
+				if err := r.emit(ctx, tx, analytics.Event{UserID: p.userID, Role: p.role}, "notification.created",
+					map[string]any{"kind": "report"}); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 	return nil
+}
+
+// ReportAfter: after three months buddy tells the mentor that the internship report is ready (idea 12.11; the report is
+// for the mentor only).
+const ReportAfter = 90 * 24 * time.Hour
+
+func reportText(p planRow) (title, body string) {
+	return "Отчёт о стажёре " + p.intern + " за 3 месяца готов",
+		"Buddy собрал факты за стажировку: задачи плана раньше срока, в срок и с опозданием, вопросы и доступы. " +
+			"Открой «Мои стажёры» → «Отчёт за стажировку». Выводы — за тобой: это не оценка, а подготовка к разговору."
 }
 
 func (r *Runner) emit(ctx context.Context, tx analytics.DBTX, base analytics.Event, name string, props map[string]any) error {

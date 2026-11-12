@@ -53,6 +53,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/plan/tasks/{task_id}", h.patchTask)
 	mux.HandleFunc("PUT /api/plan/goals", h.putGoals)
 	mux.HandleFunc("GET /api/team/interns", h.teamInterns)
+	mux.HandleFunc("GET /api/plan/report", h.getReport)
 }
 
 func (h *Handler) today() string { return h.Now().UTC().Format("2006-01-02") }

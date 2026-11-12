@@ -54,3 +54,19 @@
 .notif-item p { margin: 0; font-size: var(--text-sm); }
 .notif-item button { justify-self: start; border: 0; background: none; padding: 0; color: var(--color-accent); font-size: var(--text-xs); cursor: pointer; }
 .team-hint { margin-top: var(--space-4); }
+
+/* Internship report (idea 12.11) */
+.page-links { display: flex; gap: 16px; flex-wrap: wrap; }
+.report { display: grid; gap: 16px; max-width: 920px; }
+.report-card h3 { margin: 0 0 12px; }
+.report-card h4 { margin: 16px 0 6px; font-size: 14px; }
+.report-card ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.report-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.report-stat { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--color-surface-muted, #f4f4f2); }
+.report-stat strong { font-size: 22px; }
+.report-stat span { font-size: 13px; color: var(--color-text-muted, #6b6b6b); }
+.report-stat--good strong { color: #1a7f37; }
+.report-stat--warn strong { color: #a15c00; }
+.report-stat--bad strong { color: #c62828; }
+.report-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+.report-table th, .report-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-border, #e6e6e3); }

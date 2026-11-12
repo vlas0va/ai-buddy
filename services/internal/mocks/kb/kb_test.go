@@ -597,3 +597,29 @@ func TestLoadDir_R69_RealDataDir(t *testing.T) {
 		t.Fatalf("reload: %d %v", n2, err)
 	}
 }
+
+func TestGet_S2_FAQOpensWithACL_R71(t *testing.T) {
+	srv, _ := loaded(t)
+	out, aerr := addFAQResult(t, srv, oleg, addArgs(t, oleg, key1, "Пропуск в офис", "Заказать пропуск нужно через портал за день."))
+	if aerr != nil {
+		t.Fatal(aerr)
+	}
+	id := out["doc_id"].(string)
+	raw, aerr := srv.Invoke(context.Background(), anna, "get", map[string]any{"doc_id": id})
+	if aerr != nil {
+		t.Fatal(aerr)
+	}
+	var d map[string]any
+	if err := json.Unmarshal(raw, &d); err != nil {
+		t.Fatal(err)
+	}
+	if d["kind"] != "faq" || d["source_type"] != "test" || !strings.Contains(d["body"].(string), "через портал") {
+		t.Fatalf("got %v", d)
+	}
+	if _, aerr := srv.Invoke(context.Background(), ivan, "get", map[string]any{"doc_id": id}); aerr == nil || aerr.Code != apierr.CodeNotFound {
+		t.Fatalf("another team must not open the faq: %v", aerr)
+	}
+	if _, aerr := srv.Invoke(context.Background(), anna, "get", map[string]any{"doc_id": "nope"}); aerr == nil || aerr.Code != apierr.CodeNotFound {
+		t.Fatalf("missing: %v", aerr)
+	}
+}

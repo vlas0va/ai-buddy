@@ -255,3 +255,27 @@ func TestCron_DefaultInterval(t *testing.T) {
 		t.Fatal("CRON_INTERVAL default is 24h")
 	}
 }
+
+func TestCron_ReportAfterThreeMonths_Idea1211(t *testing.T) {
+	pool := pgtest.New(t)
+	r := cron.NewRunner(pool, analytics.NewEmitter(false), time.Hour, nil)
+	res, err := r.RunOnce(context.Background())
+	if err != nil || res.Reports != 0 {
+		t.Fatalf("day 10: %+v %v", res, err)
+	}
+	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 85) } // Анна started 10 days ago: day 95
+	res, err = r.RunOnce(context.Background())
+	if err != nil || res.Reports < 1 {
+		t.Fatalf("day 95: %+v %v", res, err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE dedupe_key = 'report:3m:intern.anna'
+		AND user_id = 'mentor.oleg' AND title LIKE '%Анна Котова%'`); n != 1 {
+		t.Fatalf("report notification for Олег: %d", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE dedupe_key LIKE 'report:%' AND user_id LIKE 'intern.%'`); n != 0 {
+		t.Fatal("the report is for the mentor only")
+	}
+	if res, _ = r.RunOnce(context.Background()); res.Reports != 0 {
+		t.Fatalf("report notification repeated: %+v", res)
+	}
+}

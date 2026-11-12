@@ -89,3 +89,30 @@ def test_S2_14_kb_doc_endpoint_respects_acl(client, anna):
     assert ok.status_code == 200 and ok.get_json()["badge"] == "Тестовая инструкция прототипа"
     assert client.http.get("/v1/kb/mentor-handbook", headers=anna.headers).status_code == 404
     assert client.http.get("/v1/kb/search-code-review", headers=anna.headers).status_code == 404
+
+
+def test_S2_15_kb_doc_endpoint_opens_a_mentor_answer_from_mcp_kb(client, anna, monkeypatch):
+    """Feedback 12.11: a mentor answer added to the KB lives in mcp-kb; its source link must open, not «Не найдено»."""
+    from agent.tools.base import ToolGateway
+
+    real = ToolGateway.read
+
+    def fake(self, tool, **args):
+        if tool == "kb.get" and args.get("doc_id") == "faq-delivery-1a2b3c4d":
+            return {
+                "doc_id": "faq-delivery-1a2b3c4d",
+                "title": "Где логи стенда",
+                "body": "Вопрос: где логи?\n\nОтвет: в Grafana.",
+                "source_type": "test",
+                "kind": "faq",
+            }
+        return real(self, tool, **args)
+
+    monkeypatch.setattr(ToolGateway, "read", fake)
+    r = client.http.get("/v1/kb/faq-delivery-1a2b3c4d", headers=anna.headers)
+    assert (
+        r.status_code == 200
+        and "Grafana" in r.get_json()["body"]
+        and r.get_json()["badge"] == "Тестовая инструкция прототипа"
+    )
+    assert client.http.get("/v1/kb/faq-search-00000000", headers=anna.headers).status_code == 404

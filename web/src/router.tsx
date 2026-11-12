@@ -13,6 +13,7 @@ import { ChatPage } from '@/pages/ChatPage'
 import { EscalationsPage } from '@/pages/EscalationsPage'
 import { InternPlanPage } from '@/pages/InternPlanPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { ReportPage } from '@/pages/ReportPage'
 import { PlanPage } from '@/pages/PlanPage'
 import { TeamPage } from '@/pages/TeamPage'
 import { useSession } from '@/store/session'
@@ -79,6 +80,17 @@ const internRoute = createRoute({
   },
 })
 
+// Internship report (idea 12.11): for the mentor and the lead of the team only.
+const internReportRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/team/$internId/report',
+  beforeLoad: teamGuard,
+  component: function InternReport() {
+    const { internId } = internReportRoute.useParams()
+    return <ReportPage internId={internId} />
+  },
+})
+
 const questionsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/questions',
@@ -91,7 +103,7 @@ const questionsRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
-  appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute, teamRoute, internRoute, questionsRoute]),
+  appRoute.addChildren([indexRoute, chatRoute, planRoute, approvalsRoute, teamRoute, internRoute, internReportRoute, questionsRoute]),
 ])
 
 export function createAppRouter(history?: RouterHistory) {

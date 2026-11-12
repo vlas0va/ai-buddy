@@ -67,6 +67,7 @@ ALLOWED_ARGS = {
     "access.request_access": {"resource_id", "reason", "environment", "level", "idempotency_key", "confirmation_token"},
     "checklist.get_plan_template": {"role"},
     "kb.search": {"query", "k"},
+    "kb.get": {"doc_id"},
     "trips.validate_request": {"city", "start_date", "end_date", "purpose"},
     "trips.create_request": {"city", "start_date", "end_date", "purpose", "idempotency_key", "confirmation_token"},
     "consents.sign": {"consent_id", "idempotency_key", "confirmation_token"},
@@ -665,6 +666,12 @@ class MockServices:
                 for h in hits
             ]
         }
+
+    def t_kb__get(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        doc = self.kb.get(str(a.get("doc_id", "")), c["role"], c.get("team_id", ""))
+        if doc is None:
+            raise ToolError("Документ не найден или недоступен.")
+        return {"doc_id": doc.doc_id, "title": doc.title, "body": doc.body, "source_type": "test", "kind": "doc"}
 
     # ------------------------------------------------------------------ dev/demo helpers (not MCP tools)
     # ------------------------------------------------------------------ trips (= B's mocks/trips)

@@ -87,7 +87,10 @@ export function EscalationsPage() {
                 </div>
                 <p className="esc-text">{e.text}</p>
                 {e.answer && <p className="esc-answer">{e.answer}</p>}
-                {e.added_to_kb && <span className="hint">Ответ добавлен в базу знаний команды.</span>}
+                {e.added_to_kb && <span className="hint">
+                    Ответ добавлен в базу знаний команды без имён и дат — buddy будет отвечать им стажёрам твоей команды
+                    {isIntern ? '' : ' (метка «Ответ наставника» под ответом)'}.
+                  </span>}
                 {!isIntern && e.status === 'open' && <AnswerForm e={e} />}
               </Card>
             </li>

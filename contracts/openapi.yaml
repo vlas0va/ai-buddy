@@ -168,6 +168,54 @@ paths:
                 items: { $ref: "#/components/schemas/Goal" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/plan/report:
+    get:
+      tags: [plan]
+      summary: Internship report over 3 months (facts, not an assessment) — for the mentor and the lead of the team only; an intern gets 403
+      parameters:
+        - { name: user_id, in: query, required: true, schema: { type: string }, description: The intern of the caller's team }
+      responses:
+        "200":
+          description: Report
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user_id, name, days, total_days, final, current_period, tasks, periods, late, overdue, questions, accesses_requested, goals, discuss]
+                properties:
+                  user_id: { type: string }
+                  name: { type: string }
+                  cohort_start: { type: [string, "null"], format: date }
+                  days: { type: integer }
+                  total_days: { type: integer }
+                  final: { type: boolean }
+                  current_period: { type: string }
+                  tasks:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      done: { type: integer }
+                      early: { type: integer }
+                      on_time: { type: integer }
+                      late: { type: integer }
+                      overdue_now: { type: integer }
+                      upcoming: { type: integer }
+                  periods: { type: array, items: { type: object } }
+                  late: { type: array, items: { type: object } }
+                  overdue: { type: array, items: { type: object } }
+                  questions:
+                    type: object
+                    properties:
+                      asked: { type: integer }
+                      escalated: { type: integer }
+                      answered: { type: integer }
+                      added_to_kb: { type: integer }
+                  accesses_requested: { type: integer }
+                  goals: { type: integer }
+                  discuss: { type: array, items: { type: string } }
+        "400": { description: user_id is missing }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/team/interns:
     get:
       tags: [plan]

@@ -53,7 +53,8 @@ export function SourceChips({ sources }: { sources: Source[] }) {
           <span className="chat-sources-label">{kb.length > 1 ? 'Источники:' : 'Источник:'}</span>
           {kb.map((s) => (
             <button key={s.doc_id} type="button" className="chat-chip chat-chip-doc" onClick={() => setOpen(s)} title="Открыть документ">
-              {s.title}
+              {/* a mentor answer added to the team KB (kb.add_faq) is marked so the intern sees where it came from */}
+              {s.doc_id.startsWith('faq-') ? `Ответ наставника: ${s.title}` : s.title}
             </button>
           ))}
           <Badge variant="test" />
