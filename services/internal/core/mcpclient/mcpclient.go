@@ -248,7 +248,11 @@ func (c *Client) DecideApproval(ctx context.Context, userToken, approvalID, deci
 
 // AddFAQ calls kb.add_faq with the mentor's token; idempotencyKey is the escalation id. It implements
 // escalations.FAQWriter.
-func (c *Client) AddFAQ(ctx context.Context, mentorToken, title, body, idempotencyKey string) error {
-	_, err := execTyped[FAQ](ctx, c, mentorToken, ToolAddFAQ, map[string]any{"title": title, "body": body}, idempotencyKey)
+func (c *Client) AddFAQ(ctx context.Context, mentorToken, title, body, scope, idempotencyKey string) error {
+	args := map[string]any{"title": title, "body": body}
+	if scope == "all" {
+		args["scope"] = "all"
+	}
+	_, err := execTyped[FAQ](ctx, c, mentorToken, ToolAddFAQ, args, idempotencyKey)
 	return err
 }

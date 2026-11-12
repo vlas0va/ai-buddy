@@ -28,7 +28,7 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("code %d: %v", code, m)
 	}
-	if m["name"] != "Анна Котова" || num(m, "total_days") != 90 || m["final"] != false || num(m, "days") != 10 {
+	if m["name"] != "Анна Котова" || num(m, "total_days") != 90 || m["final"] != false || num(m, "days") < 9 || num(m, "days") > 10 { // 10 days, 9 right after midnight UTC
 		t.Fatalf("header: %v", m)
 	}
 	if num(m, "tasks", "early") != 1 || num(m, "tasks", "done") != 1 || num(m, "tasks", "overdue_now") < 1 {

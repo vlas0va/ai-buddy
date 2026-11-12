@@ -56,6 +56,11 @@ class StubWriter:
         meta: dict[str, Any] | None = None,
     ) -> Iterator[str]:
         top = hits[0]
+        if str(top.get("doc_id", "")).startswith("faq-"):  # a mentor's answer added to the KB (feedback 12.13)
+            yield f"Наставник уже отвечал на такой вопрос:\n\n{top['snippet'].strip()}"
+            if task_hint:
+                yield f"\n\n{task_hint}"
+            return
         yield f"По тестовой инструкции «{top['title']}»:\n\n{top['snippet'].strip()}"
         if len(hits) > 1 and hits[1].get("score", 0) >= 0.6 * top.get("score", 0):
             yield f"\n\nЕщё может пригодиться: «{hits[1]['title']}»."

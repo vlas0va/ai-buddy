@@ -20,7 +20,7 @@ export const MOCK_FLAGS = {
   scenario_s3: true,
   scenario_s4: true,
   proactive_digest: true,
-  escalation_to_kb: false,
+  escalation_to_kb: true,
 }
 
 export interface MockProposal {

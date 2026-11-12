@@ -7,6 +7,7 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
+from ..errors import AgentError
 from ..retrieval import TEST_BADGE, sanitize_snippet
 from ..sse import Event, status
 from ..text import STOPWORDS, canonical_query, normalize, stems, words
@@ -100,6 +101,16 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
             snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
         # the LLM gets the whole readable document (not only the snippet), so A-Vibe answers with its details
         body = sanitize_snippet(doc.body[:2500]) if doc is not None else ""
+        if doc is None and str(h.get("doc_id", "")).startswith("faq-"):
+            # a mentor's answer (mcp-kb only): the search snippet is a cut fragment — read the document and show the answer
+            try:
+                full = turn.gateway.read("kb.get", doc_id=h["doc_id"])
+            except AgentError:
+                full = None
+            if isinstance(full, dict) and full.get("body"):
+                body = sanitize_snippet(str(full["body"])[:2500])
+                answer = str(full["body"]).split("Ответ:", 1)[-1].strip()
+                snippet = answer or snippet
         coverage = kb.coverage(query, doc.doc_id) if doc is not None and query else 0.0
         out.append(
             {
@@ -122,6 +133,19 @@ def _remote_kb(turn: Turn) -> bool:
 def _or_query(text: str) -> str:
     """mcp-kb uses websearch_to_tsquery (all words must match): the fallback asks for any meaningful word."""
     return " or ".join(w for w in words(text) if len(w) > 2 and w not in STOPWORDS)[:500]
+
+
+CYRILLIC_WORD = re.compile(r"^[а-яё]+$")
+
+
+def _unknown_terms(turn: Turn, text: str) -> list[str]:
+    """Question words that no KB document and no training question has (e.g. «собака», «стейдж»): the KB says nothing
+    about that topic, so a document matching only the other words is not an answer."""
+    kb = turn.kb
+    if kb is None or getattr(kb, "_bm25", None) is None:
+        return []
+    known = kb._bm25.idf.keys() | getattr(kb, "extra_vocab", set())
+    return [t for t in stems(text) if len(t) >= 4 and CYRILLIC_WORD.match(t) and t not in known and t not in STOPWORDS]
 
 
 def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
@@ -159,7 +183,16 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         local_hits = [
             h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
         ]
-        if local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
+        # a mentor's answer added to the KB lives only in mcp-kb (faq-…): it answers the question it was written for, so
+        # it goes first; otherwise the local ranking (the one eval checks) wins
+        faq = [
+            h
+            for h in hits
+            if turn.kb.by_id.get(h.get("doc_id")) is None and str(h.get("doc_id", "")).startswith("faq-")
+        ]
+        if faq:
+            hits = faq + [h for h in local_hits if h["doc_id"] not in {f["doc_id"] for f in faq}]
+        elif local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
             hits = local_hits
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
@@ -169,9 +202,16 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         if found:
             yield from _web_answer(turn, asked, found)
             return
+    is_faq = bool(hits) and str(hits[0].get("doc_id", "")).startswith("faq-")
+    if hits and not is_faq and _unknown_terms(turn, text) and float(hits[0].get("coverage", 1) or 0) < 0.6:
+        hits = []  # the documents match only the generic words of the question
     if not hits:
         ranking = turn.meta.get("ranking", [])
-        work_words = re.search(r"команд|работ|стажир|наставник|задач|проект|офис|сервис", normalize(text))
+        work_words = re.search(
+            r"команд|работ|стажир|наставник|задач|проект|офис|сервис|лог|стенд|stage|стейдж|прод|деплой|релиз|"
+            r"\bapi\b|[a-z]+-[a-z]+|репозитор|тест",
+            normalize(text),
+        )
         if not work_words and any(
             lbl == "offtopic" and (i == 0 or prob >= 0.15) for i, (lbl, prob) in enumerate(ranking[:2])
         ):

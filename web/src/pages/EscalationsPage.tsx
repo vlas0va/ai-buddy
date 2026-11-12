@@ -21,8 +21,9 @@ function AnswerForm({ e }: { e: Escalation }) {
   const qc = useQueryClient()
   const [text, setText] = useState('')
   const [toKb, setToKb] = useState(false)
+  const [scope, setScope] = useState<'team' | 'all'>('team')
   const answer = useMutation({
-    mutationFn: () => answerEscalation(e.id, text.trim(), toKb),
+    mutationFn: () => answerEscalation(e.id, text.trim(), toKb, scope),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.escalations }),
   })
   return (
@@ -38,13 +39,25 @@ function AnswerForm({ e }: { e: Escalation }) {
       />
       <label className="esc-kb">
         <input type="checkbox" checked={toKb} onChange={(ev) => setToKb(ev.target.checked)} />
-        Добавить ответ в базу знаний команды (как тестовую инструкцию)
+        Добавить ответ в базу знаний (как тестовую инструкцию)
       </label>
       {toKb && (
-        <p className="hint">
-          Ответ увидят все стажёры команды, поэтому пишите его общим: без имён и конкретных дат. Имена и даты buddy уберёт
-          сам перед добавлением.
-        </p>
+        <>
+          <div className="esc-scope" role="radiogroup" aria-label="Кому виден ответ">
+            <label>
+              <input type="radio" name={`scope-${e.id}`} checked={scope === 'team'} onChange={() => setScope('team')} />
+              Стажёрам моей команды — про наши сервисы и процессы
+            </label>
+            <label>
+              <input type="radio" name={`scope-${e.id}`} checked={scope === 'all'} onChange={() => setScope('all')} />
+              Всем стажёрам — общий вопрос (офис, документы, правила)
+            </label>
+          </div>
+          <p className="hint">
+            Пишите ответ общим: без имён и конкретных дат — buddy уберёт их сам перед добавлением. На такой же вопрос buddy
+            дальше ответит сам, с пометкой «Ответ наставника».
+          </p>
+        </>
       )}
       {answer.isError && <p className="ui-field-error">{errorMessage(answer.error)}</p>}
       <div className="chat-actions">
@@ -88,8 +101,8 @@ export function EscalationsPage() {
                 <p className="esc-text">{e.text}</p>
                 {e.answer && <p className="esc-answer">{e.answer}</p>}
                 {e.added_to_kb && <span className="hint">
-                    Ответ добавлен в базу знаний команды без имён и дат — buddy будет отвечать им стажёрам твоей команды
-                    {isIntern ? '' : ' (метка «Ответ наставника» под ответом)'}.
+                    Ответ добавлен в базу знаний без имён и дат — на такой же вопрос buddy дальше ответит сам, с пометкой «Ответ
+                    наставника».
                   </span>}
                 {!isIntern && e.status === 'open' && <AnswerForm e={e} />}
               </Card>

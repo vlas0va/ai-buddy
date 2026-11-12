@@ -116,3 +116,54 @@ def test_S2_15_kb_doc_endpoint_opens_a_mentor_answer_from_mcp_kb(client, anna, m
         and r.get_json()["badge"] == "Тестовая инструкция прототипа"
     )
     assert client.http.get("/v1/kb/faq-search-00000000", headers=anna.headers).status_code == 404
+
+
+def test_S2_16_topic_the_kb_does_not_know_goes_to_the_mentor(anna):
+    """QA 12.13: «собака», «стейдж» are in no document: a document matching only «офис» or «заказ» is not an answer."""
+    for q in ("можно ли приходить в офис с собакой?", "как создать тестовый заказ на стейдже доставки?"):
+        ev = anna.say(q)
+        assert first(ev, "escalation_draft")["to_role"] == "mentor", q
+        assert "Точного ответа в базе знаний нет" in text_of(ev)
+    ev = anna.say("где посмотреть логи delivery-api на stage?")  # engineering, not off-topic
+    assert first(ev, "escalation_draft") is not None and first(ev, "refusal") is None
+    assert first(anna.say("где взять ноутбук в первый день?"), "escalation_draft") is None
+
+
+def test_S2_17_mentor_answer_in_mcp_kb_beats_the_local_ranking(anna, monkeypatch):
+    """Feedback 12.13: the answer Oleg added to the KB lives only in mcp-kb; the next intern gets it, not «not found»."""
+    from agent.flows import qa
+    from agent.tools.base import ToolGateway
+
+    real = ToolGateway.read
+
+    def fake(self, tool, **args):
+        if tool == "kb.search":
+            return {
+                "items": [
+                    {
+                        "doc_id": "faq-delivery-1a2b3c4d",
+                        "title": "Можно ли приходить в офис с собакой",
+                        "snippet": "Вопрос: Можно ли приходить в офис с собакой? Ответ: Нет, только собаки-поводыри.",
+                        "source_type": "test",
+                        "url": "",
+                        "score": 0.3,
+                    }
+                ]
+            }
+        if tool == "kb.get" and args.get("doc_id") == "faq-delivery-1a2b3c4d":
+            return {
+                "doc_id": "faq-delivery-1a2b3c4d",
+                "title": "Можно ли приходить в офис с собакой",
+                "kind": "faq",
+                "body": "Вопрос: Можно ли приходить в офис с собакой?\n\nОтвет: Нет, только собаки-поводыри.",
+                "source_type": "test",
+            }
+        return real(self, tool, **args)
+
+    monkeypatch.setattr(ToolGateway, "read", fake)
+    monkeypatch.setattr(qa, "_remote_kb", lambda turn: True)
+    ev = anna.say("можно ли приходить в офис с собакой?")
+    assert first(
+        ev, "escalation_draft"
+    ) is None and "Наставник уже отвечал на такой вопрос:\n\nНет, только собаки-поводыри." in text_of(ev)
+    assert first(ev, "sources")["items"][0]["doc_id"] == "faq-delivery-1a2b3c4d"

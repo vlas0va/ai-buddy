@@ -70,7 +70,7 @@ func TestGetFlags_Defaults_R55(t *testing.T) {
 	}
 	var got map[string]bool
 	_ = json.Unmarshal([]byte(body), &got)
-	if len(got) != 6 || !got["scenario_s3"] || got["escalation_to_kb"] {
+	if len(got) != 6 || !got["scenario_s3"] || !got["escalation_to_kb"] { // on by default since 0013 (feedback 12.13)
 		t.Fatalf("flags: %v", got)
 	}
 	if code, _ := e.call(t, "GET", "/api/flags", "", "", "", ""); code != 401 {
@@ -107,7 +107,11 @@ func TestPutFlags_DemoLeadOnlyAndTargeting_R55(t *testing.T) {
 			t.Errorf("%s: %d", name, code)
 		}
 	}
-	// warm the cache, then change: the new value must be visible immediately (cache invalidated)
+	// start from «off» (the demo default is on since 0013), warm the cache, then change: the new value must be visible
+	// immediately (cache invalidated)
+	if _, err := e.pool.Exec(ctx, `UPDATE core.feature_flags SET enabled = false WHERE key = 'escalation_to_kb'`); err != nil {
+		t.Fatal(err)
+	}
 	if !e.svc.Enabled(ctx, "scenario_s1", "delivery") || e.svc.Enabled(ctx, "escalation_to_kb", "delivery") {
 		t.Fatal("unexpected defaults")
 	}

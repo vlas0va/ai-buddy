@@ -623,3 +623,23 @@ func TestGet_S2_FAQOpensWithACL_R71(t *testing.T) {
 		t.Fatalf("missing: %v", aerr)
 	}
 }
+
+func TestAddFAQ_ScopeAllIsReadByEveryTeam_Feedback1211(t *testing.T) {
+	srv, _ := loaded(t)
+	args, err := mcpx.WithConfirmation(confSecret, oleg.Sub, key1,
+		map[string]any{"title": "Можно ли приходить в офис с собакой", "body": "Нет, только собаки-поводыри.", "scope": "all"}, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, aerr := addFAQResult(t, srv, oleg, args)
+	if aerr != nil {
+		t.Fatal(aerr)
+	}
+	id := out["doc_id"].(string)
+	if _, aerr := srv.Invoke(context.Background(), ivan, "get", map[string]any{"doc_id": id}); aerr != nil {
+		t.Fatalf("another team must read a general answer: %v", aerr)
+	}
+	if got := doSearch(t, srv, ivan, map[string]any{"query": "собака офис"}); !has(got, id) {
+		t.Fatalf("search team must find it: %v", ids(got))
+	}
+}

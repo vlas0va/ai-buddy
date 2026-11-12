@@ -31,7 +31,7 @@ import (
 // and issues the confirmation token itself; mentorToken is the raw JWT of the answering user and idempotencyKey is
 // the escalation id.
 type FAQWriter interface {
-	AddFAQ(ctx context.Context, mentorToken, title, body, idempotencyKey string) error
+	AddFAQ(ctx context.Context, mentorToken, title, body, scope, idempotencyKey string) error
 }
 
 // FlagChecker tells whether a runtime flag is on for a team (flags.Service implements it).
@@ -274,6 +274,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Text    string `json:"text"`
 		AddToKB bool   `json:"add_to_kb"`
+		KBScope string `json:"kb_scope"` // team (default) | all: a general answer for every team
 	}
 	if err := httpx.ReadJSON(w, r, &body); err != nil {
 		apierr.WriteJSON(w, err)
@@ -298,7 +299,11 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 		q, a := generalize(question, names), generalize(text, names)
 		title := faqTitle(q)
 		// The answer is already saved; a KB failure must not lose it, so it is logged and reported as added_to_kb=false.
-		if err := h.faq.AddFAQ(ctx, token, title, "Вопрос: "+q+"\n\nОтвет: "+a, id); err != nil {
+		scope := "team"
+		if body.KBScope == "all" {
+			scope = "all"
+		}
+		if err := h.faq.AddFAQ(ctx, token, title, "Вопрос: "+q+"\n\nОтвет: "+a, scope, id); err != nil {
 			h.log.Warn("kb.add_faq failed", "escalation_id", id, "err", err)
 		} else {
 			added = true

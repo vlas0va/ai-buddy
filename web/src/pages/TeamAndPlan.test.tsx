@@ -165,9 +165,13 @@ describe('questions and notifications', () => {
     await userEvent.type(await screen.findByLabelText('Ответ для Анна Соколова'), 'В Confluence, раздел «Дизайн»')
     await userEvent.click(screen.getByLabelText(/Добавить ответ в базу знаний/))
     expect(screen.getByText(/без имён и конкретных дат/)).toBeInTheDocument() // checkpoint 11.11: the FAQ is general
+    // feedback 12.13: a general answer can go to every team
+    expect(screen.getByLabelText(/Стажёрам моей команды/)).toBeChecked()
+    await userEvent.click(screen.getByLabelText(/Всем стажёрам/))
+    expect(screen.getByLabelText(/Всем стажёрам/)).toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: 'Ответить' }))
     expect(await screen.findByText('Есть ответ')).toBeInTheDocument()
-    expect(screen.getByText(/Ответ добавлен в базу знаний команды/)).toBeInTheDocument()
+    expect(screen.getByText(/Ответ добавлен в базу знаний/)).toBeInTheDocument()
     expect(state.notifications.get('intern.anna')?.[0]?.kind).toBe('escalation_answer')
   })
 

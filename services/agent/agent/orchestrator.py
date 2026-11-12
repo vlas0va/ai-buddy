@@ -491,6 +491,10 @@ def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = N
     model_path = Path(config.base_dir) / str(config.nlu.get("model_path", "agent/models/intent_model.json"))
     model = IntentModel.load(model_path) if model_path.exists() else None
     router = IntentRouter(model, float(config.nlu.get("min_confidence", 0.3)))
+    if kb is not None and model is not None:
+        # words the agent knows besides the KB (the intent training set): a question word known to neither is a topic
+        # the KB does not cover — answer «not found» instead of a loosely matching document (QA 12.13)
+        kb.extra_vocab = {f[2:] for w in model.weights.values() for f in w if f.startswith("w:")}
     writer = make_writer(config, settings.llm_api_key, client=llm_client)
     web = WebSearch(config.raw.get("web_search") or {}, Path(config.base_dir), client=http_client)
     return Agent(

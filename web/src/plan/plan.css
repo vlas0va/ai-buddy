@@ -77,3 +77,6 @@
 /* goals with status (organizers 12.11) */
 .plan-goal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .plan-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.esc-scope { display: grid; gap: 4px; margin: 4px 0 0 26px; font-size: 14px; }
+.esc-scope label { display: flex; gap: 8px; align-items: center; cursor: pointer; }

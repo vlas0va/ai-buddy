@@ -49,3 +49,36 @@ test('S2: unknown question → draft to the mentor → mentor answers → intern
   await intern.reload()
   await expect(intern.locator('.esc-card').filter({ hasText: marker }).first()).toContainText('Наталья Фёдорова')
 })
+
+test('S2: a question the KB does not know → Oleg answers for all → another intern gets his answer (feedback 12.13)', async ({ browser }) => {
+  const nonce = String(Date.now() % 1e6).replace(/\d/g, (d) => 'абвгдежзик'[Number(d)])
+  const question = `Можно ли приходить в офис с собакой породы ${nonce}?`
+
+  const anna = await (await browser.newContext()).newPage()
+  await login(anna, 'intern.anna')
+  await newDialog(anna)
+  await ask(anna, question)
+  await waitAnswer(anna)
+  await expect(lastTurn(anna)).toContainText('Точного ответа в базе знаний нет')
+  const draft = anna.getByLabel('Черновик сообщения').last()
+  await draft.getByRole('button', { name: /Отправить/ }).click()
+  await expect(lastTurn(anna)).toContainText('Сообщение отправлено')
+
+  const oleg = await (await browser.newContext()).newPage()
+  await login(oleg, 'mentor.oleg')
+  await oleg.goto('/questions')
+  const card = oleg.locator('.esc-card').filter({ hasText: nonce }).first()
+  await card.getByRole('textbox').fill('Нет, в офис с животными нельзя, кроме собак-поводырей.')
+  await card.getByLabel(/Добавить ответ в базу знаний/).check()
+  await card.getByLabel(/Всем стажёрам/).check()
+  await card.getByRole('button', { name: 'Ответить' }).click()
+  await expect(oleg.locator('.esc-card').filter({ hasText: nonce }).first()).toContainText('Ответ добавлен в базу знаний')
+
+  const ivan = await (await browser.newContext()).newPage() // another team: the answer was added for all
+  await login(ivan, 'intern.ivan')
+  await newDialog(ivan)
+  await ask(ivan, question)
+  await waitAnswer(ivan)
+  await expect(lastTurn(ivan)).toContainText('собак-поводырей')
+  await expect(lastTurn(ivan)).toContainText('Ответ наставника')
+})
