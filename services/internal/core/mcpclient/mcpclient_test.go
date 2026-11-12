@@ -196,17 +196,17 @@ func TestAddFAQ_S2_MentorOnly(t *testing.T) {
 	ctx := context.Background()
 	oleg := token(t, "mentor.oleg", "mentor", "delivery")
 	key := "6f1c2a52-1d3e-4a6b-9a65-2b8f3c1d0e17"
-	if err := c.AddFAQ(ctx, oleg, "Как получить доступ", "Через сервис доступов", key); err != nil {
+	if err := c.AddFAQ(ctx, oleg, "Как получить доступ", "Через сервис доступов", "team", key); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.AddFAQ(ctx, oleg, "Как получить доступ", "Через сервис доступов", key); err != nil {
+	if err := c.AddFAQ(ctx, oleg, "Как получить доступ", "Через сервис доступов", "team", key); err != nil {
 		t.Fatal(err)
 	}
 	if fake.FAQs() != 1 {
 		t.Fatalf("faqs = %d", fake.FAQs())
 	}
 	anna := token(t, "intern.anna", "intern", "delivery")
-	if err := c.AddFAQ(ctx, anna, "Заголовок", "Текст", key); !apierr.HasCode(err, apierr.CodeForbidden) {
+	if err := c.AddFAQ(ctx, anna, "Заголовок", "Текст", "all", key); !apierr.HasCode(err, apierr.CodeForbidden) {
 		t.Fatalf("intern add_faq: %v", err)
 	}
 }

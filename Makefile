@@ -17,8 +17,9 @@ up-full: ## Start profile full (+Kafka, Grafana)
 down: ## Stop everything (keeps the database volume)
 	$(COMPOSE) --profile full down
 
-reset: ## Drop the database volume and start profile core again
-	$(COMPOSE) --profile full down -v
+reset: ## Drop the database volume (keeps the downloaded A-Vibe model) and start profile core again
+	$(COMPOSE) --profile full down
+	docker volume rm -f aibuddy_pgdata
 	$(COMPOSE) --profile core up -d --build
 
 build: ## Build all images

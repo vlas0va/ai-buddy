@@ -16,6 +16,7 @@ export const ACTION_STATUS_TEXT: Record<string, string> = {
   created: 'Создано',
   failed: 'Ошибка',
   signed: 'Подписано',
+  cancelled: 'Отменена',
 }
 
 export const ACTION_STATUS_VARIANT: Record<string, 'waiting_approval' | 'done' | 'overdue' | 'neutral'> = {
@@ -27,6 +28,7 @@ export const ACTION_STATUS_VARIANT: Record<string, 'waiting_approval' | 'done' |
   signed: 'done',
   rejected: 'overdue',
   failed: 'overdue',
+  cancelled: 'neutral',
 }
 
 export const ROLE_TEXT: Record<string, string> = {

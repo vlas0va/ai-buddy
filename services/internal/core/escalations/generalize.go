@@ -25,6 +25,11 @@ var (
 		regexp.MustCompile(`(?i)(?:^|[^\p{L}])(?:` + prep + `(?:сегодня|завтра|послезавтра|вчера)|(?:в|во|на|до|к)\s+` + weekdays +
 			`|на\s+(?:этой|следующей|прошлой)\s+неделе)(?:[^\p{L}]|$)`),
 	}
+	// the wrapper of buddy's draft to the mentor (feedback 12.13): «Подскажи, пожалуйста: … В базе знаний команды ответа не нашёл.»
+	draftRe = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)^\s*(подскажи(те)?|можешь\s+подсказать)[\s,]*(пожалуйста)?[\s,:—-]*`),
+		regexp.MustCompile(`(?i)\s*в\s+базе\s+знаний(\s+команды)?\s+ответа\s+не\s+нашёл\.?\s*$`),
+	}
 	greetingRe = regexp.MustCompile(`(?i)^\s*(привет|здравствуй(те)?|добрый\s+(день|вечер)|доброе\s+утро)[\s,!.]*`)
 	spacesRe   = regexp.MustCompile(`[ \t]{2,}`)
 	punctRe    = regexp.MustCompile(`\s+([,.!?:;])`)
@@ -44,6 +49,9 @@ func generalize(text string, names []string) string {
 		})
 	}
 	out = greetingRe.ReplaceAllString(leadingRe.ReplaceAllString(out, ""), "")
+	for _, rx := range draftRe {
+		out = rx.ReplaceAllString(out, "")
+	}
 	for _, rx := range dateRes {
 		out = rx.ReplaceAllStringFunc(out, func(m string) string {
 			r := []rune(m)

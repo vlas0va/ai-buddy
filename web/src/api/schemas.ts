@@ -52,6 +52,7 @@ export const goalSchema = z.object({
   created_by: z.string(),
   title: z.string(),
   criteria: z.string().optional(),
+  status: z.enum(['proposed', 'active', 'achieved', 'missed']).default('active'),
 })
 
 export const nextStepSchema = z.object({
@@ -73,6 +74,8 @@ export interface Task {
   due_at?: string | null
   human_only: boolean
   linked_action_id?: string | null
+  /** who confirms it is done (organizers 12.13): self, a mini-check in the chat, or the mentor */
+  confirm?: 'self' | 'quiz' | 'mentor'
   subtasks?: Task[]
 }
 
@@ -89,6 +92,7 @@ export const taskSchema: z.ZodType<Task> = z.lazy(() =>
     due_at: z.string().nullable().optional(),
     human_only: z.boolean(),
     linked_action_id: z.string().nullable().optional(),
+    confirm: z.enum(['self', 'quiz', 'mentor']).optional(),
     subtasks: z.array(taskSchema).optional(),
   }),
 )
@@ -146,7 +150,7 @@ export const chatHistorySchema = z.object({
 })
 
 export const ACTION_KINDS = ['absence_request', 'access_request', 'trip_request', 'consent'] as const
-export const ACTION_STATUSES = ['pending_approval', 'pending_hr', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed'] as const
+export const ACTION_STATUSES = ['pending_approval', 'pending_hr', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed', 'cancelled'] as const
 
 export const actionSchema = z.object({
   id: z.string(),
@@ -171,6 +175,8 @@ export const approvalSchema = z.object({
   /** lead first, then the HR admin for an absence request (checkpoint 11.11) */
   stage: z.enum(['lead', 'hr_admin']).optional(),
   created_at: z.string(),
+  /** feedback 12.13: teammates away on the same days */
+  team_absent: z.array(z.string()).optional(),
 })
 
 export const escalationSchema = z.object({

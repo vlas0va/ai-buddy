@@ -8,7 +8,10 @@ from tests.conftest import all_of, first, text_of
 def test_S4_01_lists_required_accesses_with_statuses(anna):
     ev = anna.say("Какие доступы мне нужны?")
     t = text_of(ev)
-    assert "| Confluence | — | чтение, запись | есть |" in t and "| Jira | — | чтение, запись | не запрошен |" in t
+    assert (
+        "| Confluence | — | чтение, редактирование | есть |" in t
+        and "| Jira | — | чтение, редактирование | не запрошен |" in t
+    )
     assert "| Ресурс | Окружения | Права | Статус | Кто согласует |" in t  # checkpoint 11.11: a table
     assert "согласование: руководитель команды" in t  # elevated resource is marked
     proposals = all_of(ev, "action_proposal")
@@ -26,7 +29,7 @@ def test_S4_02_ordinary_access_request_granted_and_saved(anna):
     assert p["requires_approval"] is False and p["task_checklist_item_id"] == "CL-01"
     r = first(anna.confirm(p), "tool_result")
     assert r["status"] == "granted" and r["external_id"].startswith("ACC-")
-    assert "| Jira | — | чтение, запись | есть |" in text_of(anna.say("какие доступы мне нужны"))
+    assert "| Jira | — | чтение, редактирование | есть |" in text_of(anna.say("какие доступы мне нужны"))
 
 
 def test_S4_03_elevated_access_goes_through_manager_approval(client, anna):
@@ -100,7 +103,7 @@ def test_S4_13_concrete_jira_project_and_repository(anna):
     assert p["draft"]["args"]["resource_id"] == "bb-delivery-api" and p["draft"]["args"]["level"] == "write"
     assert p["requires_approval"] is True and "владелец репозитория" in p["draft"]["display"]["approver_label"]
     r = first(anna.confirm(p), "tool_result")
-    assert r["status"] == "pending_approval" and r["summary"].endswith("(запись)")
+    assert r["status"] == "pending_approval" and r["summary"].endswith("(редактирование)")
 
 
 def test_S4_14_database_with_environment_and_rights(anna):
@@ -123,10 +126,31 @@ def test_S4_15_database_without_environment_takes_dev(anna):
 
 def test_S4_16_level_the_resource_does_not_offer(anna):
     ev = anna.say("дай админские права в confluence")
-    assert first(ev, "action_proposal") is None and "можно запросить: чтение, запись" in text_of(ev)
+    assert first(ev, "action_proposal") is None and "можно запросить: чтение, редактирование" in text_of(ev)
 
 
 def test_S4_17_environment_for_a_resource_without_environments(anna):
     ev = anna.say("доступ к проекту DLV на stage")
     p = first(ev, "action_proposal")
     assert "environment" not in p["draft"]["args"] and "нет окружений" in text_of(ev)
+
+
+def test_S4_30_justification_and_asking_the_mentor_first(anna):
+    """Organizers 12.11: a request has a justification; before requesting the intern may ask the mentor if it is needed."""
+    ev = anna.say("доступ на редактирование в репозиторий delivery-api, обоснование: задача DLV-12 из плана")
+    p = first(ev, "action_proposal")
+    assert (
+        p["draft"]["args"]["reason"] == "задача DLV-12 из плана"
+        and p["draft"]["display"]["reason"] == "задача DLV-12 из плана"
+    )
+    assert p["draft"]["display"][
+        "level_label"
+    ] == "редактирование" and "Обоснование: «задача DLV-12 из плана»" in text_of(ev)
+    ev = anna.say("нужны права на редактирование в репозиторий delivery-api")
+    assert "Добавь обоснование" in text_of(ev) and first(ev, "action_proposal")["draft"]["args"]["reason"].startswith(
+        "Онбординг"
+    )
+    ev = anna.say("нужен ли мне доступ к БД delivery_orders?")
+    d = first(ev, "escalation_draft")
+    assert first(ev, "action_proposal") is None and d["to_role"] == "mentor" and d["topic"] == "access"
+    assert "БД delivery_orders" in d["text"] and "лишние доступы" in text_of(ev)

@@ -62,3 +62,38 @@ test('S3: invalid dates are explained, nothing is drafted', async ({ page }) => 
   await expect(page.getByLabel('Черновик заявки')).toHaveCount(0)
   await expect(lastTurn(page).locator('.chat-bubble')).not.toBeEmpty()
 })
+
+test('S3: dates in a pop-up calendar, then the request is withdrawn before the HR admin decides (feedback 12.13)', async ({ page }) => {
+  const day = new Date()
+  day.setDate(day.getDate() + 40 + (Math.floor(Date.now() / 1000) % 60))
+  while (day.getDay() === 0 || day.getDay() === 6) day.setDate(day.getDate() + 1)
+  const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+  const label = `${day.getDate()} ${months[day.getMonth()]} ${day.getFullYear()}`
+
+  await login(page, 'intern.anna')
+  await newDialog(page)
+  await ask(page, 'как взять отгул')
+  await waitAnswer(page)
+  const card = page.getByLabel('Выбор дат', { exact: true }).last()
+  await card.getByRole('button', { name: /Выбери даты/ }).click()
+  for (let i = 0; i < 14 && !(await card.getByRole('button', { name: new RegExp(`^${label}`) }).count()); i++) {
+    await card.getByRole('button', { name: 'Следующий месяц' }).click()
+  }
+  await card.getByRole('button', { name: new RegExp(`^${label}`) }).click()
+  await card.getByRole('button', { name: 'Один день' }).click() // no last day: close the calendar
+  await expect(card.getByRole('button', { name: /\d{2}\.\d{2}\.\d{4}/ })).toBeVisible()
+  await card.getByRole('button', { name: 'Выбрать даты' }).click()
+  await waitAnswer(page)
+  const draft = page.getByLabel('Черновик заявки').last()
+  await draft.getByRole('button', { name: 'Отправить' }).click()
+  const result = page.getByLabel('Результат заявки').last()
+  await expect(result).toContainText(/ABS-\d+/)
+  const id = (await result.textContent())?.match(/ABS-\d+/)?.[0] ?? ''
+
+  await ask(page, `отмени заявку ${id}`)
+  await waitAnswer(page)
+  const cancel = page.getByLabel('Черновик заявки').last()
+  await expect(cancel).toContainText('Отмена заявки')
+  await cancel.getByRole('button', { name: 'Отправить' }).click()
+  await expect(page.getByLabel('Результат заявки').last()).toContainText('Отменена')
+})

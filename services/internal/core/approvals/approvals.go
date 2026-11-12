@@ -46,6 +46,8 @@ type Approval struct {
 	Comment              *string `json:"comment"`
 	Stage                string  `json:"stage"` // lead | hr_admin (absence: the HR admin decides after the lead)
 	CreatedAt            string  `json:"created_at"`
+	// TeamAbsent: teammates away on the same days (feedback 12.13)
+	TeamAbsent []string `json:"team_absent,omitempty"`
 }
 
 // Handler serves the approval endpoints.
@@ -205,7 +207,7 @@ func (h *Handler) toAPI(ctx context.Context, it mcpclient.Approval) (Approval, e
 		stage = "lead"
 	}
 	a := Approval{ID: it.ID, Kind: it.Kind, Stage: stage, RequesterDisplayName: it.RequesterDisplayName, Summary: it.Summary,
-		Status: it.Status, CreatedAt: it.CreatedAt}
+		Status: it.Status, CreatedAt: it.CreatedAt, TeamAbsent: it.TeamAbsent}
 	if it.Comment != "" {
 		comment := it.Comment
 		a.Comment = &comment

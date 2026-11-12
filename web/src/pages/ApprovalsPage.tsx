@@ -82,6 +82,9 @@ function ApprovalCard({ approval }: { approval: Approval }) {
         </span>
       </div>
       <p className="approval-summary">{withoutApprover(approval.summary)}</p>
+      {approval.team_absent && approval.team_absent.length > 0 && (
+        <p className="approval-overlap">В эти дни из команды отсутствуют: {approval.team_absent.join('; ')}</p>
+      )}
       {approval.stage === "hr_admin" ? (
         <p className="hint">
           Этап: HR-администратор. Руководитель уже согласовал; после вашего

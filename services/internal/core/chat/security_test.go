@@ -333,7 +333,7 @@ func TestConfirm_Checkpoint_AccessScope_R71(t *testing.T) {
 	}
 	got = e.stream(e.confirmPath(sid, e.proposeWith(sid, anna, access("prod", "write"))), anna, nil).find("action_result")
 	if got == nil || got["status"] != "pending_approval" ||
-		!strings.Contains(e.str(`SELECT summary FROM core.actions WHERE id = $1`, got["action_id"]), "(prod, запись)") {
+		!strings.Contains(e.str(`SELECT summary FROM core.actions WHERE id = $1`, got["action_id"]), "(prod, редактирование)") {
 		t.Fatalf("write on prod %v", got)
 	}
 

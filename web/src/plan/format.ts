@@ -39,11 +39,29 @@ export function withTaskStatus(plan: Plan, taskId: string, status: Task['status'
 }
 
 export function canToggle(t: Task): boolean {
-  return t.source === 'checklist' && t.status !== 'waiting_approval'
+  if (t.source !== 'checklist') return false
+  if (t.confirm === 'quiz') return t.status === 'done' // done by the mini-check; can be reopened
+  return t.status !== 'waiting_approval' || t.confirm === 'mentor' // the intern may take the request back
+}
+
+/** The status the intern's click asks for: a mentor-confirmed task waits for the mentor (organizers 12.13). */
+export function nextStatus(t: Task): 'in_progress' | 'done' | 'waiting_approval' {
+  if (t.status === 'done' || t.status === 'waiting_approval') return 'in_progress'
+  return t.confirm === 'mentor' ? 'waiting_approval' : 'done'
+}
+
+export const CONFIRM_HINT: Record<string, string> = {
+  quiz: 'отмечается после мини-проверки в чате',
+  mentor: 'выполнение подтверждает наставник',
 }
 
 /** QA 12.11: a task made by a request (an absence, an access) asks for its status, not «how to do it» again */
-export function askText(t: Pick<Task, 'source' | 'title'>): string {
+/** Access tasks of the checklist: organizers 12.11 — the checklist has direct links to the request forms. */
+const ACCESS_ITEMS = new Set(['CL-05'])
+
+export function askText(t: Pick<Task, 'source' | 'title'> & { checklist_item_id?: string | null; confirm?: Task['confirm'] }): string {
+  if (t.source !== 'action' && t.checklist_item_id && ACCESS_ITEMS.has(t.checklist_item_id)) return 'Какие доступы мне нужны?'
+  if (t.source !== 'action' && t.confirm === 'quiz') return `Проверь меня по задаче «${t.title}»`
   if (t.source !== 'action') return `Как выполнить задачу «${t.title}»?`
   return t.title.startsWith('Доступ') ? 'Какие доступы мне нужны?' : `Что с моей заявкой «${t.title}»?`
 }
@@ -54,4 +72,10 @@ export const NEXT_STEP_PROMPT: Record<string, (title: string) => string> = {
   absence_request: () => 'Как оформить отгул?',
   draft_message: (title) => `Помоги написать наставнику про задачу «${title}»`,
   mark_done: (title) => `Как понять, что задача «${title}» выполнена?`,
+}
+
+export function askLabel(t: Pick<Task, 'source'> & { checklist_item_id?: string | null; confirm?: Task['confirm'] }): string {
+  if (t.source === 'action') return 'Что с заявкой?'
+  if (t.confirm === 'quiz') return 'Проверить себя'
+  return t.checklist_item_id && ACCESS_ITEMS.has(t.checklist_item_id) ? 'Подать заявку' : 'Спросить buddy'
 }

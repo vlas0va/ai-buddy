@@ -62,7 +62,18 @@
   --shadow-md: 0 1px 2px rgba(26, 26, 26, 0.06), 0 8px 24px rgba(26, 26, 26, 0.07);
 
   --transition: 150ms ease;
-  --gradient-hero: #e8f2ff;
+  /* Avito palette (organizers 12.13: the palette may be used, no brandbook — look of Avito Start). Decorative only:
+     text and buttons keep the AA tokens above. */
+  --avito-blue: #00aaff;
+  --avito-green: #97cf26;
+  --avito-red: #ff6163;
+  --avito-purple: #965eeb;
+  --gradient-hero:
+    radial-gradient(circle at 88% 12%, rgba(0, 170, 255, 0.22) 0 90px, transparent 91px),
+    radial-gradient(circle at 96% 46%, rgba(151, 207, 38, 0.24) 0 54px, transparent 55px),
+    radial-gradient(circle at 80% 86%, rgba(150, 94, 235, 0.18) 0 120px, transparent 121px),
+    radial-gradient(circle at 10% 96%, rgba(255, 97, 99, 0.18) 0 70px, transparent 71px),
+    #eef6ff;
 
   --focus-ring: 0 0 0 3px rgba(0, 111, 219, 0.4);
 }

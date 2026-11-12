@@ -49,6 +49,8 @@ type item struct {
 	Stage                string `json:"stage"`
 	CreatedAt            string `json:"created_at"`
 	Replayed             *bool  `json:"replayed,omitempty"`
+	// TeamAbsent: who else of the requester's team is away on those days (feedback 12.13), absence items only
+	TeamAbsent []string `json:"team_absent,omitempty"`
 
 	approverID     string
 	idempotencyKey string
@@ -91,7 +93,46 @@ LIMIT 200`, c.Sub)
 	if items == nil {
 		items = []item{}
 	}
+	for i := range items {
+		if items[i].Kind != "absence_request" {
+			continue
+		}
+		absent, err := s.teamAbsent(ctx, items[i].RefID)
+		if err != nil {
+			return nil, err
+		}
+		items[i].TeamAbsent = absent
+	}
 	return listOut{Items: items}, nil
+}
+
+// teamAbsent lists the requester's teammates with a pending or approved absence that overlaps the request: the lead
+// sees at once that half of the team would be away (feedback 12.13).
+func (s *service) teamAbsent(ctx context.Context, requestID string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+SELECT e.display_name, o.type, o.start_date, o.end_date
+FROM absence.requests r
+JOIN directory.employees me ON me.id = r.employee_id
+JOIN absence.requests o ON o.employee_id <> r.employee_id AND o.status IN ('pending_approval', 'pending_hr', 'approved')
+     AND o.start_date <= r.end_date AND o.end_date >= r.start_date
+JOIN directory.employees e ON e.id = o.employee_id AND e.team_id = me.team_id
+WHERE r.id = $1
+ORDER BY o.start_date, e.display_name
+LIMIT 5`, requestID)
+	if err != nil {
+		return nil, fmt.Errorf("team absences: %w", err)
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (string, error) {
+		var name, kind string
+		var start, end time.Time
+		err := row.Scan(&name, &kind, &start, &end)
+		label := map[string]string{"day_off": "отгул", "vacation": "отпуск", "absence": "отсутствие", "parental_leave": "декрет"}[kind]
+		when := start.Format("02.01")
+		if !end.Equal(start) {
+			when += "–" + end.Format("02.01")
+		}
+		return fmt.Sprintf("%s: %s %s", name, label, when), err
+	})
 }
 
 type decideIn struct {

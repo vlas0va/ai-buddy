@@ -85,7 +85,7 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
             "оформлена, HR BP получает уведомление."
             if turn.user.role == "hr_admin"
             else "Отсутствия после тебя согласует HR-администратор; пока он не согласовал, стажёр может перенести даты. "
-            "Доступы на запись, администрирование и к prod выдаются только с твоего согласия."
+            "Доступы на редактирование, администрирование и к prod выдаются только с твоего согласия."
         )
         yield from say(
             "Как согласовывать: открой раздел «Согласования» — там видно, кто, что и на какие даты, и кнопки "
@@ -98,6 +98,7 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
     stage = {"hr_admin": " (этап HR-администратора)"}
     lines = [
         f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}{stage.get(p.get('stage', ''), '')}"
+        + (f" (в эти дни отсутствуют: {'; '.join(p['team_absent'])})" if p.get("team_absent") else "")
         for p in pending
     ]
     yield from say(

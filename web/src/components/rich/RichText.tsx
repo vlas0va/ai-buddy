@@ -28,7 +28,14 @@ export function RichText({ text }: { text: string }) {
       {blocks.map((b, i) => {
         const k = `b${i}`
         if (b.kind === 'ul') return <ul key={k}>{b.items.map((it, j) => <li key={j}>{inline(it, `${k}-${j}`)}</li>)}</ul>
-        if (b.kind === 'ol') return <ol key={k}>{b.items.map((it, j) => <li key={j}>{inline(it, `${k}-${j}`)}</li>)}</ol>
+        if (b.kind === 'ol')
+          return (
+            <ol key={k} start={b.start}>
+              {b.items.map((it, j) => (
+                <li key={j}>{inline(it, `${k}-${j}`)}</li>
+              ))}
+            </ol>
+          )
         if (b.kind === 'table') {
           const [head, ...rows] = b.rows
           return (

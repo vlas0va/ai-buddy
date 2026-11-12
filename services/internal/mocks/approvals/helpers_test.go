@@ -164,16 +164,17 @@ SELECT 'access_request', $1, $2, $3, 'Доступ: ' || name FROM access.resour
 }
 
 type itemOut struct {
-	ID                   string `json:"id"`
-	Kind                 string `json:"kind"`
-	RefID                string `json:"ref_id"`
-	RequesterID          string `json:"requester_id"`
-	RequesterDisplayName string `json:"requester_display_name"`
-	Summary              string `json:"summary"`
-	Status               string `json:"status"`
-	Comment              string `json:"comment"`
-	CreatedAt            string `json:"created_at"`
-	Replayed             *bool  `json:"replayed"`
+	ID                   string   `json:"id"`
+	Kind                 string   `json:"kind"`
+	RefID                string   `json:"ref_id"`
+	RequesterID          string   `json:"requester_id"`
+	RequesterDisplayName string   `json:"requester_display_name"`
+	Summary              string   `json:"summary"`
+	Status               string   `json:"status"`
+	Comment              string   `json:"comment"`
+	CreatedAt            string   `json:"created_at"`
+	Replayed             *bool    `json:"replayed"`
+	TeamAbsent           []string `json:"team_absent"`
 }
 
 type listResult struct {

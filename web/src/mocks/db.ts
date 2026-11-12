@@ -20,7 +20,7 @@ export const MOCK_FLAGS = {
   scenario_s3: true,
   scenario_s4: true,
   proactive_digest: true,
-  escalation_to_kb: false,
+  escalation_to_kb: true,
 }
 
 export interface MockProposal {
@@ -54,7 +54,7 @@ export interface MockState {
   decisions: Map<string, { actionId: string; decision: 'approved' | 'rejected' }>
   /** `${userId}:${taskId}` -> status set from the plan page */
   taskStatus: Map<string, string>
-  goals: Map<string, { id: string; created_by: string; title: string; criteria?: string }[]>
+  goals: Map<string, { id: string; created_by: string; title: string; criteria?: string; status: 'proposed' | 'active' | 'achieved' | 'missed' }[]>
   escalations: MockEscalation[]
   notifications: Map<string, MockNotification[]>
   seq: number

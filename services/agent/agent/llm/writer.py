@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -55,6 +56,11 @@ class StubWriter:
         meta: dict[str, Any] | None = None,
     ) -> Iterator[str]:
         top = hits[0]
+        if str(top.get("doc_id", "")).startswith("faq-"):  # a mentor's answer added to the KB (feedback 12.13)
+            yield f"Наставник уже отвечал на такой вопрос:\n\n{top['snippet'].strip()}"
+            if task_hint:
+                yield f"\n\n{task_hint}"
+            return
         yield f"По тестовой инструкции «{top['title']}»:\n\n{top['snippet'].strip()}"
         if len(hits) > 1 and hits[1].get("score", 0) >= 0.6 * top.get("score", 0):
             yield f"\n\nЕщё может пригодиться: «{hits[1]['title']}»."
@@ -63,11 +69,29 @@ class StubWriter:
 
 
 class LLMWriter:
-    def __init__(self, config: AgentConfig, client: OpenAICompatClient, fallback: StubWriter | None = None) -> None:
+    """The model writes the answer; the stub takes over whenever the model is not ready or fails (A-Vibe by default for
+    the expert: Ollama downloads it in the background on the first start, so the first answers come from the stub)."""
+
+    PROBE_EVERY_S = 15.0  # how often to ask the server whether the model is there while it is not
+    COOLDOWN_S = 30.0  # after the server failed: answer with the stub at once for a while
+    SLOW_COOLDOWN_S = 300.0  # after a timeout (e.g. no GPU): the model is too slow for a chat, retry in 5 minutes
+
+    def __init__(
+        self,
+        config: AgentConfig,
+        client: OpenAICompatClient,
+        fallback: StubWriter | None = None,
+        clock: Any = time.monotonic,
+    ) -> None:
         self.config = config
         self.client = client
         self.fallback = fallback
         self.name = "openai_compat"
+        self.clock = clock
+        self._ready = False
+        self._checked_at = -1e9
+        self._down_until = -1e9
+        self.state = "unknown"  # unknown | ready | loading | down | slow — shown in /readyz
         llm = config.llm
         self.tool_calling = str(llm.get("tool_calling", "false")).lower() in ("1", "true", "yes", "on")
         self.max_iter = int(llm.get("max_tool_iterations", 3))
@@ -124,6 +148,16 @@ class LLMWriter:
         history: list[dict[str, str]] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> Iterator[str]:
+        if self.fallback and not self._available():
+            if meta is not None:
+                meta["llm_fallback"] = True
+            yield (
+                "(Модель A-Vibe ещё загружается, ответ сформирован в упрощённом режиме.)\n\n"
+                if self.state == "loading"
+                else "(Модель сейчас недоступна, ответ сформирован в упрощённом режиме.)\n\n"
+            )
+            yield from self.fallback.answer(question, hits, user, task_hint)
+            return
         msgs = self._messages(question, hits, user, task_hint, history)
         try:
             if self.tool_calling and gateway is not None:
@@ -150,10 +184,34 @@ class LLMWriter:
             )
             if not self.fallback:
                 raise
+            self._failed(exc)
             if meta is not None:
                 meta["llm_fallback"] = True
             yield "(Модель сейчас недоступна, ответ сформирован в упрощённом режиме.)\n\n"
             yield from self.fallback.answer(question, hits, user, task_hint)
+
+    def _available(self) -> bool:
+        now = self.clock()
+        if now < self._down_until:
+            return False
+        if self._ready:
+            return True
+        if now - self._checked_at < self.PROBE_EVERY_S:
+            return False
+        self._checked_at = now
+        listed = self.client.model_listed()
+        if listed is False:
+            self.state = "loading"
+            return False
+        self._ready, self.state = True, "ready"
+        return True
+
+    def _failed(self, exc: LLMError) -> None:
+        slow = getattr(exc, "code", "") == "llm_timeout"
+        self._ready = False
+        self._checked_at = self.clock()
+        self._down_until = self.clock() + (self.SLOW_COOLDOWN_S if slow else self.COOLDOWN_S)
+        self.state = "slow" if slow else "down"
 
     def _run_tools(self, msgs: list[dict[str, Any]], user: User, gateway: ToolGateway) -> list[dict[str, Any]]:
         specs = self._tool_specs(user)

@@ -478,7 +478,7 @@ func TestRequestAccess_Checkpoint_EnvironmentAndLevel_R71(t *testing.T) {
 	if write.Status != "pending_approval" || write.Level != "write" || write.Environment != nil {
 		t.Fatalf("write to the repo %+v", write)
 	}
-	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary = 'Доступ: Bitbucket: репозиторий delivery-api (запись)'`,
+	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary = 'Доступ: Bitbucket: репозиторий delivery-api (редактирование)'`,
 		write.ID); n != 1 {
 		t.Fatal("approval summary without the level")
 	}

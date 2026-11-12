@@ -251,7 +251,10 @@ class Agent:
             return Route("trip", 0.9, "state")
         quiz_state = turn.state()
         if quiz_state.get("quiz"):
-            if route.source != "guardrail" and route.intent not in QUIZ_BREAK_INTENTS:
+            # only an explicit new request (a rule) ends the quiz: answers are bare words («ревью, пространство»), and the
+            # classifier reads them as some topic (QA 12.13)
+            breaks = route.source == "guardrail" or (route.source == "rule" and route.intent in QUIZ_BREAK_INTENTS)
+            if not breaks:
                 return Route("quiz_answer", 0.9, "state")
             quiz_state.pop("quiz")
             turn.save_state(quiz_state)
@@ -412,6 +415,7 @@ class Agent:
         card = {
             "absence_request": absence.result_card,
             "absence_reschedule": absence.reschedule_card,
+            "absence_cancel": absence.cancel_card,
             "access_request": access.result_card,
             "approval_decision": team.result_card,
             "trip_request": trips.result_card,
@@ -491,6 +495,10 @@ def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = N
     model_path = Path(config.base_dir) / str(config.nlu.get("model_path", "agent/models/intent_model.json"))
     model = IntentModel.load(model_path) if model_path.exists() else None
     router = IntentRouter(model, float(config.nlu.get("min_confidence", 0.3)))
+    if kb is not None and model is not None:
+        # words the agent knows besides the KB (the intent training set): a question word known to neither is a topic
+        # the KB does not cover — answer «not found» instead of a loosely matching document (QA 12.13)
+        kb.extra_vocab = {f[2:] for w in model.weights.values() for f in w if f.startswith("w:")}
     writer = make_writer(config, settings.llm_api_key, client=llm_client)
     web = WebSearch(config.raw.get("web_search") or {}, Path(config.base_dir), client=http_client)
     return Agent(

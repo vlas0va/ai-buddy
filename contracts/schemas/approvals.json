@@ -75,6 +75,13 @@
                 },
                 "replayed": {
                   "type": "boolean"
+                },
+                "team_absent": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "absence: teammates away on the same days"
                 }
               },
               "required": [

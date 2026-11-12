@@ -6,6 +6,22 @@ import { Card } from '@/components/ui/Card'
 import { shortDate } from './format'
 import { PERIOD_LABELS } from './periods'
 
+function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
+}
+
+/** «40 мин», «1 ч 20 мин», «3 ч» */
+function hours(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m} мин`
+  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`
+}
+
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'bad' }) {
   return (
     <div className={`report-stat${tone ? ` report-stat--${tone}` : ''}`}>
@@ -80,6 +96,17 @@ function Body({ r }: { r: Report }) {
         )}
       </Card>
 
+      <Card className="report-card report-saved" aria-label="Время наставника">
+        <h3>Время наставника</h3>
+        <p className="report-saved-main">
+          <strong>≈ {hours(r.questions.saved_minutes)}</strong> сэкономил buddy: {r.questions.self_served}{' '}
+          {plural(r.questions.self_served, 'вопрос', 'вопроса', 'вопросов')} стажёр закрыл сам, без наставника.
+        </p>
+        <p className="hint">
+          Оценка: 10 минут наставника на вопрос. Для сравнения: на наставничество за 6 месяцев стажировки уходит 40–48 часов.
+        </p>
+      </Card>
+
       <Card className="report-card" aria-label="Вопросы и доступы">
         <h3>Вопросы и доступы</h3>
         <div className="report-stats">
@@ -88,7 +115,7 @@ function Body({ r }: { r: Report }) {
           <Stat label="получили ответ" value={r.questions.answered} />
           <Stat label="ответов добавлено в базу знаний" value={r.questions.added_to_kb} tone="good" />
           <Stat label="заявок на доступы" value={r.accesses_requested} />
-          <Stat label="целей на стажировку" value={r.goals} />
+          <Stat label={`целей достигнуто из ${r.goals}`} value={r.goals_achieved} tone="good" />
         </div>
       </Card>
 

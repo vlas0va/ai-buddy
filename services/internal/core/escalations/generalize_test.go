@@ -17,3 +17,11 @@ func TestGeneralize_Checkpoint_NoNamesNoDates(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneralize_DraftWrapperIsDropped_Feedback1213(t *testing.T) {
+	got := generalize("Олег, привет! Подскажи, пожалуйста: Можно ли приходить в офис с собакой? В базе знаний команды ответа не нашёл.",
+		[]string{"Олег Мартынов"})
+	if got != "Можно ли приходить в офис с собакой?" {
+		t.Fatalf("got %q", got)
+	}
+}

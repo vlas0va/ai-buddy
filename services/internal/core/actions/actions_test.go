@@ -622,3 +622,40 @@ func TestSave_Checkpoint_RescheduleMovesActionAndTask(t *testing.T) {
 		t.Fatalf("replay %+v %v %v", got, changed, err)
 	}
 }
+
+func TestSave_Feedback1213_CancelAndReplace(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	dayOff, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000401", Kind: KindAbsence,
+		Result: absenceResult("ABS-000401", "2026-11-24", "2026-11-24", "Мария Лебедева")})
+	if err != nil || dayOff.TaskID == nil {
+		t.Fatalf("%+v %v", dayOff, err)
+	}
+	// a vacation that replaced the day off: the day off is cancelled and leaves the plan
+	res := absenceResult("ABS-000402", "2026-11-23", "2026-11-27", "Мария Лебедева")
+	var m map[string]any
+	_ = json.Unmarshal(res, &m)
+	m["type"], m["replaced_id"] = "vacation", "ABS-000401"
+	res, _ = json.Marshal(m)
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000402", Kind: KindAbsence, Result: res}); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.actions WHERE external_id = 'ABS-000401' AND status = 'cancelled' AND summary LIKE '%(отменена)'`); n != 1 {
+		t.Fatal("the replaced day off must be cancelled")
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.plan_tasks WHERE id = $1`, *dayOff.TaskID); n != 0 {
+		t.Fatal("its task must leave the plan")
+	}
+	// cancel the vacation itself; a repeated cancel keeps one «(отменена)»
+	for i := 0; i < 2; i++ {
+		got, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000403", Kind: KindCancel,
+			Result: absenceResult("ABS-000402", "2026-11-23", "2026-11-27", "")})
+		if err != nil || got.Status != "cancelled" || strings.Count(got.Summary, "(отменена)") != 1 {
+			t.Fatalf("cancel %d: %+v %v", i, got, err)
+		}
+	}
+	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000404", Kind: KindCancel,
+		Result: json.RawMessage(`{}`)}); err == nil {
+		t.Fatal("result without id")
+	}
+}

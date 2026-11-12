@@ -119,3 +119,52 @@ def test_S3_30_calendar_bare_day_and_change_after_the_lead(client, anna):
     assert picker["purpose"] == "reschedule" and picker["ref_id"] == r["external_id"]
     moved = first(anna.say(f"перенеси заявку {r['external_id']} на 17 ноября"), "action_proposal")
     assert moved["kind"] == "absence_reschedule" and moved["draft"]["args"]["start_date"] == "2026-11-17"
+
+
+def test_S3_31_withdraw_absorb_and_plan_clash(client, anna):
+    """Feedback 12.13: a pending request can be withdrawn; a vacation over a pending day off replaces it in one step;
+    the calendar marks busy days; a plan task due in the absence is mentioned; problems read as sentences."""
+    day = first(anna.confirm(first(anna.say("отгул 24 ноября"), "action_proposal")), "tool_result")["external_id"]
+    # the calendar shows the request as busy
+    picker = first(anna.say("Как оформить отпуск?"), "date_picker")
+    assert any(b["start"] == "2026-11-24" and day in b["label"] for b in picker["busy"])
+    # a vacation that covers the day off replaces it
+    ev = anna.say("отпуск с 23 ноября по 27 ноября")
+    p = first(ev, "action_proposal")
+    assert p["draft"]["args"]["replaces"] == day and "отменится сама" in text_of(ev)
+    res = first(anna.confirm(p), "tool_result")
+    assert res["result"]["replaced_id"] == day
+    # withdraw the vacation; a typo «оотгул» still means a day off
+    ev = anna.say("отмени заявку на отпуск")
+    c = first(ev, "action_proposal")
+    assert c["kind"] == "absence_cancel" and c["draft"]["args"]["id"] == res["external_id"]
+    done = first(anna.confirm(c), "tool_result")
+    assert done["status"] == "cancelled" and "(отменена)" in done["summary"]
+    assert "Не нашёл заявку" in text_of(anna.say("отменить заявку на оотгул"))
+    # two open day offs: buddy asks which one
+    for d in ("1 декабря", "3 декабря"):
+        anna.confirm(first(anna.say(f"отгул {d}"), "action_proposal"))
+    assert "Какую заявку отменить?" in text_of(anna.say("отмени отгул"))
+
+
+def test_S3_32_partial_overlap_moves_the_right_request(anna):
+    """Feedback 12.13: a partial overlap offers to move THAT request, with its own kind in the calendar title."""
+    day = first(anna.confirm(first(anna.say("отгул с 24 по 25 ноября"), "action_proposal")), "tool_result")[
+        "external_id"
+    ]
+    ev = anna.say("отгул с 25 по 26 ноября")
+    picker = first(ev, "date_picker")
+    assert first(ev, "action_proposal") is None
+    assert (
+        picker["purpose"] == "reschedule" and picker["ref_id"] == day and picker["label"] == f"Новые даты: отгул {day}"
+    )
+    assert ". " in text_of(ev).split("оформить не получится:")[1][:200]  # sentences, not «a; b»
+
+
+def test_S3_33_lead_sees_teammates_away_on_the_same_days(client, anna):
+    """Feedback 12.13: in the lead's list an absence shows who else of the team is away on those days."""
+    oleg = client.login("mentor.oleg")
+    oleg.confirm(first(oleg.say("отгул 25 ноября"), "action_proposal"))
+    anna.confirm(first(anna.say("отгул 25 ноября"), "action_proposal"))
+    text = text_of(client.login("lead.maria").say("покажи заявки на согласование"))
+    assert "в эти дни отсутствуют: Олег Мартынов: отгул 25.11" in text

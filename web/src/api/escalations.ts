@@ -9,9 +9,10 @@ export function listEscalations() {
   return apiRequest('/api/escalations', z.array(escalationSchema))
 }
 
-export function answerEscalation(id: string, text: string, addToKb: boolean) {
+/** kbScope (feedback 12.13): «team» — interns of the mentor's team; «all» — a general answer for every team. */
+export function answerEscalation(id: string, text: string, addToKb: boolean, kbScope: 'team' | 'all' = 'team') {
   return apiRequest(`/api/escalations/${encodeURIComponent(id)}/answer`, escalationSchema, {
     method: 'POST',
-    body: { text, add_to_kb: addToKb },
+    body: addToKb ? { text, add_to_kb: true, kb_scope: kbScope } : { text, add_to_kb: false },
   })
 }

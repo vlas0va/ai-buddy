@@ -42,8 +42,8 @@ type fakeFAQ struct {
 	err   error
 }
 
-func (f *fakeFAQ) AddFAQ(_ context.Context, token, title, body, key string) error {
-	f.calls = append(f.calls, map[string]string{"token": token, "title": title, "body": body, "key": key})
+func (f *fakeFAQ) AddFAQ(_ context.Context, token, title, body, scope, key string) error {
+	f.calls = append(f.calls, map[string]string{"token": token, "title": title, "body": body, "key": key, "scope": scope})
 	return f.err
 }
 
@@ -382,5 +382,26 @@ func TestAnswer_Checkpoint_FAQIsGeneral_R10(t *testing.T) {
 	}
 	if !strings.Contains(call["body"], "предупреди за два дня") || !strings.HasPrefix(call["title"], "Можно ли взять отгул в нужный день") {
 		t.Fatalf("FAQ text: %v", call)
+	}
+}
+
+// Feedback 12.11: a general answer can go to the KB of every team, not only the mentor's one.
+func TestAnswer_KBScopeAll_Feedback1211(t *testing.T) {
+	e := setup(t, true)
+	answer := func(text, body string) {
+		esc := e.send(anna, "mentor", text)
+		req, _ := http.NewRequest("POST", e.srv.URL+"/api/escalations/"+esc["id"].(string)+"/answer", strings.NewReader(body))
+		tok, _ := authn.Issue(secret, authn.Claims{Sub: "mentor.oleg", Role: "mentor", TeamID: "delivery"}, time.Hour)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	answer("Можно ли приходить в офис с собакой?", `{"text":"Нет, только собаки-поводыри.","add_to_kb":true,"kb_scope":"all"}`)
+	answer("Где логи стенда?", `{"text":"В Grafana.","add_to_kb":true}`)
+	if len(e.faq.calls) != 2 || e.faq.calls[0]["scope"] != "all" || e.faq.calls[1]["scope"] != "team" {
+		t.Fatalf("scopes: %v", e.faq.calls)
 	}
 }

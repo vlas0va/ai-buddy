@@ -11,3 +11,4 @@
 .approval-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; border-radius: 22px; background: #e7e7e3; }
 .approval-filter button { min-height: 36px; padding: 0 var(--space-4); border: 0; border-radius: 18px; background: transparent; font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--color-neutral); cursor: pointer; }
 .approval-filter button[aria-pressed='true'] { background: var(--color-surface); color: var(--color-text); font-weight: 700; box-shadow: var(--shadow-sm); }
+.approval-overlap { margin: 4px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--color-warning-soft); color: var(--color-warning); font-size: 13px; }

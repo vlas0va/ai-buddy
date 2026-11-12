@@ -169,6 +169,15 @@
           "confirmation_token": {
             "type": "string",
             "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "team",
+              "all"
+            ],
+            "default": "team",
+            "description": "team = interns, mentors and leads of the mentor's team; all = every team (a general answer)"
           }
         },
         "required": [

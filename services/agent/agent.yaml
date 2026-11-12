@@ -101,6 +101,10 @@ tools:
     roles: [intern, mentor, lead]
     write: true
     proposal_kind: absence_reschedule
+  - name: absence.cancel_request
+    roles: [intern, mentor, lead]
+    write: true
+    proposal_kind: absence_cancel
   - name: approvals.list_pending
     roles: [lead, hr_admin]
     write: false

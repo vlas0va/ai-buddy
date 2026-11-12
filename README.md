@@ -18,7 +18,13 @@
 docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 ```
 
-или `make up`. Через 2–4 минуты (первая сборка) откройте **http://localhost:5173** и войдите тестовой учёткой.
+или `make up`. Через 2–4 минуты (первая сборка; плюс скачивание образа Ollama 1,1 ГБ — около 1,5 минуты на 100 Мбит/с) откройте **http://localhost:5173** и войдите тестовой учёткой.
+
+Ответы пишет модель **A-Vibe** (Авито, 8B, GGUF Q4_K_M) в локальном Ollama из того же compose — без ключей. При первом
+запуске модель (~5 ГБ, около 7 минут на 100 Мбит/с) скачивается в фоне: стек готов сразу, а пока модель грузится, отвечает детерминированный режим
+(stub) с пометкой «упрощённый режим». Если модель упала или слишком медленная (нет GPU), агент тоже сразу отвечает
+через stub. С видеокартой NVIDIA добавьте `-f deploy/docker-compose.gpu.yml`. Без модели вовсе: `LLM_PROVIDER=stub`
+в `.env`. Статус модели: `curl localhost:8090/readyz` → `llm_state` (`loading` / `ready` / `slow` / `down`).
 
 | Логин | Роль | Что показать |
 |---|---|---|
@@ -32,7 +38,7 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 | `alumni.petr` | Выпускник стажировки | buddy остаётся точкой входа после стажировки |
 
 Пароль у всех — `demo`. Порты: web 5173, core API 8080, agent 8090 и mcp-mocks 8100 (только localhost).
-Сброс данных: `make reset`. Windows без `make`: команды `docker compose` выше, подробности — [docs/dev-setup-windows.md](docs/dev-setup-windows.md).
+Сброс данных: `make reset` (база пересоздаётся, скачанная модель остаётся). Windows без `make`: `docker compose -f deploy/docker-compose.yml --profile core down`, `docker volume rm aibuddy_pgdata`, затем команда запуска выше; `down -v` удалит и модель. Подробности — [docs/dev-setup-windows.md](docs/dev-setup-windows.md).
 
 ## Сценарии
 
@@ -76,8 +82,21 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 
 ## LLM и ключи
 
-По умолчанию `LLM_PROVIDER=stub`: детерминированный роутер намерений (guardrails → правила → обученный классификатор)
-и извлекающие ответы по базе знаний. На stub проходят все сценарии, e2e и eval. Своя модель подключается в `.env`
+**Для проверяющих — коротко.**
+
+| Вопрос | Ответ |
+|---|---|
+| Какая модель по умолчанию | **A-Vibe** (Авито, `AvitoTech/avibe`, 8B) в квантовании GGUF Q4_K_M: `hf.co/NightForger/avibe-GGUF:Q4_K_M` |
+| Где работает | локально, Ollama 0.9.6 в том же `docker compose` (сервис `ollama`); веса скачиваются с Hugging Face при первом запуске (~5 ГБ), ключ не нужен |
+| Пока модель не готова | отвечает stub с пометкой «упрощённый режим»; сценарии с заявками от модели не зависят |
+| Облачная модель с вашим ключом | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=…/v1` `LLM_API_KEY=…` `LLM_MODEL=…` в `.env` — готовый пример: [deploy/llm/openai-compatible.env](deploy/llm/openai-compatible.env) |
+| Какие переменные | `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_TIMEOUT_S` (все — в `.env.example`) |
+| Все примеры конфигурации | [deploy/llm/](deploy/llm/README.md): A-Vibe в compose, A-Vibe в Ollama на компьютере, облачный API, stub |
+
+По умолчанию — A-Vibe в Ollama из compose, с откатом на `stub`, пока модель грузится или если она недоступна. Stub —
+детерминированный роутер намерений (guardrails → правила → обученный классификатор) и извлекающие ответы по базе
+знаний; на нём проходят все сценарии, e2e и eval (CI запускает стек с `LLM_DEFAULT_PROVIDER=stub AVIBE_PULL=false`).
+Сценарии с заявками (отгул, доступы, командировки) детерминированы при любой модели. Другая модель — в `.env`
 (шаблон без секретов — `.env.example`):
 
 | Вариант | Как |
@@ -85,7 +104,7 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 | Внешний OpenAI-совместимый API (ключ организаторов) | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=https://<provider>/v1` `LLM_API_KEY=…` `LLM_MODEL=…` |
 | **A-Vibe на ноутбуке** (GPU от 6 ГБ) через Ollama | `ollama pull hf.co/NightForger/avibe-GGUF:Q4_K_M`, затем `make up`; `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=http://host.docker.internal:11434/v1` `LLM_MODEL=hf.co/NightForger/avibe-GGUF:Q4_K_M` `LLM_TIMEOUT_S=90` |
 | **A-Vibe** (`AvitoTech/avibe`) на своей GPU через vLLM | профиль `avibe`: `docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d`, `LLM_BASE_URL=http://avibe:8000/v1` `LLM_MODEL=AvitoTech/avibe` |
-| Ollama на ноутбуке | профиль `ollama`, `LLM_BASE_URL=http://ollama:11434/v1` `LLM_MODEL=qwen2.5:7b-instruct` |
+| Без модели (только stub) | `LLM_PROVIDER=stub`; не скачивать модель: `AVIBE_PULL=false` в окружении compose |
 
 После изменения: `docker compose -f deploy/docker-compose.yml --profile core up -d agent`. Модель получает только
 документы, разрешённые пользователю, и только читающие инструменты; заявки создаёт детерминированный сценарий после
@@ -123,7 +142,7 @@ web (React, SSE) ──► core (Go: REST, SSE-прокси, план, журн�
 | `cd web && npm run coverage` | vitest | 159 тестов |
 | `make eval` | 134 кейса качества ответов, guard-метрики | 100%, guard 100% |
 | `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 180/180 |
-| `make e2e` | Playwright на запущенном стеке (stub LLM) | 27 тестов, по спеке на сценарий |
+| `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 27 тестов, по спеке на сценарий |
 | `make smoke` | S3, S4, командировка, согласие, шаги HR, вложение через API core | SMOKE OK |
 | `make lint` | golangci/gofmt, ruff, eslint, `openspec validate --all` | |
 
@@ -139,7 +158,7 @@ CI (`.github/workflows/ci.yml`) прогоняет всё это, поднима
 | Playwright | 1.63 (`e2e/package-lock.json`) |
 | PostgreSQL / Redis | 16 / 7 |
 | Kafka / Grafana (профиль full) | 3.9 / 11.3 |
-| Ollama / vLLM (необязательно) | 0.5.7 / 0.10.1.1 |
+| Ollama (A-Vibe по умолчанию) / vLLM (необязательно) | 0.9.6 / 0.10.1.1 |
 
 ## Где что лежит
 

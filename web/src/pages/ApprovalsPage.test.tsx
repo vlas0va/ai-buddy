@@ -150,4 +150,19 @@ describe('S3 step 8: manager approvals page', () => {
     expect(await screen.findByText('Недостаточно прав для этого действия.')).toBeInTheDocument()
     await waitFor(() => expect(decisionCalls).toHaveLength(0))
   })
+
+  it('feedback 12.13: the lead sees teammates away on the same days', async () => {
+    signInAs('lead.maria')
+    server.use(
+      http.get('*/api/approvals', () =>
+        HttpResponse.json([
+          { id: 'a1', kind: 'absence_request', requester_display_name: 'Анна Котова', summary: 'Отгул 21.04.2027', status: 'pending',
+            stage: 'lead', created_at: '2026-11-12T10:00:00Z', team_absent: ['Олег Мартынов: отпуск 20.04–24.04'] },
+        ]),
+      ),
+    )
+    mountWithClient(<ApprovalsPage />)
+    const card = await screen.findByLabelText('Заявка: Анна Котова')
+    expect(within(card).getByText('В эти дни из команды отсутствуют: Олег Мартынов: отпуск 20.04–24.04')).toBeInTheDocument()
+  })
 })

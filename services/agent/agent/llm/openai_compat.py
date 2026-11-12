@@ -80,7 +80,8 @@ class OpenAICompatClient:
     ) -> None:
         if not base_url or not model:
             raise ValueError("LLM_BASE_URL and LLM_MODEL are required for LLM_PROVIDER=openai_compat")
-        self.url = base_url.rstrip("/") + "/chat/completions"
+        self.base_url = base_url.rstrip("/")
+        self.url = self.base_url + "/chat/completions"
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
@@ -117,6 +118,23 @@ class OpenAICompatClient:
             except Exception:  # noqa: BLE001 - a streamed body may be unreadable
                 detail = ""
             raise LLMError(f"Модель вернула ошибку {resp.status_code}. {detail}".strip(), retryable=retryable)
+
+    def model_listed(self) -> bool | None:
+        """Is the model served right now? True / False from `GET /models` (Ollama lists pulled models only, so a model
+        that is still downloading is False); None when the endpoint cannot tell (no such route, odd answer)."""
+        try:
+            resp = self.client.get(self.base_url + "/models", headers=self.headers, timeout=3.0)
+        except httpx.HTTPError:
+            return False  # server not reachable: not ready
+        except Exception:  # noqa: BLE001 - a custom transport that cannot answer GET: cannot tell
+            return None
+        if resp.status_code >= 400:
+            return None
+        try:
+            ids = {str(m.get("id", "")) for m in resp.json().get("data", [])}
+        except (ValueError, AttributeError):
+            return None
+        return self.model in ids or f"{self.model}:latest" in ids
 
     def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> Completion:
         try:

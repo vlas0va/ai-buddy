@@ -5,7 +5,7 @@ import type { ProposalState } from '../stream'
 
 const TYPE_TEXT: Record<string, string> = { day_off: 'Отгул', vacation: 'Отпуск', absence: 'Отсутствие', parental_leave: 'Декрет' }
 
-const LEVEL_TEXT: Record<string, string> = { read: 'чтение', write: 'запись', admin: 'администрирование' }
+const LEVEL_TEXT: Record<string, string> = { read: 'чтение', write: 'редактирование', admin: 'администрирование' }
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v : ''
@@ -25,6 +25,14 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
       { label: 'Документы', value: Array.isArray(display?.documents) ? display.documents.map(str).join(', ') : '' },
       { label: 'Согласующий', value: str(display?.approver_display_name) },
       { label: 'Затем', value: 'HR-администратор' },
+      { label: 'Заменяет', value: str(display?.replaces) }, // feedback 12.13: a pending request inside the new dates
+    ]
+  }
+  if (p.kind === 'absence_cancel') {
+    return [
+      { label: 'Заявка', value: `${str(display?.ref_id) || str(args.id)} — ${str(display?.type_label)}` },
+      { label: 'Даты', value: str(display?.period_label) },
+      { label: 'Что будет', value: 'заявка и её согласование отменятся, задача уйдёт из плана' },
     ]
   }
   if (p.kind === 'absence_reschedule') {
@@ -66,12 +74,14 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
     { label: 'Права', value: str(display?.level_label) || (args.level ? LEVEL_TEXT[str(args.level)] ?? str(args.level) : '') },
     { label: 'Повышенные права', value: display?.elevated ? 'Да, нужно согласование' : 'Нет' },
     { label: 'Кто согласует', value: display?.elevated ? str(display?.approver_label) : '' },
+    { label: 'Обоснование', value: str(display?.reason) || str(args.reason) },
   ]
 }
 
 const TITLE: Record<Proposal['kind'], string> = {
   absence_request: 'Черновик заявки на отсутствие',
   absence_reschedule: 'Перенос заявки',
+  absence_cancel: 'Отмена заявки',
   access_request: 'Черновик заявки на доступ',
   trip_request: 'Черновик заявки на командировку',
   consent: 'Подпись согласия',

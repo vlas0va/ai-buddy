@@ -54,6 +54,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/plan/goals", h.putGoals)
 	mux.HandleFunc("GET /api/team/interns", h.teamInterns)
 	mux.HandleFunc("GET /api/plan/report", h.getReport)
+	mux.HandleFunc("POST /api/plan/goals/propose", h.proposeGoals)
 }
 
 func (h *Handler) today() string { return h.Now().UTC().Format("2006-01-02") }
@@ -83,8 +84,23 @@ type Task struct {
 	DueAt           *string `json:"due_at"`
 	HumanOnly       bool    `json:"human_only"`
 	LinkedActionID  *string `json:"linked_action_id"`
+	// Confirm says who confirms the task is done (organizers 12.13: our choice per task type): self — the intern ticks it;
+	// quiz — a mini-check in the chat marks it done; mentor — the intern asks, the mentor or the lead confirms.
+	Confirm string `json:"confirm"`
 
 	stored string // status as stored, before the overdue-on-read rule
+}
+
+// confirmModes: study tasks without steps are checked with a quiz, getting to know the team is confirmed by the mentor.
+var confirmModes = map[string]string{"CL-07": "quiz", "CL-09": "quiz", "CL-03": "mentor"}
+
+func confirmMode(item *string) string {
+	if item != nil {
+		if m, ok := confirmModes[*item]; ok {
+			return m
+		}
+	}
+	return "self"
 }
 
 // TopTask is a top-level task with its subtasks (always present, possibly empty).
@@ -114,7 +130,10 @@ type Goal struct {
 	Title     string  `json:"title"`
 	Criteria  *string `json:"criteria,omitempty"`
 	CreatedBy string  `json:"created_by"`
+	Status    string  `json:"status"` // proposed | active | achieved | missed
 }
+
+var goalStatuses = map[string]bool{"proposed": true, "active": true, "achieved": true, "missed": true}
 
 // Plan is the openapi Plan.
 type Plan struct {
@@ -235,6 +254,10 @@ func scanTask(row pgx.Row, today string) (Task, error) {
 		&t.Status, &t.DueAt, &t.HumanOnly, &t.LinkedActionID)
 	t.stored = t.Status
 	t.Status = effectiveStatus(t.Status, t.DueAt, today)
+	t.Confirm = "self"
+	if t.Source == "checklist" && t.ParentTaskID == nil {
+		t.Confirm = confirmMode(t.ChecklistItemID)
+	}
 	return t, err
 }
 
@@ -281,7 +304,7 @@ func (h *Handler) loadTasks(ctx context.Context, planID, today string) ([]Period
 }
 
 func (h *Handler) loadGoals(ctx context.Context, internID string) ([]Goal, error) {
-	rows, err := h.pool.Query(ctx, `SELECT g.id::text, g.title, g.criteria, g.created_by FROM core.goals g
+	rows, err := h.pool.Query(ctx, `SELECT g.id::text, g.title, g.criteria, g.created_by, g.status FROM core.goals g
 		JOIN core.plans p ON p.id = g.plan_id WHERE p.user_id = $1 AND p.plan_role = 'intern' ORDER BY g.created_at, g.id`, internID)
 	if err != nil {
 		return nil, fmt.Errorf("select goals: %w", err)
@@ -290,7 +313,7 @@ func (h *Handler) loadGoals(ctx context.Context, internID string) ([]Goal, error
 	out := []Goal{}
 	for rows.Next() {
 		var g Goal
-		if err := rows.Scan(&g.ID, &g.Title, &g.Criteria, &g.CreatedBy); err != nil {
+		if err := rows.Scan(&g.ID, &g.Title, &g.Criteria, &g.CreatedBy, &g.Status); err != nil {
 			return nil, fmt.Errorf("scan goal: %w", err)
 		}
 		out = append(out, g)
@@ -463,17 +486,42 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 			t.due_at::text, p.user_id
 		FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id WHERE t.id = $1 FOR UPDATE OF t`, id).
 		Scan(&t.planID, &t.source, &t.period, &t.status, &t.parent, &t.item, &t.due, &t.owner)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && t.owner != c.Sub) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, apierr.Forbidden() // unknown and foreign tasks look the same (R71)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("select task: %w", err)
 	}
-	if t.source != "checklist" || t.status == "waiting_approval" {
-		return nil, apierr.Conflict().WithMessage("Статус этой задачи меняется автоматически после решения по заявке")
+	mode := "self"
+	if t.source == "checklist" && t.parent == nil {
+		mode = confirmMode(t.item)
+	}
+	if t.owner != c.Sub {
+		// the mentor or the lead of the team confirms (done) or returns (in_progress) a task waiting for them
+		ok, err := h.reviewerOf(ctx, c, t.owner)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || mode != "mentor" || t.status != "waiting_approval" || (status != "done" && status != "in_progress") {
+			return nil, apierr.Forbidden()
+		}
+	} else {
+		switch {
+		case t.source != "checklist" || (t.status == "waiting_approval" && mode != "mentor"):
+			return nil, apierr.Conflict().WithMessage("Статус этой задачи меняется автоматически после решения по заявке")
+		case mode == "quiz" && status == "done":
+			return nil, apierr.Conflict().WithMessage("Эта задача отмечается после мини-проверки: нажми «Проверить себя»")
+		case mode == "mentor" && status == "done":
+			status = "waiting_approval" // the intern asks, the mentor confirms
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now() WHERE id = $1`, id, status); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
+	}
+	if status == "waiting_approval" && t.status != "waiting_approval" {
+		if err := h.askReviewers(ctx, tx, t); err != nil {
+			return nil, err
+		}
 	}
 	becameDone := status == "done" && t.status != "done"
 	if t.parent == nil {
@@ -564,6 +612,7 @@ func (h *Handler) loadTop(ctx context.Context, q pgx.Tx, id string) (TopTask, er
 type goalInput struct {
 	Title    string `json:"title"`
 	Criteria string `json:"criteria"`
+	Status   string `json:"status"` // empty = active
 }
 
 func (h *Handler) putGoals(w http.ResponseWriter, r *http.Request) {
@@ -604,6 +653,13 @@ func (h *Handler) putGoals(w http.ResponseWriter, r *http.Request) {
 			apierr.WriteJSON(w, apierr.Validation().WithMessage("У цели нужен заголовок до 300 символов, критерии — до 1000"))
 			return
 		}
+		if g.Status == "" {
+			g.Status = "active"
+		}
+		if !goalStatuses[g.Status] {
+			apierr.WriteJSON(w, apierr.Validation().WithMessage("Статус цели: proposed, active, achieved или missed"))
+			return
+		}
 	}
 	goals, err := h.replaceGoals(ctx, c, body.UserID, body.Goals)
 	if err != nil {
@@ -634,9 +690,9 @@ func (h *Handler) replaceGoals(ctx context.Context, c authn.Claims, internID str
 	for _, g := range in {
 		var saved Goal
 		// clock_timestamp() keeps the input order: created_at differs per row inside one transaction.
-		err := tx.QueryRow(ctx, `INSERT INTO core.goals (plan_id, title, criteria, created_by, created_at)
-			VALUES ($1, $2, NULLIF($3, ''), $4, clock_timestamp()) RETURNING id::text, title, criteria, created_by`,
-			planID, g.Title, g.Criteria, c.Sub).Scan(&saved.ID, &saved.Title, &saved.Criteria, &saved.CreatedBy)
+		err := tx.QueryRow(ctx, `INSERT INTO core.goals (plan_id, title, criteria, created_by, created_at, status)
+			VALUES ($1, $2, NULLIF($3, ''), $4, clock_timestamp(), $5) RETURNING id::text, title, criteria, created_by, status`,
+			planID, g.Title, g.Criteria, c.Sub, g.Status).Scan(&saved.ID, &saved.Title, &saved.Criteria, &saved.CreatedBy, &saved.Status)
 		if err != nil {
 			return nil, fmt.Errorf("insert goal: %w", err)
 		}

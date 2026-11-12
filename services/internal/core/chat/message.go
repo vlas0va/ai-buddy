@@ -31,6 +31,7 @@ var allowedTools = map[string]string{
 	"trip_request":       mcpclient.ToolCreateTrip,
 	"consent":            mcpclient.ToolSignConsent,
 	"absence_reschedule": mcpclient.ToolReschedule,
+	"absence_cancel":     mcpclient.ToolCancelAbsence,
 	kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
 }
 
@@ -265,6 +266,16 @@ loop:
 			if sse.Send(ev.Name, ev.Data) != nil {
 				return
 			}
+		case ev.Name == "quiz_passed":
+			// organizers 12.13: a study task is confirmed by a mini-check; core marks the caller's own task done (the
+			// user comes from the JWT, the agent only names the checklist item) and tells web to refresh the plan
+			if err := h.quizPassed(ctx, c, ev.Data); err != nil {
+				h.log.Warn("quiz_passed not applied", "session", sid, "err", err)
+				continue
+			}
+			if sse.Send(ev.Name, ev.Data) != nil {
+				return
+			}
 		case ev.Name == agentclient.EventError:
 			h.saveAssistant(ctx, assistantID, sid, &st)
 			_ = sse.Send(ev.Name, ev.Data)
@@ -402,3 +413,24 @@ func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID s
 	h.emit(ctx, c, "action.proposed", map[string]any{"kind": p.Kind, "proposal_id": p.ProposalID})
 	return p.Summary, nil
 }
+
+// quizPassed marks the caller's quiz-confirmed checklist task done (with its subtasks). Only tasks whose confirmation is
+// a quiz are touched; anything else is ignored.
+func (h *Handler) quizPassed(ctx context.Context, c authn.Claims, data json.RawMessage) error {
+	var in struct {
+		ChecklistItemID string `json:"checklist_item_id"`
+	}
+	if err := json.Unmarshal(data, &in); err != nil || in.ChecklistItemID == "" {
+		return fmt.Errorf("bad quiz_passed: %s", data)
+	}
+	if !quizItems[in.ChecklistItemID] {
+		return fmt.Errorf("item %s is not confirmed by a quiz", in.ChecklistItemID)
+	}
+	_, err := h.pool.Exec(ctx, `UPDATE core.plan_tasks t SET status = 'done', updated_at = now()
+		FROM core.plans p WHERE p.id = t.plan_id AND p.user_id = $1 AND p.plan_role = 'intern'
+		  AND t.checklist_item_id = $2 AND t.source = 'checklist' AND t.status <> 'done'`, c.Sub, in.ChecklistItemID)
+	return err
+}
+
+// quizItems mirror plan.confirmModes («quiz»): study tasks without steps.
+var quizItems = map[string]bool{"CL-07": true, "CL-09": true}

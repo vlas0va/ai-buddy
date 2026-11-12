@@ -58,7 +58,8 @@ test('S1: mentor sees interns, opens a plan read-only and sets goals that the in
   await login(intern, 'intern.anna')
   await intern.goto('/plan')
   await expect(intern.getByText(goal)).toBeVisible()
-  await expect(intern.getByRole('button', { name: /цели/ })).toHaveCount(0)
+  // the intern does not edit or approve goals; she may only write down new ones for approval (organizers 12.11)
+  await expect(intern.getByRole('button', { name: /Изменить цели|Задать цели|Согласовать/ })).toHaveCount(0)
 })
 
 test('S1: reminders arrive in the notifications bell', async ({ page }) => {
@@ -86,4 +87,53 @@ test('Report: the mentor opens the intern report; the intern has no report (idea
   await expect(intern.getByRole('link', { name: 'Отчёт за стажировку' })).toHaveCount(0)
   await intern.goto('/team/intern.anna/report')
   await expect(intern).toHaveURL(/\/chat/)
+})
+
+test('Goals: the intern writes down the goals after the meeting, the lead approves them (organizers 12.11)', async ({ browser }) => {
+  const title = `Выкатить первую задачу ${Date.now() % 100000}`
+  const intern = await (await browser.newContext()).newPage()
+  await login(intern, 'intern.anna')
+  await intern.goto('/plan')
+  const goals = intern.getByRole('region', { name: 'Цели адаптации' })
+  await goals.getByRole('button', { name: 'Записать цели после встречи' }).click()
+  await goals.getByLabel('Цель 1').fill(title)
+  await goals.getByLabel('Критерий 1').fill('PR влит, фича за флагом')
+  await goals.getByRole('button', { name: 'Отправить на согласование' }).click()
+  await expect(goals.getByText(title)).toBeVisible()
+  await expect(goals.getByText('Ждёт согласования').first()).toBeVisible()
+
+  const lead = await (await browser.newContext()).newPage()
+  await login(lead, 'lead.maria')
+  await lead.goto('/team/intern.anna')
+  const card = lead.getByRole('region', { name: 'Цели адаптации' }).locator('.plan-goal').filter({ hasText: title })
+  await card.getByRole('button', { name: 'Согласовать' }).click()
+  await expect(card.getByText('В работе')).toBeVisible()
+  await card.getByRole('button', { name: 'Достигнута', exact: true }).click()
+  await expect(lead.getByRole('region', { name: 'Цели адаптации' }).locator('.plan-goal').filter({ hasText: title }).getByText('Достигнута', { exact: true })).toBeVisible()
+})
+
+test('Confirmation: a study task opens a mini-check, a team task is confirmed by the mentor (organizers 12.13)', async ({ browser }) => {
+  const ivan = await (await browser.newContext()).newPage()
+  await login(ivan, 'intern.ivan')
+  await ivan.goto('/plan')
+  const study = ivan.locator('.plan-task').filter({ hasText: 'Изучи все необходимые документы' })
+  await expect(study).toContainText('отмечается после мини-проверки')
+  await expect(study.getByRole('checkbox')).toBeDisabled()
+  const team = ivan.locator('.plan-task').filter({ hasText: 'Познакомься с командой' })
+  // a repeated run finds the task done or waiting: bring it back to work first
+  if (await team.getByRole('checkbox').isChecked()) await team.getByRole('checkbox').click()
+  await expect(team.getByRole('checkbox')).not.toBeChecked()
+  if (!(await team.textContent())?.includes('Ждёт подтверждения')) await team.getByRole('checkbox').click() // asks the mentor
+  await expect(team).toContainText('Ждёт подтверждения')
+
+  const sergey = await (await browser.newContext()).newPage()
+  await login(sergey, 'mentor.sergey')
+  await sergey.goto('/team/intern.ivan')
+  const card = sergey.locator('.plan-task').filter({ hasText: 'Познакомься с командой' })
+  await card.getByRole('button', { name: 'Подтвердить выполнение' }).click()
+  await expect(card).toContainText('Готово')
+
+  await study.getByRole('button', { name: 'Проверить себя' }).click()
+  await expect(ivan).toHaveURL(/\/chat/)
+  await expect(lastTurn(ivan)).toContainText('Вставь пропущенные слова', { timeout: 20000 })
 })

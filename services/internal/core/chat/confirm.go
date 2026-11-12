@@ -585,6 +585,10 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 		if id != str(args, "id") || !strings.HasPrefix(id, "ABS-") || status != actions.StatusPendingApproval {
 			return fmt.Errorf("moved request %q/%q differs from the confirmed %q", id, status, str(args, "id"))
 		}
+	case mcpclient.ToolCancelAbsence:
+		if id != str(args, "id") || !strings.HasPrefix(id, "ABS-") || status != "cancelled" {
+			return fmt.Errorf("cancelled request %q/%q differs from the confirmed %q", id, status, str(args, "id"))
+		}
 	case mcpclient.ToolCreateTrip:
 		if err := same("city", "start_date", "end_date"); err != nil {
 			return err

@@ -152,7 +152,7 @@ type requestIn struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-var levelLabels = map[string]string{"read": "чтение", "write": "запись", "admin": "администрирование"}
+var levelLabels = map[string]string{"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 
 type requestOut struct {
 	ID              string  `json:"id"`
@@ -332,7 +332,7 @@ func checkScope(name string, environments, levels []string, in requestIn) error 
 	return nil
 }
 
-// scopeLabel is « (stage, запись)» for the approval summary; empty for plain read access to a tool.
+// scopeLabel is « (stage, редактирование)» for the approval summary; empty for plain read access to a tool.
 func scopeLabel(in requestIn) string {
 	switch {
 	case in.Environment != "":

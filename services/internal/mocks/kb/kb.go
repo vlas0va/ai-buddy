@@ -54,11 +54,12 @@ func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 			Title string `json:"title"`
 			Body  string `json:"body"`
 			Key   string `json:"idempotency_key"`
+			Scope string `json:"scope"`
 		}
 		if err := mcpx.DecodeArgs(args, &in); err != nil {
 			return nil, err
 		}
-		return addFAQ(ctx, pool, c, in.Title, in.Body, in.Key)
+		return addFAQ(ctx, pool, c, in.Title, in.Body, in.Key, in.Scope)
 	})
 	return nil
 }
@@ -155,7 +156,13 @@ type faqOut struct {
 }
 
 // addFAQ stores a mentor answer as an FAQ document of the mentor's team; idempotent by key (R79).
-func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key string) (any, error) {
+// addFAQ stores a mentor's answer: for the mentor's team (scope "team", default) or, for a general answer, for every
+// team (scope "all", feedback 12.11). The doc id keeps the mentor's team either way.
+func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key, scope string) (any, error) {
+	teams := []string{c.TeamID}
+	if scope == "all" {
+		teams = []string{"*"}
+	}
 	suffix := make([]byte, 4)
 	if _, err := rand.Read(suffix); err != nil {
 		return nil, fmt.Errorf("generating doc id: %w", err)
@@ -164,9 +171,9 @@ func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body,
 	var out faqOut
 	err := pool.QueryRow(ctx, `
 		INSERT INTO kb.documents (doc_id, title, body, source_type, acl_roles, acl_teams, kind, created_by, idempotency_key)
-		VALUES ($1, $2, $3, 'test', ARRAY['intern','mentor','lead'], ARRAY[$4::text], 'faq', $5, $6)
+		VALUES ($1, $2, $3, 'test', ARRAY['intern','mentor','lead'], $4::text[], 'faq', $5, $6)
 		ON CONFLICT (idempotency_key) DO NOTHING
-		RETURNING doc_id, title, source_type`, docID, title, body, c.TeamID, c.Sub, key).
+		RETURNING doc_id, title, source_type`, docID, title, body, teams, c.Sub, key).
 		Scan(&out.DocID, &out.Title, &out.SourceType)
 	if err == nil {
 		return out, nil

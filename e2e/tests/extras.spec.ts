@@ -59,7 +59,9 @@ test('Consents: statuses are listed, a voluntary consent is signed after «От�
   await ask(page, 'подпиши согласие на опросы')
   await waitAnswer(page)
   const draft = page.getByLabel('Черновик заявки').last()
-  if (await lastTurn(page).getByLabel('Черновик заявки').count()) {
+  // the answer arrives before its card: wait for one of the two outcomes, then branch (first run vs a repeated one)
+  await expect(lastTurn(page)).toContainText(/Подготовил подпись|уже подписано/)
+  if (!(await lastTurn(page).textContent())?.includes('уже подписано')) {
     await expect(draft).toContainText('Подпись согласия')
     await draft.getByRole('button', { name: 'Отправить' }).click()
     const result = page.getByLabel('Результат заявки').last()
