@@ -120,6 +120,8 @@ func (s *turnState) collect(ev agentclient.Event) {
 		s.card("escalation", ev.Data)
 	case agentclient.EventNextStep:
 		s.card("next_step", ev.Data)
+	case "date_picker": // feedback 12.11: the calendar under an absence answer comes back with the history
+		s.card("date_picker", ev.Data)
 	case agentclient.EventDone:
 		s.done = ev.Data
 		var d struct {

@@ -6,4 +6,5 @@ export const keys = {
   interns: ['interns'] as const,
   escalations: ['escalations'] as const,
   notifications: ['notifications'] as const,
+  chatSessions: ['chat-sessions'] as const,
 }

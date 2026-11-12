@@ -10,7 +10,7 @@ import { STATUS_LABELS } from '@/components/ui/badgeText'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAsk } from '@/store/ask'
-import { canToggle, NEXT_STEP_PROMPT, progress, shortDate, withTaskStatus } from './format'
+import { askText, canToggle, NEXT_STEP_PROMPT, progress, shortDate, withTaskStatus } from './format'
 import { GoalsSection } from './GoalsSection'
 import './plan.css'
 
@@ -145,7 +145,7 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
                         readOnly={readOnly}
                         onToggle={(status) => toggle.mutate({ id: t.id, status })}
                         onToggleSub={(id, status) => toggle.mutate({ id, status })}
-                        onAsk={() => askBuddy(`Как выполнить задачу «${t.title}»?`)}
+                        onAsk={() => askBuddy(askText(t))}
                       />
                     </li>
                   ))}
@@ -228,7 +228,7 @@ function TaskRow({
       )}
       {!readOnly && !done && (
         <button type="button" className="plan-ask" onClick={onAsk}>
-          Спросить buddy
+          {task.source === 'action' ? 'Что с заявкой?' : 'Спросить buddy'}
         </button>
       )}
     </Card>

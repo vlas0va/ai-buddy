@@ -342,3 +342,16 @@ it('feedback 12.11: a list draft sent from the list shows its result in the list
   expect(history.messages).toHaveLength(1)
   expect(history.messages[0]?.bundle?.[1]?.result?.status).toBe('granted')
 })
+
+it('QA 12.11: the query cache is dropped when another user signs in', async () => {
+  const { QueryClient: QC } = await import('@tanstack/react-query')
+  const { clearOnUserChange } = await import('@/queryClient')
+  const { useSession } = await import('@/store/session')
+  const client = new QC()
+  const stop = clearOnUserChange(client)
+  useSession.setState({ user: { id: 'intern.anna' } as never })
+  client.setQueryData(['notifications'], [{ id: 'n1' }])
+  useSession.setState({ user: { id: 'hradmin.olga' } as never })
+  expect(client.getQueryData(['notifications'])).toBeUndefined()
+  stop()
+})

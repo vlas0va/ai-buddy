@@ -53,11 +53,12 @@ def escalation_event(turn: Turn, question: str, role: str, topic: str = "questio
             "to_user_id": (person or {}).get("user_id"),
             "to_name": person_name(person),
             "topic": topic,
-            "text": f"{hello} Подскажи, пожалуйста: {q} Не нашёл ответа в базе знаний команды.",
+            "text": f"{hello} Подскажи, пожалуйста: {q} В базе знаний команды ответа не нашёл.",
         },
     )
 
 
+ASK_MENTOR = re.compile(r"(уточни|спроси|обратись|напиши)\w*\s+(\w+\s+){0,2}(у\s+|к\s+)?наставник", re.I)
 CITY_WORDS = re.compile(r"москв|петербург|питер|спб|удал[её]н|казан|новосибирск|екатеринбург")
 
 
@@ -224,10 +225,20 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             task_hint = f"Это относится к задаче твоего плана «{t.title}»."
             break
     yield status("composing", "Формулирую ответ")
+    answer = []
     for chunk in turn.writer.answer(
         asked, hits[:3], turn.user, task_hint, gateway=turn.gateway, history=turn.history, meta=turn.meta
     ):
+        answer.append(chunk)
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
+    if turn.user.role == "intern" and ASK_MENTOR.search("".join(answer)):
+        # the answer sends the intern to the mentor: give the message ready to send through buddy, so the mentor's
+        # answer can go to the knowledge base for the next interns (QA 12.11)
+        yield from say(
+            "\n\nНиже черновик вопроса наставнику — отправь его здесь, а не в личку: если ответ пригодится другим, "
+            "наставник одной галочкой добавит его в базу знаний."
+        )
+        yield escalation_event(turn, asked, "mentor")
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."

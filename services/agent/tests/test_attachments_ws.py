@@ -56,7 +56,7 @@ def test_AT_04_screenshot_is_not_guessed_and_text_still_answered(anna):
     ev = say_with(anna, "", att("screen.png", "image", mime="image/png"))
     assert "не распознаю" in text_of(ev) and "текст ошибки" in text_of(ev)
     ev = say_with(anna, "как оформить отгул?", att("screen.png", "image"))
-    assert "не распознаю" in text_of(ev) and "На какие даты" in text_of(ev)
+    assert "не распознаю" in text_of(ev) and "Выбери даты в календаре" in text_of(ev)
 
 
 def test_AT_05_document_is_not_read_points_to_upload(anna):

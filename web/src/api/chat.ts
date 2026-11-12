@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { apiRequest } from './client'
-import { escalationDraftSchema, nextStepSchema, proposalSchema, refusalSchema, resultSchema } from '@/chat/events'
+import { datePickerSchema, escalationDraftSchema, nextStepSchema, proposalSchema, refusalSchema, resultSchema } from '@/chat/events'
 import { chatHistorySchema, chatMessageSchema, chatSessionSchema, escalationSchema } from './schemas'
 
 export function createSession() {
@@ -28,6 +28,7 @@ const historySchema = chatHistorySchema.extend({
       escalation_sent: z.boolean().optional(),
       refusal: refusalSchema.optional().catch(undefined),
       next_step: nextStepSchema.optional().catch(undefined),
+      date_picker: datePickerSchema.optional().catch(undefined),
     }),
   ),
 })
@@ -38,6 +39,13 @@ export const kbDocSchema = z.object({ doc_id: z.string(), title: z.string(), bod
 
 export function getKBDoc(docId: string) {
   return apiRequest(`/api/kb/${encodeURIComponent(docId)}`, kbDocSchema)
+}
+
+const sessionsListSchema = z.array(z.object({ session_id: z.string(), title: z.string(), created_at: z.string(), updated_at: z.string() }))
+export type SessionSummary = z.infer<typeof sessionsListSchema>[number]
+
+export function listSessions() {
+  return apiRequest('/api/chat/sessions', sessionsListSchema)
 }
 
 export function getSession(sessionId: string) {

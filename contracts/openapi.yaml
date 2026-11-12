@@ -183,6 +183,24 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/chat/sessions:
+    get:
+      tags: [chat]
+      summary: Earlier dialogs of the user with messages, newest first (title = first question)
+      responses:
+        "200":
+          description: Dialogs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [session_id, title, created_at, updated_at]
+                  properties:
+                    session_id: { type: string, format: uuid }
+                    title: { type: string }
+                    created_at: { type: string, format: date-time }
+                    updated_at: { type: string, format: date-time }
     post:
       tags: [chat]
       summary: Start a chat session

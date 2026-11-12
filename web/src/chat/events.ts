@@ -53,6 +53,17 @@ export const nextStepSchema = z.object({
 })
 export type NextStep = z.infer<typeof nextStepSchema>
 
+/** feedback 12.11: a calendar under an absence answer; the chosen dates go back as a message */
+export const datePickerSchema = z.object({
+  purpose: z.enum(['absence', 'reschedule']),
+  kind: z.string(),
+  ref_id: z.string().optional(),
+  min: z.string(),
+  max: z.string(),
+  label: z.string(),
+})
+export type DatePicker = z.infer<typeof datePickerSchema>
+
 export const streamErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -70,6 +81,7 @@ export type StreamEvent =
   | { type: 'refusal'; data: Refusal }
   | { type: 'error'; data: StreamError }
   | { type: 'next_step'; data: NextStep }
+  | { type: 'date_picker'; data: DatePicker }
   | { type: 'done'; data: { message_id?: string } }
   /** an event this client does not know: contracts/agent-stream.md says new events are additive and must be skipped */
   | { type: 'ignored'; data: { name: string } }
@@ -84,6 +96,7 @@ const payloads = {
   refusal: refusalSchema,
   error: streamErrorSchema,
   next_step: nextStepSchema,
+  date_picker: datePickerSchema,
   done: z.object({ message_id: z.string().optional() }),
 } as const
 

@@ -42,6 +42,12 @@ export function canToggle(t: Task): boolean {
   return t.source === 'checklist' && t.status !== 'waiting_approval'
 }
 
+/** QA 12.11: a task made by a request (an absence, an access) asks for its status, not «how to do it» again */
+export function askText(t: Pick<Task, 'source' | 'title'>): string {
+  if (t.source !== 'action') return `Как выполнить задачу «${t.title}»?`
+  return t.title.startsWith('Доступ') ? 'Какие доступы мне нужны?' : `Что с моей заявкой «${t.title}»?`
+}
+
 export const NEXT_STEP_PROMPT: Record<string, (title: string) => string> = {
   ask_buddy: (title) => `Как выполнить задачу «${title}»?`,
   request_access: () => 'Какие доступы мне нужны?',

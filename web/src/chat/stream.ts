@@ -3,6 +3,7 @@ import type { ChatHistory } from '@/api/chat'
 import type { AttachmentMeta, sourceSchema } from '@/api/schemas'
 import type {
   ActionResult,
+  DatePicker,
   EscalationDraftData,
   NextStep,
   Proposal,
@@ -32,6 +33,7 @@ export interface ChatMessage {
   refusal: Refusal | null
   error: StreamError | null
   nextStep?: NextStep | null
+  datePicker?: DatePicker | null
   /** server id of a saved assistant message (done.message_id or history), used for «Полезно / Не полезно» */
   serverId?: string
   /** user text that produced this assistant message, used by "Повторить" */
@@ -76,6 +78,7 @@ export function fromHistory(history: ChatHistory): ChatState {
       escalationSent: m.escalation_sent ?? false,
       refusal: m.refusal ?? null,
       nextStep: m.next_step ?? null,
+      datePicker: m.date_picker ?? null,
       error: null,
       serverId: m.author === 'assistant' ? m.id : undefined,
     }
@@ -220,6 +223,7 @@ export const handlers = {
     }
   },
   next_step: (s: ChatState, d: NextStep): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, nextStep: d }))),
+  date_picker: (s: ChatState, d: DatePicker): ChatState => (s.quiet ? s : patchLast(s, (m) => ({ ...m, datePicker: d }))),
   done: (s: ChatState, d: { message_id?: string } = {}): ChatState => {
     if (s.quiet) return { messages: s.messages, streaming: false, stage: null }
     const next = d.message_id ? patchLast(s, (m) => ({ ...m, serverId: d.message_id })) : s
@@ -247,6 +251,8 @@ export function reduce(state: ChatState, event: StreamEvent): ChatState {
       return handlers.error(state, event.data)
     case 'next_step':
       return handlers.next_step(state, event.data)
+    case 'date_picker':
+      return handlers.date_picker(state, event.data)
     case 'done':
       return handlers.done(state, event.data)
     case 'ignored':

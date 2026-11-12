@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from .. import clock
@@ -30,11 +30,14 @@ TYPE_PATTERNS = [  # order matters: «отпуск за свой счёт» is a
 TYPE_LABELS = {"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 TYPE_GENITIVE = {"day_off": "отгула", "vacation": "отпуска", "absence": "отсутствия", "parental_leave": "декрета"}
 INFO_QUESTION = re.compile(r"сколько|положен|как\s+(взять|оформ|уйти|получ)|можно\s+ли|когда\s+можно|правил|порядок")
-RESCHEDULE = re.compile(r"перенес|перенос|сдвин|подвин|поменя\w*\s+даты|измени\w*\s+даты")
+RESCHEDULE = re.compile(
+    r"перенес|перенос|сдвин|подвин|(измен|поменя|помен|смен)\w*\s+(\w+\s+){0,2}(дат|отгул|отпуск|заявк|отсутств|декрет)"
+)
 ABS_ID = re.compile(r"\babs-(\d+)\b", re.IGNORECASE)
 MAX_DOCUMENTS = 3
 DATE_HINT = "Например: «в пятницу», «завтра» или «с 16 по 17 ноября»."
-NOTICE_WORKING_DAYS = 2
+NOTICE_WORKING_DAYS = 3  # feedback 12.11: «отгул берётся не позже чем за 3 дня»
+BARE_DAY = re.compile(r"^\s*(\d{1,2})\s*$")  # «13» answering «на какие даты?»
 STATUS_LABELS = {
     "pending_approval": "На согласовании",
     "pending_hr": "Ждёт HR-администратора",
@@ -44,10 +47,46 @@ STATUS_LABELS = {
 }
 
 
+def bare_day(text: str) -> DateRange | None:
+    """«13» → the nearest 13th from tomorrow on (this month or the next)."""
+    m = BARE_DAY.match(text)
+    if not m or not 1 <= int(m.group(1)) <= 31:
+        return None
+    today, day = clock.today(), int(m.group(1))
+    for months in range(0, 3):
+        y, mo = today.year + (today.month - 1 + months) // 12, (today.month - 1 + months) % 12 + 1
+        try:
+            d = date(y, mo, day)
+        except ValueError:
+            continue
+        if d > today:
+            return DateRange(d, d)
+    return None
+
+
+def date_picker(kind: str, purpose: str = "absence", ref_id: str = "") -> Event:
+    """A calendar under the answer (feedback 12.11): the user picks the dates instead of typing them."""
+    today = clock.today()
+    earliest = {"vacation": today + timedelta(days=14), "parental_leave": today}.get(kind, today + timedelta(days=1))
+    labels = {"day_off": "отгула", "vacation": "отпуска", "absence": "отсутствия", "parental_leave": "декрета"}
+    return Event(
+        "date_picker",
+        {
+            "purpose": purpose,
+            "kind": kind,
+            "ref_id": ref_id,
+            "min": earliest.isoformat(),
+            "max": (today + timedelta(days=365)).isoformat(),
+            "label": ("Новые даты " if purpose == "reschedule" else "Даты ") + labels.get(kind, "отгула"),
+        },
+    )
+
+
 def looks_like_slot_answer(text: str) -> bool:
     t = normalize(text)
     return bool(
-        parse_range(t, clock.today())
+        bare_day(t)
+        or parse_range(t, clock.today())
         or CANCEL.search(t)
         or CONFIRM.search(t)
         or any(rx.search(t) for _, rx in TYPE_PATTERNS)
@@ -129,8 +168,9 @@ def _explain_type(turn: Turn, kind: str) -> Iterator[Event]:
     facts = f"{VACATION_FACTS}\n\n" if kind == "vacation" else ""
     yield from say(
         f"{facts}Как оформить: {PROCESS} Первым согласует {approver}. {TYPE_RULES[kind]}\n\n"
-        f"На какие даты оформить {TYPE_GENITIVE[kind]}? {DATE_HINTS[kind]}"
+        f"Выбери даты {TYPE_GENITIVE[kind]} в календаре ниже или напиши их. {DATE_HINTS[kind]}"
     )
+    yield date_picker(kind)
 
 
 def _explain(turn: Turn) -> Iterator[Event]:
@@ -142,12 +182,12 @@ def _explain(turn: Turn) -> Iterator[Event]:
     who = f"наставника ({mentor})" if mentor else "наставника"
     approver = (lead or {}).get("name") or "руководитель команды"
     yield from say(
-        f"По тестовой инструкции «{doc['title']}»: заранее предупреди руководителя и {who}, затем создай заявку в "
-        f"сервисе отсутствий — я подготовлю черновик. Согласует {approver}, затем HR-администратор; после этого отгул "
-        f"оформлен, а HR BP получит уведомление. Пока HR-администратор не согласовал, даты можно перенести. "
-        f"Отгул — не больше 3 рабочих дней подряд.\n\n"
-        f"На какие даты оформить? {DATE_HINT}"
+        f"Отгул оформляют заранее — не позже чем за {NOTICE_WORKING_DAYS} рабочих дня, и не больше 3 рабочих дней "
+        f"подряд. Предупреди {who}. Согласует {approver}, затем HR-администратор. Пока HR-администратор не согласовал "
+        f"(даже если руководитель уже согласовал), даты можно поменять.\n\n"
+        f"Выбери даты в календаре ниже или напиши, например, «в пятницу»."
     )
+    yield date_picker("day_off")
 
 
 def _other_type(turn: Turn, text: str) -> Iterator[Event]:
@@ -254,7 +294,7 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     docs = documents_of(turn) or st.get("documents") or []
     st["documents"] = docs
 
-    rng = parse_range(t, clock.today())
+    rng = parse_range(t, clock.today()) or bare_day(t)
     if st["step"] == "proposed" and rng is None and CONFIRM.search(t) and not type_changed:
         yield from say(
             "Чтобы отправить заявку, нажми «Отправить» на карточке черновика. Без твоего подтверждения я заявку "
@@ -272,7 +312,8 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         if explain_again:
             yield from (_explain(turn) if kind == "day_off" else _explain_type(turn, kind))
         else:
-            yield from say(f"Не получилось понять даты. {DATE_HINTS.get(kind, DATE_HINT)}")
+            yield from say("Не получилось понять даты — выбери их в календаре ниже.")
+            yield date_picker(kind)
         return
 
     label = type_label(kind)
@@ -285,11 +326,22 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     if not check.get("valid"):
         st["step"] = "collect"
         turn.save_state({**state, "absence": st})
+        problems = " ".join(check.get("problems", []))
+        overlap = ABS_ID.search(problems)
+        if overlap:  # the same dates as an open request of the user: offer to move that request instead
+            ref = f"ABS-{overlap.group(1)}"
+            yield from say(
+                f"{label} {human_range(rng)} оформить не получится: {problems} Если хочешь поменять даты заявки "
+                f"{ref}, выбери новые даты ниже — пока HR-администратор не согласовал, перенос возможен."
+            )
+            yield date_picker(kind, "reschedule", ref)
+            return
         yield from say(
-            f"{label} {human_range(rng)} оформить не получится: {' '.join(check.get('problems', []))} "
-            f"Выбери другие даты{' или приложи документ' if kind == 'parental_leave' and not docs else ''}. "
-            f"{DATE_HINTS.get(kind, DATE_HINT)}"
+            f"{label} {human_range(rng)} оформить не получится: {problems} "
+            f"Выбери другие даты{' или приложи документ' if kind == 'parental_leave' and not docs else ''} "
+            "в календаре ниже."
         )
+        yield date_picker(kind)
         return
 
     approver_name = check.get("approver_display_name") or (turn.contact("lead") or {}).get("name") or ""
@@ -323,7 +375,10 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
 
     notice = ""
     if kind == "day_off" and working_days(clock.today(), rng.start) - 1 < NOTICE_WORKING_DAYS:
-        notice = " Обычно об отгуле предупреждают за 2 рабочих дня — обязательно предупреди руководителя лично."
+        notice = (
+            f" Отгул оформляют не позже чем за {NOTICE_WORKING_DAYS} рабочих дня — обязательно предупреди руководителя "
+            "лично."
+        )
     length = f"рабочих дней: {days}" if kind == "day_off" else f"календарных дней: {calendar_days}"
     doc_line = f" Документы: {', '.join(d['name'] for d in docs)}." if docs else ""
     mentor = first_name(turn.contact("mentor"), "")
@@ -363,7 +418,11 @@ def handle_reschedule(turn: Turn, text: str) -> Iterator[Event]:
     t_kind = target.get("type", "day_off")
     rng = parse_range(normalize(text), clock.today())
     if rng is None:
-        yield from say(f"На какие даты перенести заявку {target['id']}? {DATE_HINTS.get(t_kind, DATE_HINT)}")
+        yield from say(
+            f"На какие даты перенести заявку {target['id']}? Выбери их в календаре ниже — после переноса заявку снова "
+            "согласуют руководитель и HR-администратор."
+        )
+        yield date_picker(t_kind, "reschedule", target["id"])
         return
     args = {"id": target["id"], "start_date": rng.start.isoformat(), "end_date": rng.end.isoformat()}
     check = turn.gateway.read(

@@ -898,3 +898,41 @@ func TestChat_Feedback_SourceChipOpensDocument_R69(t *testing.T) {
 		t.Errorf("anonymous: %d", got)
 	}
 }
+
+// Feedback 12.11: «Новый диалог» keeps the old conversation: the list of dialogs names each by its first question;
+// the calendar under an absence answer comes back with the history.
+func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	first := e.session(anna)
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Выбери даты."}},
+			{Name: "date_picker", Data: map[string]any{"purpose": "absence", "kind": "day_off", "min": "2026-11-10", "max": "2027-11-09", "label": "Даты отгула"}},
+			agenttest.Done()}
+	})
+	e.message(first, anna, "Как оформить отгул?")
+	e.agent.OnMessage(nil)
+	second := e.session(anna)
+	e.message(second, anna, "кто мой наставник?")
+	_ = e.session(anna) // an empty dialog is not listed
+
+	var list []map[string]any
+	e.do(http.MethodGet, "/api/chat/sessions", anna, nil).json(t, &list)
+	if len(list) != 2 || list[0]["session_id"] != second || list[1]["title"] != "Как оформить отгул?" {
+		t.Fatalf("dialogs %v", list)
+	}
+	var other []map[string]any
+	e.do(http.MethodGet, "/api/chat/sessions", e.maria(), nil).json(t, &other)
+	if len(other) != 0 {
+		t.Fatalf("another user sees the dialogs: %v", other)
+	}
+	var h struct {
+		Messages []struct {
+			DatePicker map[string]any `json:"date_picker"`
+		} `json:"messages"`
+	}
+	e.do(http.MethodGet, "/api/chat/sessions/"+first, anna, nil).json(t, &h)
+	if h.Messages[1].DatePicker["label"] != "Даты отгула" {
+		t.Fatalf("date picker %v", h.Messages[1])
+	}
+}

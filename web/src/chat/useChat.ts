@@ -194,5 +194,28 @@ export function useChat() {
     setState(initialState)
   }, [userId])
 
-  return { state, restoring, send, retry, confirm, confirmMany, cancel, newDialog }
+  // feedback 12.11: an earlier dialog opens again from the list; «Новый диалог» never deletes the old one
+  const openSession = useCallback(
+    async (sessionId: string) => {
+      abortRef.current?.abort()
+      streamingRef.current = false
+      inflight.current.clear()
+      useChatStore.getState().setSession(userId, sessionId)
+      sessionRef.current = Promise.resolve(sessionId)
+      setRestoring(true)
+      try {
+        setState(fromHistory(await getSession(sessionId)))
+      } catch {
+        sessionRef.current = null
+        useChatStore.getState().clearSession(userId)
+        setState(initialState)
+      } finally {
+        setRestoring(false)
+      }
+      void qc.invalidateQueries({ queryKey: keys.chatSessions })
+    },
+    [qc, userId],
+  )
+
+  return { state, restoring, send, retry, confirm, confirmMany, cancel, newDialog, openSession, currentSessionId: useChatStore((s) => s.sessions[userId]) }
 }

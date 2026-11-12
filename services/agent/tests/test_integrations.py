@@ -349,3 +349,19 @@ def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
     assert weak == "Я этого не нашёл."
     ok = "".join(writer(["Забери ноутбук", " на стойке."]).answer("где ноут?", [{**hit, "coverage": 1.0}], user))
     assert ok == "Забери ноутбук на стойке."
+
+
+def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, client):
+    """QA 12.11: «уточни у наставника» in the answer → a ready message to the mentor, sent through buddy so the answer
+    can go to the knowledge base."""
+    from agent.llm.writer import StubWriter
+
+    def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
+        yield "Открой пространство команды. Уточни у наставника, какие разделы изучить."
+
+    monkeypatch.setattr(StubWriter, "answer", fake)
+    anna = client.login("intern.anna")
+    ev = anna.say("какие документы и мануалы по работе в моей команде мне нужно изучить")
+    draft = first(ev, "escalation_draft")
+    assert draft and draft["to_role"] == "mentor" and "документы и мануалы" in draft["text"]
+    assert "добавит его в базу знаний" in "".join(e.data["text"] for e in ev if e.name == "token")

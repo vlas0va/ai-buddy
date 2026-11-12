@@ -135,6 +135,7 @@ func New(d Deps, cfg Config) *Handler {
 // Register adds the chat routes (behind authn.Middleware).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat/sessions", h.createSession)
+	mux.HandleFunc("GET /api/chat/sessions", h.listSessions)
 	mux.HandleFunc("GET /api/chat/sessions/{session_id}", h.getSession)
 	mux.HandleFunc("POST /api/chat/sessions/{session_id}/messages", h.postMessage)
 	mux.HandleFunc("POST /api/chat/sessions/{session_id}/proposals/{proposal_id}/confirm", h.confirm)
@@ -185,6 +186,50 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, map[string]string{"session_id": id})
 }
 
+// SessionSummary is one earlier conversation in the list of dialogs (feedback 12.11: «Новый диалог» keeps the old one).
+type SessionSummary struct {
+	SessionID string `json:"session_id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// listSessions returns the caller's conversations that have messages, newest first; the title is the first question.
+func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
+	c, _, ok := caller(w, r)
+	if !ok {
+		return
+	}
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT s.id::text,
+		       coalesce((SELECT left(m.text, 80) FROM core.chat_messages m WHERE m.session_id = s.id AND m.author = 'user'
+		                 AND m.text <> '' ORDER BY m.created_at, m.id LIMIT 1), 'Диалог'),
+		       to_char(s.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+		       to_char(max(m.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+		FROM core.chat_sessions s JOIN core.chat_messages m ON m.session_id = s.id
+		WHERE s.user_id = $1
+		GROUP BY s.id ORDER BY max(m.created_at) DESC LIMIT 30`, c.Sub)
+	if err != nil {
+		apierr.WriteJSON(w, fmt.Errorf("list sessions: %w", err))
+		return
+	}
+	defer rows.Close()
+	out := []SessionSummary{}
+	for rows.Next() {
+		var s SessionSummary
+		if err := rows.Scan(&s.SessionID, &s.Title, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			apierr.WriteJSON(w, fmt.Errorf("scan session: %w", err))
+			return
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		apierr.WriteJSON(w, fmt.Errorf("read sessions: %w", err))
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
+}
+
 // Message is the openapi ChatMessage.
 type Message struct {
 	ID          string            `json:"id"`
@@ -203,6 +248,7 @@ type Message struct {
 	EscalationSent bool              `json:"escalation_sent,omitempty"` // a message to that role was sent after the draft
 	Refusal        json.RawMessage   `json:"refusal,omitempty"`
 	NextStep       json.RawMessage   `json:"next_step,omitempty"`
+	DatePicker     json.RawMessage   `json:"date_picker,omitempty"`
 }
 
 // attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
@@ -255,7 +301,7 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		}
 		var cards map[string]json.RawMessage
 		_ = json.Unmarshal(rawCards, &cards)
-		m.Escalation, m.Refusal, m.NextStep = cards["escalation"], cards["refusal"], cards["next_step"]
+		m.Escalation, m.Refusal, m.NextStep, m.DatePicker = cards["escalation"], cards["refusal"], cards["next_step"], cards["date_picker"]
 		m.Proposals = restoreProposals(cards["proposals"], rawStatuses)
 		if len(m.Proposals) == 1 {
 			m.Proposal, m.ProposalState, m.Proposals = m.Proposals[0].Proposal, m.Proposals[0].State, nil

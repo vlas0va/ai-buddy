@@ -27,7 +27,7 @@ test('Trip: one message → draft → TRP-… → the lead approves it in «Со
 
   const lead = await (await browser.newContext()).newPage()
   await login(lead, 'lead.dmitry')
-  await lead.getByRole('link', { name: 'Согласования' }).click()
+  await lead.getByRole('link', { name: 'Согласования', exact: true }).click()
   const card = lead.getByLabel('Заявка: Иван Белов').filter({ hasText: 'Командировка' }).filter({ hasText: ddmmyyyy(start) }).first()
   await expect(card).toBeVisible()
   await card.getByRole('button', { name: 'Согласовать' }).click()
@@ -87,14 +87,14 @@ test('Day off: the approved request shows the HR admin and HR BP steps', async (
 
   const lead = await (await browser.newContext()).newPage()
   await login(lead, 'lead.maria')
-  await lead.getByRole('link', { name: 'Согласования' }).click()
+  await lead.getByRole('link', { name: 'Согласования', exact: true }).click()
   const card = lead.getByLabel('Заявка: Анна Котова').filter({ hasText: ddmmyyyy(day).slice(0, 5) }).first()
   await card.getByRole('button', { name: 'Согласовать' }).click()
   await expect(card).toHaveCount(0)
 
   const admin = await (await browser.newContext()).newPage()
   await login(admin, 'hradmin.olga')
-  await admin.getByRole('link', { name: 'Согласования' }).click()
+  await admin.getByRole('link', { name: 'Согласования', exact: true }).click()
   const hrCard = admin.getByLabel('Заявка: Анна Котова').filter({ hasText: ddmmyyyy(day).slice(0, 5) }).first()
   await hrCard.getByRole('button', { name: 'Согласовать' }).click()
   await expect(hrCard).toHaveCount(0)
