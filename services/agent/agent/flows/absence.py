@@ -540,7 +540,7 @@ def handle_withdraw(turn: Turn, text: str) -> Iterator[Event]:
     )
     yield from say(
         f"Подготовил отмену заявки {target['id']}: {t_label.lower()} {_period(target)}. Согласование у руководителя "
-        "и HR-администратора тоже отменится. Нажми «Отправить»."
+        "и HR-администратора тоже отменится. Нажми «Отменить заявку» на карточке — или «Оставить заявку», если передумал."
     )
     yield Event("action_proposal", proposal)
 

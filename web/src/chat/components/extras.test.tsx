@@ -385,3 +385,19 @@ it('organizers 12.11: the access draft shows the justification', () => {
   expect(screen.getByText('задача DLV-12')).toBeInTheDocument()
   expect(screen.getByText('редактирование')).toBeInTheDocument()
 })
+
+it('Rita 13.13: a cancellation card names the outcome — «Отменить заявку» / «Оставить заявку»', async () => {
+  const onConfirm = vi.fn()
+  const onCancel = vi.fn()
+  const p = { proposal_id: 'c1', kind: 'absence_cancel', state: 'pending',
+    draft: { tool: 'absence.cancel_request', args: { id: 'ABS-000100' }, display: { ref_id: 'ABS-000100', type_label: 'Отгул', period_label: '17 ноября (вт)' } } } as never
+  const { rerender } = render(<ActionProposalCard proposal={p} onConfirm={onConfirm} onCancel={onCancel} />)
+  expect(screen.queryByRole('button', { name: 'Отправить' })).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Оставить заявку' }))
+  expect(onCancel).toHaveBeenCalledWith('c1')
+  rerender(<ActionProposalCard proposal={{ ...(p as object), state: 'cancelled' } as never} onConfirm={onConfirm} onCancel={onCancel} />)
+  expect(screen.getByText('Заявка осталась как была — отмена не отправлена.')).toBeInTheDocument()
+  rerender(<ActionProposalCard proposal={{ ...(p as object), state: 'pending' } as never} onConfirm={onConfirm} onCancel={onCancel} />)
+  await userEvent.click(screen.getByRole('button', { name: 'Отменить заявку' }))
+  expect(onConfirm).toHaveBeenCalledWith('c1')
+})

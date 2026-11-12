@@ -99,6 +99,7 @@ export function ActionProposalCard({ proposal, disabled, onConfirm, onCancel }: 
   const { state } = proposal
   const confirming = state === 'confirming'
   const finished = state === 'confirmed' || state === 'cancelled'
+  const withdraw = proposal.kind === 'absence_cancel'
   return (
     <Card className="chat-card" aria-label="Черновик заявки">
       <h3>{TITLE[proposal.kind]}</h3>
@@ -110,15 +111,18 @@ export function ActionProposalCard({ proposal, disabled, onConfirm, onCancel }: 
           </div>
         ))}
       </dl>
-      {state === 'cancelled' && <p className="hint">Заявка отменена, ничего не отправлено.</p>}
-      {state === 'confirmed' && <p className="hint">Заявка отправлена.</p>}
+      {/* Rita 13.13: «Отменить» on a cancellation card read as «cancel the request» — the labels name the outcome */}
+      {state === 'cancelled' && (
+        <p className="hint">{withdraw ? 'Заявка осталась как была — отмена не отправлена.' : 'Черновик закрыт, ничего не отправлено.'}</p>
+      )}
+      {state === 'confirmed' && <p className="hint">{withdraw ? 'Отмена отправлена.' : 'Заявка отправлена.'}</p>}
       {!finished && (
         <div className="chat-actions">
           <Button loading={confirming} disabled={disabled && !confirming} onClick={() => onConfirm(proposal.proposal_id)}>
-            Отправить
+            {withdraw ? 'Отменить заявку' : 'Отправить'}
           </Button>
           <Button variant="secondary" disabled={confirming || disabled} onClick={() => onCancel(proposal.proposal_id)}>
-            Отменить
+            {withdraw ? 'Оставить заявку' : 'Не отправлять'}
           </Button>
         </div>
       )}
