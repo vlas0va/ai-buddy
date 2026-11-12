@@ -34,6 +34,8 @@ RESCHEDULE = re.compile(
     r"перенес|перенос|сдвин|подвин|(измен|поменя|помен|смен)\w*\s+(\w+\s+){0,2}(дат|отгул|отпуск|заявк|отсутств|декрет)"
 )
 ABS_ID = re.compile(r"\babs-(\d+)\b", re.IGNORECASE)
+WITHDRAW = re.compile(r"(отмен|отзов|отозв|аннулир)\w*\s+(\w+\s+){0,2}(о+тгул|отпуск|заявк|отсутств|декрет|abs-)")
+OPEN = ("pending_approval", "pending_hr")
 MAX_DOCUMENTS = 3
 DATE_HINT = "Например: «в пятницу», «завтра» или «с 16 по 17 ноября»."
 NOTICE_WORKING_DAYS = 3  # feedback 12.11: «отгул берётся не позже чем за 3 дня»
@@ -64,7 +66,22 @@ def bare_day(text: str) -> DateRange | None:
     return None
 
 
-def date_picker(kind: str, purpose: str = "absence", ref_id: str = "") -> Event:
+def busy_ranges(turn: Turn) -> list[dict[str, str]]:
+    """The user's open and approved requests: the calendar marks those days (feedback 12.13)."""
+    try:
+        reqs = items(turn.gateway.read("absence.list_my_requests"))
+    except Exception:  # noqa: BLE001 - the calendar works without them
+        return []
+    return [
+        {"start": r["start_date"], "end": r["end_date"], "label": f"{type_label(r.get('type', 'day_off'))} {r['id']}"}
+        for r in reqs
+        if r.get("status") in (*OPEN, "approved")
+    ][:20]
+
+
+def date_picker(
+    kind: str, purpose: str = "absence", ref_id: str = "", busy: list[dict[str, str]] | None = None, label: str = ""
+) -> Event:
     """A calendar under the answer (feedback 12.11): the user picks the dates instead of typing them."""
     today = clock.today()
     earliest = {"vacation": today + timedelta(days=14), "parental_leave": today}.get(kind, today + timedelta(days=1))
@@ -77,7 +94,8 @@ def date_picker(kind: str, purpose: str = "absence", ref_id: str = "") -> Event:
             "ref_id": ref_id,
             "min": earliest.isoformat(),
             "max": (today + timedelta(days=365)).isoformat(),
-            "label": ("Новые даты " if purpose == "reschedule" else "Даты ") + labels.get(kind, "отгула"),
+            "label": label or ("Новые даты " if purpose == "reschedule" else "Даты ") + labels.get(kind, "отгула"),
+            "busy": busy or [],
         },
     )
 
@@ -170,7 +188,7 @@ def _explain_type(turn: Turn, kind: str) -> Iterator[Event]:
         f"{facts}Как оформить: {PROCESS} Первым согласует {approver}. {TYPE_RULES[kind]}\n\n"
         f"Выбери даты {TYPE_GENITIVE[kind]} в календаре ниже или напиши их. {DATE_HINTS[kind]}"
     )
-    yield date_picker(kind)
+    yield date_picker(kind, busy=busy_ranges(turn))
 
 
 def _explain(turn: Turn) -> Iterator[Event]:
@@ -187,7 +205,7 @@ def _explain(turn: Turn) -> Iterator[Event]:
         f"(даже если руководитель уже согласовал), даты можно поменять.\n\n"
         f"Выбери даты в календаре ниже или напиши, например, «в пятницу»."
     )
-    yield date_picker("day_off")
+    yield date_picker("day_off", busy=busy_ranges(turn))
 
 
 def _other_type(turn: Turn, text: str) -> Iterator[Event]:
@@ -276,6 +294,9 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     st: dict[str, Any] = state.get("absence") or {"slots": {}, "step": "collect", "explained": False}
     t = normalize(text)
 
+    if WITHDRAW.search(t):
+        yield from handle_withdraw(turn, text)
+        return
     if CANCEL.search(t):
         turn.clear_state()
         yield from say("Хорошо, черновик отменил. Если понадобится отгул или отпуск — просто напиши даты.")
@@ -313,10 +334,11 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
             yield from (_explain(turn) if kind == "day_off" else _explain_type(turn, kind))
         else:
             yield from say("Не получилось понять даты — выбери их в календаре ниже.")
-            yield date_picker(kind)
+            yield date_picker(kind, busy=busy_ranges(turn))
         return
 
     label = type_label(kind)
+    replaces: tuple[str, str] | None = None
     yield status("calling_service", "Проверяю даты в сервисе отсутствий")
     args: dict[str, Any] = {"type": kind, "start_date": rng.start.isoformat(), "end_date": rng.end.isoformat()}
     if docs:
@@ -326,28 +348,76 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     if not check.get("valid"):
         st["step"] = "collect"
         turn.save_state({**state, "absence": st})
-        problems = " ".join(check.get("problems", []))
+        problems = _sentences(check.get("problems", []))
         overlap = ABS_ID.search(problems)
-        if overlap:  # the same dates as an open request of the user: offer to move that request instead
+        if overlap:
+            reqs = items(turn.gateway.read("absence.list_my_requests"))
             ref = f"ABS-{overlap.group(1)}"
-            yield from say(
-                f"{label} {human_range(rng)} оформить не получится: {problems} Если хочешь поменять даты заявки "
-                f"{ref}, выбери новые даты ниже — пока HR-администратор не согласовал, перенос возможен."
+            other = next((r for r in reqs if r["id"].upper() == ref), None)
+            inside = (
+                other is not None
+                and rng.start.isoformat() <= other["start_date"]
+                and other["end_date"] <= rng.end.isoformat()
             )
-            yield date_picker(kind, "reschedule", ref)
+            o_days = (
+                (date.fromisoformat(other["end_date"]) - date.fromisoformat(other["start_date"])).days if other else 0
+            )
+            longer = other is not None and (other.get("type", "day_off") != kind or (rng.end - rng.start).days > o_days)
+            if other is not None and other.get("status") in OPEN and inside and longer:
+                # feedback 12.13: a longer absence covers a pending request — it replaces that request in one step
+                check2 = turn.gateway.read("absence.validate_request", **args, exclude_id=ref)
+                o_label = f"{type_label(other.get('type', 'day_off')).lower()} {_period(other)}"
+                if check2.get("valid"):
+                    replaces = (ref, o_label)
+                    check = check2
+                else:
+                    rest = _sentences(check2.get("problems", []))
+                    yield from say(
+                        f"{label} {human_range(rng)} пока не оформить: {rest} Заявка {ref} ({o_label}) попадает внутрь "
+                        f"новых дат — когда всё будет готово, я её отменю автоматически, отдельно отменять не нужно."
+                    )
+                    if kind == "parental_leave" and not docs:
+                        yield from say(" Приложи заявление скрепкой и снова отправь даты.")
+                    else:
+                        yield date_picker(kind, busy=busy_ranges(turn))
+                    return
+            elif other is not None and other.get("status") == "approved":
+                yield from say(
+                    f"{label} {human_range(rng)} оформить не получится: {problems} Заявка {ref} уже согласована — "
+                    "отменить или изменить её может только HR-администратор, напиши ему. Или выбери другие даты ниже."
+                )
+                yield date_picker(kind, busy=busy_ranges(turn))
+                return
+            else:  # a partial overlap with an open request: move that request, or pick other dates
+                o_kind = (other or {}).get("type", "day_off")
+                yield from say(
+                    f"{label} {human_range(rng)} оформить не получится: {problems} Можно перенести заявку {ref} "
+                    f"({type_label(o_kind).lower()}) — выбери для неё новые даты ниже: пока HR-администратор не "
+                    "согласовал, перенос возможен. Или напиши другие даты для новой заявки."
+                )
+                yield date_picker(
+                    o_kind,
+                    "reschedule",
+                    ref,
+                    busy=busy_ranges(turn),
+                    label=f"Новые даты: {type_label(o_kind).lower()} {ref}",
+                )
+                return
+        if not overlap or check.get("valid") is not True:
+            yield from say(
+                f"{label} {human_range(rng)} оформить не получится: {problems} "
+                f"Выбери другие даты{' или приложи документ' if kind == 'parental_leave' and not docs else ''} "
+                "в календаре ниже."
+            )
+            yield date_picker(kind, busy=busy_ranges(turn))
             return
-        yield from say(
-            f"{label} {human_range(rng)} оформить не получится: {problems} "
-            f"Выбери другие даты{' или приложи документ' if kind == 'parental_leave' and not docs else ''} "
-            "в календаре ниже."
-        )
-        yield date_picker(kind)
-        return
 
     approver_name = check.get("approver_display_name") or (turn.contact("lead") or {}).get("name") or ""
     days = working_days(rng.start, rng.end)
     calendar_days = (rng.end - rng.start).days + 1
     write_args = {**args, "comment": ""}
+    if replaces:
+        write_args["replaces"] = replaces[0]
     dates = rng.start.strftime("%d.%m.%Y") if rng.single else f"{rng.start:%d.%m.%Y}–{rng.end:%d.%m.%Y}"
     display: dict[str, Any] = {
         "approver_display_name": approver_name,
@@ -360,6 +430,8 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     }
     if kind != "day_off":
         display["calendar_days"] = calendar_days
+    if replaces:
+        display["replaces"] = f"{replaces[0]} ({replaces[1]}) — будет отменена"
     summary = f"{label} {human_range(rng)}"
     proposal = turn.make_proposal(
         "absence_request",
@@ -382,11 +454,93 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
     length = f"рабочих дней: {days}" if kind == "day_off" else f"календарных дней: {calendar_days}"
     doc_line = f" Документы: {', '.join(d['name'] for d in docs)}." if docs else ""
     mentor = first_name(turn.contact("mentor"), "")
+    replace_line = (
+        f" Заявка {replaces[0]} ({replaces[1]}) попадает внутрь — после отправки она отменится сама."
+        if replaces
+        else ""
+    )
     yield from say(
-        f"Подготовил черновик: {label.lower()} {human_range(rng)}, {length}.{doc_line} "
+        f"Подготовил черновик: {label.lower()} {human_range(rng)}, {length}.{doc_line}{replace_line} "
         f"Согласует {approver_name or 'руководитель'}, затем HR-администратор. Проверь и нажми «Отправить».{notice} "
         f"Если отсутствие влияет на задачи, предупреди наставника{(' (' + mentor + ')') if mentor else ''} — могу "
         f"подготовить сообщение."
+    )
+    clash = _plan_clashes(turn, rng)
+    if clash:
+        yield from say(f"\n\n{clash}")
+    yield Event("action_proposal", proposal)
+
+
+def _sentences(problems: list[str]) -> str:
+    """«a; b» → «A. B.»: problems from the service read as sentences (feedback 12.13)."""
+    out = [p.strip().rstrip(".") for p in problems if p.strip()]
+    return " ".join(f"{p[0].upper()}{p[1:]}." for p in out)
+
+
+def _plan_clashes(turn: Turn, rng: DateRange) -> str:
+    """Feedback 12.13: plan tasks due within the absence — say so before the request goes out."""
+    hit = [
+        t
+        for t in turn.user.tasks
+        if t.due_at
+        and t.status != "done"
+        and not t.parent_task_id
+        and rng.start.isoformat() <= t.due_at[:10] <= rng.end.isoformat()
+    ]
+    if not hit:
+        return ""
+    names = "; ".join(f"«{t.title}» (до {date.fromisoformat(t.due_at[:10]):%d.%m})" for t in hit[:3])
+    return f"Обрати внимание: в эти даты срок задач плана — {names}. Обсуди с наставником, перенести срок или закрыть раньше."
+
+
+def handle_withdraw(turn: Turn, text: str) -> Iterator[Event]:
+    """«отмени заявку на отгул» (feedback 12.13): a request the HR admin has not approved can be withdrawn."""
+    yield status("calling_service", "Смотрю заявки в сервисе отсутствий")
+    reqs = items(turn.gateway.read("absence.list_my_requests"))
+    m = ABS_ID.search(text)
+    kind = detect_type(text) or ("day_off" if re.search(r"о+тгул", normalize(text)) else None)
+    if m:
+        cands = [r for r in reqs if r["id"].upper() == f"ABS-{m.group(1)}"]
+    else:
+        cands = [r for r in reqs if r["status"] in OPEN and kind in (None, r.get("type", "day_off"))]
+    if not cands:
+        yield from say(
+            "Не нашёл заявку, которую можно отменить: отменить можно заявку, которую HR-администратор ещё не согласовал. "
+            "Напиши «мои заявки», чтобы посмотреть статусы."
+        )
+        return
+    if len(cands) > 1:
+        lines = "\n".join(
+            f"- {r['id']}: {type_label(r.get('type', 'day_off')).lower()} {_period(r)}" for r in cands[:5]
+        )
+        yield from say(f"Какую заявку отменить? Напиши номер, например «отмени заявку {cands[0]['id']}»:\n{lines}")
+        return
+    target = cands[0]
+    t_label = type_label(target.get("type", "day_off"))
+    if target["status"] not in OPEN:
+        yield from say(
+            f"Заявку {target['id']} уже нельзя отменить через меня: {STATUS_LABELS.get(target['status'], target['status']).lower()}. "
+            "Согласованную заявку отменяет HR-администратор — напиши ему."
+        )
+        return
+    display = {
+        "ref_id": target["id"],
+        "type": target.get("type", "day_off"),
+        "type_label": t_label,
+        "period_label": _period(target),
+    }
+    proposal = turn.make_proposal(
+        "absence_cancel",
+        "absence.cancel_request",
+        {"id": target["id"]},
+        f"Отмена заявки {target['id']}",
+        f"Отмена: {t_label.lower()} {_period(target)}",
+        display,
+        requires_approval=False,
+    )
+    yield from say(
+        f"Подготовил отмену заявки {target['id']}: {t_label.lower()} {_period(target)}. Согласование у руководителя "
+        "и HR-администратора тоже отменится. Нажми «Отправить»."
     )
     yield Event("action_proposal", proposal)
 
@@ -422,7 +576,13 @@ def handle_reschedule(turn: Turn, text: str) -> Iterator[Event]:
             f"На какие даты перенести заявку {target['id']}? Выбери их в календаре ниже — после переноса заявку снова "
             "согласуют руководитель и HR-администратор."
         )
-        yield date_picker(t_kind, "reschedule", target["id"])
+        yield date_picker(
+            t_kind,
+            "reschedule",
+            target["id"],
+            busy=busy_ranges(turn),
+            label=f"Новые даты: {type_label(t_kind).lower()} {target['id']}",
+        )
         return
     args = {"id": target["id"], "start_date": rng.start.isoformat(), "end_date": rng.end.isoformat()}
     check = turn.gateway.read(
@@ -436,7 +596,7 @@ def handle_reschedule(turn: Turn, text: str) -> Iterator[Event]:
     label = type_label(t_kind)
     if not check.get("valid"):
         yield from say(
-            f"Перенести {label.lower()} на {human_range(rng)} не получится: {' '.join(check.get('problems', []))} "
+            f"Перенести {label.lower()} на {human_range(rng)} не получится: {_sentences(check.get('problems', []))} "
             "Выбери другие даты."
         )
         return
@@ -492,4 +652,16 @@ def reschedule_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, An
         "approver_display_name": r.get("approver_display_name", ""),
         "summary": f"{label} {_period(r)} (перенос)",
         "followup": "Даты перенесены. Заявку снова согласует руководитель, затем HR-администратор.",
+    }
+
+
+def cancel_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
+    label = type_label(r.get("type", "day_off"))
+    return {
+        "external_id": r["id"],
+        "status": r["status"],
+        "status_label": STATUS_LABELS.get(r["status"], "Отменена"),
+        "approver_display_name": r.get("approver_display_name", ""),
+        "summary": f"{label} {_period(r)} (отменена)",
+        "followup": "Заявка отменена, согласование у руководителя и HR-администратора тоже. Задача ушла из плана.",
     }

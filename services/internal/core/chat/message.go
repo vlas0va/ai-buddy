@@ -31,6 +31,7 @@ var allowedTools = map[string]string{
 	"trip_request":       mcpclient.ToolCreateTrip,
 	"consent":            mcpclient.ToolSignConsent,
 	"absence_reschedule": mcpclient.ToolReschedule,
+	"absence_cancel":     mcpclient.ToolCancelAbsence,
 	kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
 }
 

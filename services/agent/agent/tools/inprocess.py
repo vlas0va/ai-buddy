@@ -30,6 +30,7 @@ TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
     "absence.create_request": {"intern", "mentor", "lead"},
     "absence.get_request": {"intern", "mentor", "lead"},
     "absence.reschedule_request": {"intern", "mentor", "lead"},
+    "absence.cancel_request": {"intern", "mentor", "lead"},
     "approvals.list_pending": {"lead", "hr_admin"},
     "approvals.decide": {"lead", "hr_admin"},
     "access.list_required": {"intern", "mentor"},
@@ -58,10 +59,12 @@ ALLOWED_ARGS = {
         "end_date",
         "comment",
         "documents",
+        "replaces",
         "idempotency_key",
         "confirmation_token",
     },
     "absence.reschedule_request": {"id", "start_date", "end_date", "idempotency_key", "confirmation_token"},
+    "absence.cancel_request": {"id", "idempotency_key", "confirmation_token"},
     "absence.get_request": {"id"},
     "approvals.decide": {"approval_id", "decision", "comment", "idempotency_key", "confirmation_token"},
     "access.request_access": {"resource_id", "reason", "environment", "level", "idempotency_key", "confirmation_token"},
@@ -419,9 +422,22 @@ class MockServices:
         key = f"absence:{a['idempotency_key']}"
         if (replay := self._replay(key)) is not None:
             return replay
-        v = self._validate(c, a)
+        old = None
+        if a.get("replaces"):  # feedback 12.13: a longer absence over a pending request replaces it
+            old = next((r for r in self.absences if r["id"] == a["replaces"]), None)
+            if old is None or old["employee_id"] != c["sub"]:
+                raise ToolDenied("Операция недоступна.")
+            if old["status"] not in ("pending_approval", "pending_hr"):
+                raise ToolValidationError(
+                    "Заменить можно только заявку, которую HR-администратор ещё не согласовал.", code="conflict"
+                )
+            if old["start_date"] < a["start_date"] or old["end_date"] > a["end_date"]:
+                raise ToolValidationError("Заменяемая заявка должна целиком попадать в новые даты.")
+        v = self._validate(c, {**a, "exclude_id": old["id"]} if old else a)
         if not v["valid"]:
             raise ToolValidationError(" ".join(v["problems"]))
+        if old:
+            self._cancel(old)
         approver = v.get("approver_id") or ""
         rec = {
             "id": self._next_id("ABS"),
@@ -439,6 +455,32 @@ class MockServices:
         if approver:
             self._open_approval("absence_request", rec["id"], c["sub"], approver, self._abs_summary(rec))
         result = {**self._absence_view(rec), "replayed": False}
+        if old:
+            result["replaced_id"] = old["id"]
+        self.idempotency[key] = result
+        return result
+
+    def _cancel(self, r: dict[str, Any]) -> None:
+        r.update(status="cancelled", decided_at=_now_iso())
+        for p in self.approvals:
+            if p["kind"] == "absence_request" and p["ref_id"] == r["id"] and p["status"] == "pending":
+                p["status"] = "cancelled"
+
+    def t_absence__cancel_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+        """Withdraw a request until the HR admin approves it (= B's absence.cancelRequest, feedback 12.13)."""
+        self._check_confirmation(c, a)
+        key = f"cancel:{a['idempotency_key']}"
+        if (replay := self._replay(key)) is not None:
+            return replay
+        r = next((r for r in self.absences if r["id"] == a.get("id")), None)
+        if r is None or r["employee_id"] != c["sub"]:
+            raise ToolDenied("Операция недоступна.")
+        if r["status"] not in ("pending_approval", "pending_hr"):
+            raise ToolValidationError(
+                "Отменить можно только заявку, которую HR-администратор ещё не согласовал.", code="conflict"
+            )
+        self._cancel(r)
+        result = {**self._absence_view(r), "replayed": False}
         self.idempotency[key] = result
         return result
 
@@ -480,14 +522,36 @@ class MockServices:
             "requester_display_name": self.name(p["requester_id"]),
         }
 
+    def _team_absent(self, ref_id: str) -> list[str]:
+        """= B's approvals.teamAbsent (feedback 12.13): teammates away on the same days."""
+        r = next((x for x in self.absences if x["id"] == ref_id), None)
+        if r is None:
+            return []
+        team = self.employees.get(r["employee_id"], {}).get("team_id")
+        labels = {"day_off": "отгул", "vacation": "отпуск", "absence": "отсутствие", "parental_leave": "декрет"}
+        out = []
+        for o in self.absences:
+            if (
+                o["employee_id"] != r["employee_id"]
+                and o["status"] in ("pending_approval", "pending_hr", "approved")
+                and self.employees.get(o["employee_id"], {}).get("team_id") == team
+                and o["start_date"] <= r["end_date"]
+                and o["end_date"] >= r["start_date"]
+            ):
+                s, e = o["start_date"], o["end_date"]
+                when = f"{s[8:10]}.{s[5:7]}" + ("" if s == e else f"–{e[8:10]}.{e[5:7]}")
+                out.append(f"{self.name(o['employee_id'])}: {labels.get(o.get('type', 'day_off'), 'отгул')} {when}")
+        return out[:5]
+
     def t_approvals__list_pending(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "items": [
-                self._approval_view(p)
-                for p in self.approvals
-                if p["approver_id"] == c["sub"] and p["status"] == "pending"
-            ]
-        }
+        out = []
+        for p in self.approvals:
+            if p["approver_id"] == c["sub"] and p["status"] == "pending":
+                v = self._approval_view(p)
+                if p["kind"] == "absence_request" and (absent := self._team_absent(p["ref_id"])):
+                    v["team_absent"] = absent
+                out.append(v)
+        return {"items": out}
 
     def t_approvals__decide(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         self._check_confirmation(c, a)

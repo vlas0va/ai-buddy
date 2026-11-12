@@ -23,31 +23,35 @@ const wrap = (ui: ReactNode) => {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
 }
 
-describe('Feedback 12.11: calendar for absence dates', () => {
-  it('one day and a range are sent as ordinary messages, then the card locks', async () => {
+describe('Feedback 12.11 / 12.13: a pop-up calendar for absence dates', () => {
+  const picker = { purpose: 'absence' as const, kind: 'day_off', label: 'Даты отгула', min: '2026-11-13', max: '2027-11-13' }
+
+  it('first day, then last day in a small calendar; a range is sent as a message and the card locks', async () => {
     const onPick = vi.fn()
-    wrap(<DatePickerCard picker={{ purpose: 'absence', kind: 'day_off', label: 'Даты отгула', min: '2026-11-13', max: '2027-11-13' }} onPick={onPick} />)
+    wrap(<DatePickerCard picker={{ ...picker, busy: [{ start: '2026-11-20', end: '2026-11-20', label: 'Отгул ABS-000100' }] }} onPick={onPick} />)
     const send = screen.getByRole('button', { name: 'Выбрать даты' })
     expect(send).toBeDisabled()
-    await userEvent.type(screen.getByLabelText('Дата начала'), '2026-11-16')
-    await userEvent.type(screen.getByLabelText('Дата окончания'), '2026-11-17')
+    await userEvent.click(screen.getByRole('button', { name: /Выбери даты/ }))
+    expect(screen.getByRole('button', { name: '12 ноября 2026' })).toBeDisabled() // before min
+    expect(screen.getByRole('button', { name: '20 ноября 2026, занято: Отгул ABS-000100' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '16 ноября 2026' }))
+    await userEvent.click(screen.getByRole('button', { name: '17 ноября 2026' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // closed once the range is complete
     await userEvent.click(send)
     expect(onPick).toHaveBeenCalledWith('с 16.11.2026 по 17.11.2026')
     expect(screen.getByText(/Даты отправлены/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Дата начала')).toBeDisabled()
   })
 
-  it('a reschedule names the request', async () => {
+  it('a reschedule names the request; one day is enough; the month can be switched', async () => {
     const onPick = vi.fn()
-    wrap(
-      <DatePickerCard
-        picker={{ purpose: 'reschedule', kind: 'day_off', ref_id: 'ABS-000100', label: 'Новые даты отгула', min: '2026-11-13', max: '2027-11-13' }}
-        onPick={onPick}
-      />,
-    )
-    await userEvent.type(screen.getByLabelText('Дата начала'), '2026-11-18')
+    wrap(<DatePickerCard picker={{ ...picker, purpose: 'reschedule', ref_id: 'ABS-000100', label: 'Новые даты: отгул ABS-000100' }} onPick={onPick} />)
+    await userEvent.click(screen.getByRole('button', { name: /Выбери даты/ }))
+    expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))
+    await userEvent.click(screen.getByRole('button', { name: '2 декабря 2026' }))
+    await userEvent.keyboard('{Escape}')
     await userEvent.click(screen.getByRole('button', { name: 'Перенести на эти даты' }))
-    expect(onPick).toHaveBeenCalledWith('перенеси заявку ABS-000100 на 18.11.2026')
+    expect(onPick).toHaveBeenCalledWith('перенеси заявку ABS-000100 на 02.12.2026')
   })
 })
 

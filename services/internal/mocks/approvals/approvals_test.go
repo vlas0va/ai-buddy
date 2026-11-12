@@ -47,6 +47,10 @@ func TestListPending_S3_S4_OnlyCallerAsApprover_R71(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, first.CreatedAt); err != nil {
 		t.Fatalf("created_at %q", first.CreatedAt)
 	}
+	// feedback 12.13: the lead sees that Олег (same team) is away on the same day; another team's people are not listed
+	if len(first.TeamAbsent) != 1 || first.TeamAbsent[0] != "Олег Мартынов: отгул 10.11" {
+		t.Fatalf("team absent %v", first.TeamAbsent)
+	}
 	if got.Items[1].Summary != "Доступ: Закрытое пространство инцидентов «Доставки»" {
 		t.Fatalf("access summary %q", got.Items[1].Summary)
 	}

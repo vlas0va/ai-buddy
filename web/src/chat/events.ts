@@ -15,7 +15,7 @@ export type Draft = z.infer<typeof draftSchema>
 
 export const proposalSchema = z.object({
   proposal_id: z.string(),
-  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule', 'absence_cancel']),
   draft: draftSchema,
   summary: z.string().optional(),
 })
@@ -23,7 +23,7 @@ export type Proposal = z.infer<typeof proposalSchema>
 
 export const resultSchema = z.object({
   action_id: z.string(),
-  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule']),
+  kind: z.enum([...ACTION_KINDS, 'approval_decision', 'absence_reschedule', 'absence_cancel']),
   external_id: z.string().nullable().optional(),
   status: z.enum(ACTION_STATUSES),
   summary: z.string().optional(),
@@ -61,6 +61,8 @@ export const datePickerSchema = z.object({
   min: z.string(),
   max: z.string(),
   label: z.string(),
+  /** feedback 12.13: the user's open and approved requests, marked in the calendar */
+  busy: z.array(z.object({ start: z.string(), end: z.string(), label: z.string() })).optional(),
 })
 export type DatePicker = z.infer<typeof datePickerSchema>
 

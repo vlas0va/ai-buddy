@@ -58,6 +58,7 @@ func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error 
 	srv.Handle("create_request", s.createRequest)
 	srv.Handle("get_request", s.getRequest)
 	srv.Handle("reschedule_request", s.rescheduleRequest)
+	srv.Handle("cancel_request", s.cancelRequest)
 	return nil
 }
 
@@ -86,10 +87,13 @@ type request struct {
 	Documents           []document `json:"documents"`
 	Steps               []step     `json:"steps"`
 	Replayed            *bool      `json:"replayed,omitempty"`
+	// ReplacedID: a pending request inside the new dates that create_request cancelled (feedback 12.13)
+	ReplacedID string `json:"replaced_id,omitempty"`
 
 	employeeID     string
 	idempotencyKey string
 	rescheduleKey  string
+	cancelKey      string
 }
 
 // document is the metadata of a file attached to a request; its content never reaches the service.
@@ -112,7 +116,7 @@ const selectRequest = `
 SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
        coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
        r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at,
-       r.documents, r.lead_decided_at, coalesce(r.reschedule_key::text, '')
+       r.documents, r.lead_decided_at, coalesce(r.reschedule_key::text, ''), coalesce(r.cancel_key::text, '')
 FROM absence.requests r
 LEFT JOIN directory.employees a ON a.id = r.approver_id
 LEFT JOIN directory.employees emp ON emp.id = r.employee_id
@@ -132,7 +136,7 @@ func scanRequest(row pgx.CollectableRow) (request, error) {
 	)
 	err := row.Scan(&r.ID, &r.Type, &start, &end, &r.Comment, &r.Status, &r.ApproverID, &r.ApproverDisplayName,
 		&created, &r.employeeID, &r.idempotencyKey, &decided, &hrAdmin, &registered, &hrbp, &notified,
-		&docs, &leadDecided, &r.rescheduleKey)
+		&docs, &leadDecided, &r.rescheduleKey, &r.cancelKey)
 	r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
 	r.CreatedAt = created.UTC().Format(time.RFC3339)
 	if json.Unmarshal(docs, &r.Documents) != nil || r.Documents == nil {
@@ -465,6 +469,7 @@ type createIn struct {
 	dates
 	Comment        string `json:"comment"`
 	IdempotencyKey string `json:"idempotency_key"`
+	Replaces       string `json:"replaces"` // a pending request of the caller inside the new dates: cancelled in the same step
 }
 
 // createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead)
@@ -490,15 +495,38 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
 	if found {
 		return replay(prev, c, in)
 	}
-	check, err := s.validate(ctx, tx, c, in.dates)
+	if in.ExcludeID != "" {
+		return nil, apierr.Validation().WithMessage("exclude_id используется только при проверке переноса")
+	}
+	d := in.dates
+	if in.Replaces != "" {
+		// feedback 12.13: a vacation or a parental leave that covers a pending day off replaces it
+		old, ok, err := findRequest(ctx, tx, "r.id = $1", in.Replaces)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || old.employeeID != c.Sub {
+			return nil, forbiddenRequest()
+		}
+		if old.Status != "pending_approval" && old.Status != "pending_hr" {
+			return nil, apierr.Conflict().WithMessage("Заменить можно только заявку, которую HR-администратор ещё не согласовал")
+		}
+		if old.StartDate < in.StartDate || old.EndDate > in.EndDate {
+			return nil, apierr.Validation().WithMessage("Заменяемая заявка должна целиком попадать в новые даты")
+		}
+		d.ExcludeID = old.ID
+	}
+	check, err := s.validate(ctx, tx, c, d)
 	if err != nil {
 		return nil, err
 	}
 	if !check.Valid {
-		return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
+		return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, ". "))
 	}
-	if in.ExcludeID != "" {
-		return nil, apierr.Validation().WithMessage("exclude_id используется только при проверке переноса")
+	if in.Replaces != "" {
+		if err := cancelInTx(ctx, tx, in.Replaces, ""); err != nil {
+			return nil, err
+		}
 	}
 	docs, _ := json.Marshal(nonNilDocs(in.Documents))
 	var id string
@@ -527,7 +555,75 @@ VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, typeLa
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 	created.Replayed = new(bool)
+	created.ReplacedID = in.Replaces
 	return created, nil
+}
+
+// --- cancel_request ---
+
+type cancelIn struct {
+	ID             string `json:"id"`
+	IdempotencyKey string `json:"idempotency_key"`
+}
+
+// cancelRequest withdraws the caller's request while the HR admin has not approved it (feedback 12.13): the request
+// becomes cancelled and its open approval items disappear from «Согласования». A repeated key returns it again.
+func (s *service) cancelRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
+	var in cancelIn
+	if err := mcpx.DecodeArgs(args, &in); err != nil {
+		return nil, err
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil {
+		return nil, fmt.Errorf("lock employee: %w", err)
+	}
+	r, ok, err := findRequest(ctx, tx, "r.id = $1", in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if !ok || r.employeeID != c.Sub {
+		return nil, forbiddenRequest()
+	}
+	if r.cancelKey == in.IdempotencyKey && r.Status == "cancelled" {
+		replayed := true
+		r.Replayed = &replayed
+		return r, nil
+	}
+	if r.Status != "pending_approval" && r.Status != "pending_hr" {
+		return nil, apierr.Conflict().WithMessage("Отменить можно только заявку, которую HR-администратор ещё не согласовал. " +
+			"Согласованную заявку отменяет HR-администратор — напиши ему.")
+	}
+	if err := cancelInTx(ctx, tx, r.ID, in.IdempotencyKey); err != nil {
+		return nil, err
+	}
+	out, _, err := findRequest(ctx, tx, "r.id = $1", r.ID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	out.Replayed = new(bool)
+	return out, nil
+}
+
+func cancelInTx(ctx context.Context, tx pgx.Tx, id, key string) error {
+	if _, err := tx.Exec(ctx, `UPDATE absence.requests SET status = 'cancelled', decided_at = now(),
+    cancel_key = coalesce(nullif($2, '')::uuid, cancel_key) WHERE id = $1`, id, key); err != nil {
+		if isUniqueViolation(err) {
+			return keyConflict()
+		}
+		return fmt.Errorf("cancel absence request: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE approvals.items SET status = 'cancelled', decided_at = now()
+WHERE kind = 'absence_request' AND ref_id = $1 AND status = 'pending'`, id); err != nil {
+		return fmt.Errorf("cancel approval items: %w", err)
+	}
+	return nil
 }
 
 // replay returns the stored request for a repeated key, or conflict when the key was used for other arguments.
@@ -597,7 +693,7 @@ func (s *service) rescheduleRequest(ctx context.Context, c mcpx.Caller, args jso
 		return nil, err
 	}
 	if !check.Valid {
-		return nil, apierr.Validation().WithMessage("Перенести нельзя: " + strings.Join(check.Problems, "; "))
+		return nil, apierr.Validation().WithMessage("Перенести нельзя: " + strings.Join(check.Problems, ". "))
 	}
 	_, err = tx.Exec(ctx, `
 UPDATE absence.requests SET start_date = $2::date, end_date = $3::date, status = 'pending_approval',

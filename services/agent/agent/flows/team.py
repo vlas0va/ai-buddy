@@ -98,6 +98,7 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
     stage = {"hr_admin": " (этап HR-администратора)"}
     lines = [
         f"- {p['ref_id']}: {p.get('requester_display_name', '')} — {p['summary']}{stage.get(p.get('stage', ''), '')}"
+        + (f" (в эти дни отсутствуют: {'; '.join(p['team_absent'])})" if p.get("team_absent") else "")
         for p in pending
     ]
     yield from say(

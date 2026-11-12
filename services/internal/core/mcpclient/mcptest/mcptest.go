@@ -93,7 +93,7 @@ func New(t testing.TB, jwtSecret, confirmationSecret []byte) *Server {
 	for name, tools := range map[string]map[string]mcpx.HandlerFunc{
 		"absence": {
 			"get_policy": s.getPolicy, "list_my_requests": s.listMyRequests, "validate_request": s.validateRequest,
-			"create_request": s.createRequest, "get_request": s.getRequest, "reschedule_request": s.rescheduleRequest,
+			"create_request": s.createRequest, "get_request": s.getRequest, "reschedule_request": s.rescheduleRequest, "cancel_request": s.cancelRequest,
 		},
 		"access": {
 			"list_required": s.listRequired, "list_my_access": s.listMyAccess, "list_team_channels": s.listTeamChannels,
@@ -215,6 +215,34 @@ func (s *Server) addApproval(kind, ref, requester, approver, summary string) {
 
 // HRAdmin is the HR admin who decides the second stage of an absence request.
 const HRAdmin = "hradmin.olga"
+
+// cancelRequest withdraws the caller's request while the HR admin has not approved it.
+func (s *Server) cancelRequest(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
+	var in struct {
+		ID string `json:"id"`
+	}
+	if err := mcpx.DecodeArgs(args, &in); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.absence {
+		if r.res.ID != in.ID || r.owner != c.Sub {
+			continue
+		}
+		if r.res.Status != "pending_approval" && r.res.Status != "pending_hr" {
+			return nil, apierr.Conflict().WithMessage("Отменить можно только заявку, которую HR-администратор ещё не согласовал")
+		}
+		r.res.Status = "cancelled"
+		for _, a := range s.approvals {
+			if a.res.RefID == in.ID && a.res.Status == "pending" {
+				a.res.Status = "cancelled"
+			}
+		}
+		return r.res, nil
+	}
+	return nil, apierr.Forbidden()
+}
 
 // rescheduleRequest moves the caller's request while the HR admin has not approved it; approval starts again.
 func (s *Server) rescheduleRequest(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {

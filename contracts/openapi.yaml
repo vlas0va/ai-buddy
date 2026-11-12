@@ -886,7 +886,7 @@ components:
         external_id: { type: ["string", "null"], examples: [ABS-000123, TRP-000200, CNS-000300] }
         status:
           type: string
-          enum: [pending_approval, pending_hr, approved, rejected, granted, created, failed, signed]
+          enum: [pending_approval, pending_hr, approved, rejected, granted, created, failed, signed, cancelled]
           description: granted = access issued (S4); approved = absence or trip approved; signed = voluntary consent signed
         summary: { type: string, examples: ["Отгул 14.11.2026, согласующий — Мария Л."] }
         approver_display_name: { type: ["string", "null"] }
@@ -909,6 +909,10 @@ components:
           enum: [lead, hr_admin]
           description: absence requests are decided by the lead, then by the HR admin (checkpoint 11.11)
         created_at: { type: string, format: date-time }
+        team_absent:
+          type: array
+          items: { type: string }
+          description: absence requests — teammates away on the same days («Имя: отгул 10.11»)
 
     Escalation:
       type: object

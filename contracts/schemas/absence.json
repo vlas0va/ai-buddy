@@ -383,6 +383,11 @@
           "confirmation_token": {
             "type": "string",
             "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          },
+          "replaces": {
+            "type": "string",
+            "pattern": "^ABS-\\d{6}$",
+            "description": "a pending request of the caller fully inside the new dates: cancelled in the same step (a vacation that covers a day off)"
           }
         },
         "required": [
@@ -512,6 +517,10 @@
           },
           "replayed": {
             "type": "boolean"
+          },
+          "replaced_id": {
+            "type": "string",
+            "description": "create_request with replaces: the cancelled request"
           }
         },
         "required": [
@@ -667,6 +676,10 @@
           },
           "replayed": {
             "type": "boolean"
+          },
+          "replaced_id": {
+            "type": "string",
+            "description": "create_request with replaces: the cancelled request"
           }
         },
         "required": [
@@ -843,6 +856,180 @@
           },
           "replayed": {
             "type": "boolean"
+          },
+          "replaced_id": {
+            "type": "string",
+            "description": "create_request with replaces: the cancelled request"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "start_date",
+          "end_date",
+          "status",
+          "approver_id",
+          "created_at"
+        ]
+      }
+    },
+    {
+      "name": "cancel_request",
+      "description": "Отменить свою заявку, пока HR-администратор её не согласовал. Открытые согласования исчезают.",
+      "roles": [
+        "intern",
+        "mentor",
+        "lead"
+      ],
+      "write": true,
+      "inputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ABS-[0-9]{6}$"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "format": "uuid",
+            "description": "= proposal_id; repeated call returns stored result"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Issued by core on user confirmation; see contracts/mcp-tools.md"
+          }
+        },
+        "required": [
+          "id",
+          "idempotency_key",
+          "confirmation_token"
+        ]
+      },
+      "outputSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ABS-[0-9]{6}$"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "day_off",
+              "vacation",
+              "absence",
+              "parental_leave"
+            ],
+            "description": "day_off = отгул, vacation = отпуск, absence = отсутствие, parental_leave = декрет"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_approval",
+              "pending_hr",
+              "approved",
+              "rejected",
+              "cancelled"
+            ],
+            "description": "pending_hr = the lead approved, the HR admin has not decided yet (dates can still be moved)"
+          },
+          "approver_id": {
+            "type": "string"
+          },
+          "approver_display_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "documents": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "mime": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "description": "Metadata of attached documents (never their content)"
+          },
+          "steps": {
+            "type": "array",
+            "description": "Lead approves, HR admin registers in the HR system, HR BP is notified",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "lead",
+                    "hr_admin",
+                    "hrbp"
+                  ]
+                },
+                "display_name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "waiting",
+                    "approved",
+                    "rejected",
+                    "registered",
+                    "notified",
+                    "skipped"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "role",
+                "status"
+              ]
+            }
+          },
+          "replayed": {
+            "type": "boolean"
+          },
+          "replaced_id": {
+            "type": "string",
+            "description": "create_request with replaces: the cancelled request"
           }
         },
         "required": [

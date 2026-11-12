@@ -99,3 +99,10 @@ export const BellIcon = () => (
     <path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" />
   </Icon>
 )
+
+export const CalendarIcon = () => (
+  <Icon size={18}>
+    <rect x="3" y="5" width="18" height="16" rx="2" />
+    <path d="M16 3v4M8 3v4M3 10h18" />
+  </Icon>
+)

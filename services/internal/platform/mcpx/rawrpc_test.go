@@ -89,7 +89,7 @@ func TestRawJSONRPC_PythonStyleClient_R71(t *testing.T) {
 			t.Fatalf("contract inputSchema not served as is: %v", tool["inputSchema"])
 		}
 	}
-	if strings.Join(names, ",") != "create_request,get_policy,get_request,list_my_requests,reschedule_request,validate_request" { // go-sdk sorts by name
+	if strings.Join(names, ",") != "cancel_request,create_request,get_policy,get_request,list_my_requests,reschedule_request,validate_request" { // go-sdk sorts by name
 		t.Fatalf("tools %v", names)
 	}
 

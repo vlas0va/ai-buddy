@@ -47,6 +47,8 @@ const (
 	KindConsent = "consent"
 	// KindReschedule moves an absence request to other dates: it updates the existing absence action, never adds one.
 	KindReschedule = "absence_reschedule"
+	// KindCancel withdraws an absence request (feedback 12.13): the existing action becomes cancelled, its task goes away.
+	KindCancel = "absence_cancel"
 )
 
 // Action statuses (openapi Action.status).
@@ -173,6 +175,13 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
 	if in.Kind == KindReschedule {
 		return s.reschedule(ctx, q, in)
 	}
+	if in.Kind == KindCancel {
+		var r mcpclient.AbsenceRequest
+		if err := json.Unmarshal(in.Result, &r); err != nil || r.ID == "" {
+			return Action{}, fmt.Errorf("cancel result without id: %w", apierr.Internal())
+		}
+		return s.cancelAbsence(ctx, q, in.Claims, r.ID, in.ProposalID)
+	}
 	d, err := s.describe(ctx, q, in)
 	if err != nil {
 		return Action{}, err
@@ -208,6 +217,17 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
 	if taskID != nil {
 		if _, err := q.Exec(ctx, `UPDATE core.actions SET task_id = $2 WHERE id = $1`, id, *taskID); err != nil {
 			return Action{}, fmt.Errorf("link action task: %w", err)
+		}
+	}
+	if in.Kind == KindAbsence {
+		// a vacation that covers a pending day off replaced it (absence.create_request with replaces, feedback 12.13)
+		var r struct {
+			ReplacedID string `json:"replaced_id"`
+		}
+		if json.Unmarshal(in.Result, &r) == nil && r.ReplacedID != "" {
+			if _, err := s.cancelAbsence(ctx, q, in.Claims, r.ReplacedID, in.ProposalID); err != nil && !errors.Is(err, ErrNotFound) {
+				return Action{}, err
+			}
 		}
 	}
 	props := map[string]any{"kind": in.Kind, "action_id": id, "proposal_id": in.ProposalID}
@@ -562,6 +582,32 @@ func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action,
 	}
 	if err := s.emit(ctx, q, analytics.Event{Name: "action.rescheduled", UserID: in.Claims.Sub, Role: in.Claims.Role,
 		TeamID: in.Claims.TeamID, Props: map[string]any{"action_id": a.ID, "proposal_id": in.ProposalID}}); err != nil {
+		return Action{}, err
+	}
+	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
+}
+
+// cancelAbsence marks the caller's absence action cancelled and removes its plan task (the request no longer exists in
+// the plan). A repeated call returns the same action.
+func (s *Service) cancelAbsence(ctx context.Context, q DBTX, c authn.Claims, externalID, proposalID string) (Action, error) {
+	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
+		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 ORDER BY a.created_at LIMIT 1 FOR UPDATE`,
+		KindAbsence, externalID, c.Sub))
+	if err != nil {
+		return Action{}, err
+	}
+	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = 'cancelled', task_id = NULL,
+		summary = CASE WHEN summary LIKE '%(отменена)' THEN summary ELSE summary || ' (отменена)' END, updated_at = now()
+		WHERE id = $1`, a.ID); err != nil {
+		return Action{}, fmt.Errorf("cancel action: %w", err)
+	}
+	if a.TaskID != nil {
+		if _, err := q.Exec(ctx, `DELETE FROM core.plan_tasks WHERE id = $1 AND linked_action_id = $2`, *a.TaskID, a.ID); err != nil {
+			return Action{}, fmt.Errorf("remove cancelled task: %w", err)
+		}
+	}
+	if err := s.emit(ctx, q, analytics.Event{Name: "action.cancelled", UserID: c.Sub, Role: c.Role, TeamID: c.TeamID,
+		Props: map[string]any{"action_id": a.ID, "proposal_id": proposalID}}); err != nil {
 		return Action{}, err
 	}
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))

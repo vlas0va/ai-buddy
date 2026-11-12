@@ -38,6 +38,7 @@ Tool errors are returned as MCP tool results with `isError: true` and structured
 | absence | `create_request` | intern, mentor, lead | **yes** | S3 steps 5–7 |
 | absence | `get_request` | intern, mentor, lead (own only) | no | S3 step 8 |
 | absence | `reschedule_request` | intern, mentor, lead (own only) | **yes** | перенос до согласования HR-администратором |
+| absence | `cancel_request` | intern, mentor, lead (own only) | **yes** | отмена до согласования HR-администратором; `create_request.replaces` отменяет заявку внутри новых дат |
 | approvals (`/mcp/approvals`) | `list_pending` | lead, hr_admin | no | S3 step 8, S4 |
 | approvals | `decide` | lead (own team only), hr_admin (second stage) | **yes** | S3 step 8, S4 |
 | directory (`/mcp/directory`) | `whoami` | all | no | S2 |

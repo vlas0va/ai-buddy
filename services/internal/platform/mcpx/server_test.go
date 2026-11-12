@@ -278,7 +278,7 @@ func TestInvoke(t *testing.T) {
 	for _, d := range s.Tools() {
 		names = append(names, d.Name)
 	}
-	if !slices.Equal(names, []string{"get_policy", "list_my_requests", "validate_request", "create_request", "get_request", "reschedule_request"}) {
+	if !slices.Equal(names, []string{"get_policy", "list_my_requests", "validate_request", "create_request", "get_request", "reschedule_request", "cancel_request"}) {
 		t.Fatalf("tools %v", names)
 	}
 }

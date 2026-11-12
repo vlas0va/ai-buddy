@@ -150,7 +150,7 @@ export const chatHistorySchema = z.object({
 })
 
 export const ACTION_KINDS = ['absence_request', 'access_request', 'trip_request', 'consent'] as const
-export const ACTION_STATUSES = ['pending_approval', 'pending_hr', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed'] as const
+export const ACTION_STATUSES = ['pending_approval', 'pending_hr', 'approved', 'rejected', 'granted', 'created', 'failed', 'signed', 'cancelled'] as const
 
 export const actionSchema = z.object({
   id: z.string(),
@@ -175,6 +175,8 @@ export const approvalSchema = z.object({
   /** lead first, then the HR admin for an absence request (checkpoint 11.11) */
   stage: z.enum(['lead', 'hr_admin']).optional(),
   created_at: z.string(),
+  /** feedback 12.13: teammates away on the same days */
+  team_absent: z.array(z.string()).optional(),
 })
 
 export const escalationSchema = z.object({

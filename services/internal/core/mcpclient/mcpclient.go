@@ -44,6 +44,7 @@ const (
 	ToolCreateTrip     = "trips.create_request"
 	ToolSignConsent    = "consents.sign"
 	ToolReschedule     = "absence.reschedule_request"
+	ToolCancelAbsence  = "absence.cancel_request"
 )
 
 // Config configures a Client.
@@ -178,17 +179,18 @@ type AccessRequest struct {
 
 // Approval is an item of approvals.list_pending and the result of approvals.decide (contracts/schemas/approvals.json).
 type Approval struct {
-	ID                   string `json:"id"`
-	Kind                 string `json:"kind"`
-	RefID                string `json:"ref_id"`
-	RequesterID          string `json:"requester_id"`
-	RequesterDisplayName string `json:"requester_display_name,omitempty"`
-	Summary              string `json:"summary"`
-	Status               string `json:"status"`
-	Comment              string `json:"comment,omitempty"`
-	Stage                string `json:"stage,omitempty"` // absence: lead, then hr_admin
-	CreatedAt            string `json:"created_at"`
-	Replayed             bool   `json:"replayed,omitempty"`
+	ID                   string   `json:"id"`
+	Kind                 string   `json:"kind"`
+	RefID                string   `json:"ref_id"`
+	RequesterID          string   `json:"requester_id"`
+	RequesterDisplayName string   `json:"requester_display_name,omitempty"`
+	Summary              string   `json:"summary"`
+	Status               string   `json:"status"`
+	Comment              string   `json:"comment,omitempty"`
+	Stage                string   `json:"stage,omitempty"` // absence: lead, then hr_admin
+	CreatedAt            string   `json:"created_at"`
+	TeamAbsent           []string `json:"team_absent,omitempty"`
+	Replayed             bool     `json:"replayed,omitempty"`
 }
 
 // FAQ is the result of kb.add_faq.

@@ -224,7 +224,7 @@ func TestCreateRequest_S3_RevalidatesDates_R79(t *testing.T) {
 	}{
 		{"weekend", "2026-11-14", "2026-11-14", "Заявку нельзя создать: Отгул оформляется только на рабочие дни"},
 		{"overlap with own pending request", "2026-11-11", "2026-11-12", "пересекаются с заявкой"},
-		{"past and too long", "2026-11-02", "2026-11-06", "не раньше завтрашнего дня (10.11.2026); Отгул можно оформить не больше"},
+		{"past and too long", "2026-11-02", "2026-11-06", "не раньше завтрашнего дня (10.11.2026). Отгул можно оформить не больше"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -670,4 +670,41 @@ func TestGetRequest_Checkpoint_StepsWithHRAdminStage(t *testing.T) {
 	if got[0].At == "" {
 		t.Fatalf("approved without lead time %+v", got)
 	}
+}
+
+func TestCancelAndReplace_Feedback1213(t *testing.T) {
+	e := newEnv(t)
+	dayOff := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-11-24", "2026-11-24")))
+	// a vacation over the pending day off replaces it in one step
+	args := absenceArgs("vacation", "2026-11-23", "2026-11-27")
+	e.wantCode(anna, "create_request", confirmed(t, anna, newKey(t), args), apierr.CodeValidation) // overlap without replaces
+	args["replaces"] = dayOff.ID
+	vac := mustCall[map[string]any](e, anna, "create_request", confirmed(t, anna, newKey(t), args))
+	if vac["replaced_id"] != dayOff.ID || vac["status"] != "pending_approval" {
+		t.Fatalf("vacation %v", vac)
+	}
+	if e.count(`SELECT count(*) FROM absence.requests WHERE id = $1 AND status = 'cancelled'`, dayOff.ID) != 1 ||
+		e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND status = 'pending'`, dayOff.ID) != 0 {
+		t.Fatal("the day off must be cancelled with its approval item")
+	}
+	// cancel: own pending only, idempotent by key, an approved one goes to the HR admin
+	key := newKey(t)
+	id := vac["id"].(string)
+	out := mustCall[requestOut](e, anna, "cancel_request", confirmed(t, anna, key, map[string]any{"id": id}))
+	if out.Status != "cancelled" || out.Replayed == nil || *out.Replayed {
+		t.Fatalf("cancel %+v", out)
+	}
+	again := mustCall[requestOut](e, anna, "cancel_request", confirmed(t, anna, key, map[string]any{"id": id}))
+	if again.Replayed == nil || !*again.Replayed {
+		t.Fatal("same key must replay")
+	}
+	e.wantCode(ivan, "cancel_request", confirmed(t, ivan, newKey(t), map[string]any{"id": id}), apierr.CodeForbidden)
+	approved := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-12-08", "2026-12-08")))
+	e.exec(`UPDATE absence.requests SET status = 'approved' WHERE id = $1`, approved.ID)
+	e.wantCode(anna, "cancel_request", confirmed(t, anna, newKey(t), map[string]any{"id": approved.ID}), apierr.CodeConflict)
+	// replaces must be inside the new dates
+	pending := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-12-15", "2026-12-15")))
+	bad := absenceArgs("vacation", "2026-12-16", "2026-12-20")
+	bad["replaces"] = pending.ID
+	e.wantCode(anna, "create_request", confirmed(t, anna, newKey(t), bad), apierr.CodeValidation)
 }

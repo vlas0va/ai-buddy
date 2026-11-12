@@ -415,6 +415,7 @@ class Agent:
         card = {
             "absence_request": absence.result_card,
             "absence_reschedule": absence.reschedule_card,
+            "absence_cancel": absence.cancel_card,
             "access_request": access.result_card,
             "approval_decision": team.result_card,
             "trip_request": trips.result_card,
