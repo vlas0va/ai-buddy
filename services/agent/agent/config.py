@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -114,9 +115,23 @@ class AgentConfig:
         }
 
 
+LLM_DEFAULTABLE = ("PROVIDER", "BASE_URL", "MODEL", "TIMEOUT_S")
+
+
+def with_llm_defaults(env: Mapping[str, str]) -> dict[str, str]:
+    """LLM_<X> from .env wins; when it is unset or empty, LLM_DEFAULT_<X> applies. Compose sets the defaults to A-Vibe in
+    the bundled Ollama, so the expert gets the model with no .env at all, and a .env line still overrides it."""
+    out = dict(env)
+    for key in LLM_DEFAULTABLE:
+        if not out.get(f"LLM_{key}") and out.get(f"LLM_DEFAULT_{key}"):
+            out[f"LLM_{key}"] = out[f"LLM_DEFAULT_{key}"]
+    return out
+
+
 def load_agent_config(path: str | os.PathLike[str] | None = None, env: dict[str, str] | None = None) -> AgentConfig:
     cfg_path = Path(path or os.environ.get("AGENT_CONFIG") or SERVICE_ROOT / "agent.yaml")
-    raw = yaml.safe_load(substitute_env(cfg_path.read_text(encoding="utf-8"), env))
+    merged = with_llm_defaults(os.environ if env is None else env)
+    raw = yaml.safe_load(substitute_env(cfg_path.read_text(encoding="utf-8"), merged))
     tools = {
         t["name"]: ToolSpec(
             name=t["name"],

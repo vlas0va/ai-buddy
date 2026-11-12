@@ -127,7 +127,12 @@ services:
       # Web search for general technical questions: curated (default, offline) | searxng (profile websearch) | off.
       WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-curated}
       WEB_SEARCH_URL: ${WEB_SEARCH_URL:-}
-      # LLM_* come from ../.env (see .env.example).
+      # A-Vibe by default (Rita 12.11): the bundled Ollama serves it; a LLM_* line in ../.env overrides these defaults.
+      # Until Ollama has downloaded the model, and whenever it fails or is too slow, the agent answers with the stub.
+      LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-openai_compat}
+      LLM_DEFAULT_BASE_URL: ${LLM_DEFAULT_BASE_URL:-http://ollama:11434/v1}
+      LLM_DEFAULT_MODEL: ${AVIBE_MODEL:-hf.co/NightForger/avibe-GGUF:Q4_K_M}
+      LLM_DEFAULT_TIMEOUT_S: ${LLM_DEFAULT_TIMEOUT_S:-120}
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Ollama running on the laptop itself (A-Vibe on the laptop GPU)
     depends_on:
@@ -154,15 +159,24 @@ services:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   ollama:
-    # Optional local LLM for demos without an external key: docker compose --profile core --profile ollama up -d
-    # then: docker compose exec ollama ollama pull qwen2.5:7b-instruct
-    # and in .env: LLM_PROVIDER=openai_compat LLM_BASE_URL=http://ollama:11434/v1 LLM_MODEL=qwen2.5:7b-instruct
-    image: ollama/ollama:0.5.7
-    profiles: [ollama]
+    # A-Vibe (AvitoTech/avibe, GGUF Q4_K_M, ~5 GB) for the agent by default, no key. On the first start the model is
+    # downloaded in the background (the stack is ready at once, the agent uses the stub until the model is there).
+    # CPU by default; NVIDIA GPU: add -f deploy/docker-compose.gpu.yml. No download: AVIBE_PULL=false.
+    image: ollama/ollama:0.9.6
+    profiles: [core, full, ollama]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        ollama serve & pid=$$!; sleep 3;
+        if [ "$$AVIBE_PULL" != "false" ]; then
+        until ollama pull "$$AVIBE_MODEL"; do echo "A-Vibe download failed, retry in 60 s"; sleep 60; done; fi;
+        wait $$pid
+    environment:
+      AVIBE_MODEL: ${AVIBE_MODEL:-hf.co/NightForger/avibe-GGUF:Q4_K_M}
+      AVIBE_PULL: ${AVIBE_PULL:-true}
+      OLLAMA_KEEP_ALIVE: 24h
     volumes:
       - ollama:/root/.ollama
-    ports:
-      - "127.0.0.1:11434:11434"
 
   avibe:
     # Optional own-compute LLM: A-Vibe (AvitoTech/avibe, 8B, Apache-2.0) served by vLLM, OpenAI-compatible, with tool calling.

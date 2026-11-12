@@ -124,6 +124,9 @@ def create_app(
             "kb_docs": len(agent.kb.docs) if agent.kb else 0,
             "intent_model": agent.router.model is not None,
             "provider": getattr(agent.writer, "name", "stub"),
+            # openai_compat: ready | loading (Ollama still downloads the model) | down | slow; the stub answers meanwhile
+            "llm_state": getattr(agent.writer, "state", "stub"),
+            "llm_model": getattr(getattr(agent.writer, "client", None), "model", None),
         }
         ok = checks["kb_docs"] > 0
         return jsonify({"status": "ready" if ok else "degraded", "checks": checks}), 200 if ok else 503

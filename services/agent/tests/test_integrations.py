@@ -156,6 +156,8 @@ def llm_transport(stream_chunks=None, complete_msgs=None, status: int = 200):  #
     complete_msgs = list(complete_msgs or [])
 
     def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":  # GET /models: this server cannot tell, so the model counts as ready
+            return httpx.Response(404, text="no such route")
         body = json.loads(req.content)
         if status != 200:
             return httpx.Response(status, text="err")
@@ -365,3 +367,49 @@ def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, 
     draft = first(ev, "escalation_draft")
     assert draft and draft["to_role"] == "mentor" and "документы и мануалы" in draft["text"]
     assert "добавит его в базу знаний" in "".join(e.data["text"] for e in ev if e.name == "token")
+
+
+def test_LLM_08_avibe_by_default_with_the_stub_while_it_loads_or_fails(monkeypatch):
+    """Rita 12.11: the expert gets A-Vibe by default (compose: LLM_DEFAULT_* → bundled Ollama); while Ollama still
+    downloads the model, or when it fails or is too slow, the stub answers at once instead of waiting for a timeout."""
+    from agent.config import with_llm_defaults
+
+    env = with_llm_defaults({"LLM_DEFAULT_PROVIDER": "openai_compat", "LLM_DEFAULT_MODEL": "avibe", "LLM_PROVIDER": ""})
+    assert env["LLM_PROVIDER"] == "openai_compat" and env["LLM_MODEL"] == "avibe"
+    assert (
+        with_llm_defaults({"LLM_DEFAULT_PROVIDER": "openai_compat", "LLM_PROVIDER": "stub"})["LLM_PROVIDER"] == "stub"
+    )
+
+    state = {"models": [], "chat": 0, "mode": "ok"}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.method == "GET":
+            return httpx.Response(200, json={"data": [{"id": m} for m in state["models"]]})
+        state["chat"] += 1
+        if state["mode"] == "slow":
+            raise httpx.ReadTimeout("slow")
+        line = f"data: {json.dumps({'choices': [{'delta': {'content': 'Ответ модели.'}}]})}"
+        return httpx.Response(200, text=line + "\n\ndata: [DONE]", headers={"content-type": "text/event-stream"})
+
+    now = [1000.0]
+    c = llm_app(monkeypatch, httpx.MockTransport(handler))
+    s = c.login("intern.anna")
+    c.agent.writer.clock = lambda: now[0]
+
+    ev = s.say("как проходит код-ревью?")  # the model is not pulled yet
+    assert "ещё загружается" in text_of(ev) and first(ev, "done")["provider"] == "stub_fallback" and state["chat"] == 0
+    assert c.http.get("/readyz").get_json()["checks"]["llm_state"] == "loading"
+
+    state["models"] = ["test-model:latest"]
+    now[0] += 20
+    ev = s.say("как проходит код-ревью?")
+    assert "Ответ модели." in text_of(ev) and first(ev, "done")["provider"] == "openai_compat"
+
+    state["mode"] = "slow"  # e.g. no GPU: one timeout, then the stub answers at once for 5 minutes
+    assert "упрощённом режиме" in text_of(s.say("как проходит код-ревью?"))
+    calls = state["chat"]
+    assert "упрощённом режиме" in text_of(s.say("как проходит код-ревью?")) and state["chat"] == calls
+    assert c.http.get("/readyz").get_json()["checks"]["llm_state"] == "slow"
+    state["mode"] = "ok"
+    now[0] += 301
+    assert "Ответ модели." in text_of(s.say("как проходит код-ревью?"))
