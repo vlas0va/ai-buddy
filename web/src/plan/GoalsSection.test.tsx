@@ -48,8 +48,8 @@ describe('Organizers 12.11: goals are agreed with the lead, approved and tracked
       { title: 'Выкатить задачу в прод', criteria: 'PR влит', status: 'active' },
       { title: 'Разобраться в CI', status: 'active' },
     ])
-    await userEvent.click(screen.getAllByRole('button', { name: 'Достигнута' })[0])
-    expect((sent.at(-1) as { status: string }[])[1].status).toBe('achieved')
+    await userEvent.click(screen.getByRole('button', { name: 'Достигнута' }))
+    expect((sent.at(-1) as { status: string }[])[1]?.status).toBe('achieved')
   })
 
   it('the intern writes down the goals after the meeting; they go for approval', async () => {
