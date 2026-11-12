@@ -41,7 +41,7 @@ def _addressee(text: str, default: str = "mentor") -> str:
     return default
 
 
-def escalation_event(turn: Turn, question: str, role: str, topic: str = "question") -> Event:
+def escalation_event(turn: Turn, question: str, role: str, topic: str = "question", kb_found: bool = False) -> Event:
     person = turn.contact(role) or (turn.contact("mentor") if role != "mentor" else None)
     if person is None:
         role = "mentor"
@@ -54,12 +54,29 @@ def escalation_event(turn: Turn, question: str, role: str, topic: str = "questio
             "to_user_id": (person or {}).get("user_id"),
             "to_name": person_name(person),
             "topic": topic,
-            "text": f"{hello} Подскажи, пожалуйста: {q} В базе знаний команды ответа не нашёл.",
+            "text": f"{hello} Подскажи, пожалуйста: {q} "
+            + (
+                "В базе знаний есть общий ответ, но нужно твоё уточнение."
+                if kb_found
+                else "В базе знаний команды ответа не нашёл."
+            ),
         },
     )
 
 
 ASK_MENTOR = re.compile(r"(уточни|спроси|обратись|напиши)\w*\s+(\w+\s+){0,2}(у\s+|к\s+)?наставник", re.I)
+# a polite sign-off («Если что-то не учтено — уточни у наставника») is not a gap in the answer (Rita 12.13)
+SIGN_OFF = re.compile(r"^\s*(если|при\s+необходимости|в\s+случае)\b", re.I)
+
+
+def sends_to_mentor(answer: str) -> bool:
+    """The answer tells the intern to ask the mentor something concrete, not just «if anything — ask the mentor»."""
+    for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
+        if ASK_MENTOR.search(sentence) and not SIGN_OFF.search(sentence):
+            return True
+    return False
+
+
 CITY_WORDS = re.compile(r"москв|петербург|питер|спб|удал[её]н|казан|новосибирск|екатеринбург")
 
 
@@ -271,14 +288,14 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     ):
         answer.append(chunk)
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
-    if turn.user.role == "intern" and ASK_MENTOR.search("".join(answer)):
+    if turn.user.role == "intern" and sends_to_mentor("".join(answer)):
         # the answer sends the intern to the mentor: give the message ready to send through buddy, so the mentor's
         # answer can go to the knowledge base for the next interns (QA 12.11)
         yield from say(
             "\n\nНиже черновик вопроса наставнику — отправь его здесь, а не в личку: если ответ пригодится другим, "
             "наставник одной галочкой добавит его в базу знаний."
         )
-        yield escalation_event(turn, asked, "mentor")
+        yield escalation_event(turn, asked, "mentor", kb_found=True)
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."

@@ -367,6 +367,19 @@ def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, 
     draft = first(ev, "escalation_draft")
     assert draft and draft["to_role"] == "mentor" and "документы и мануалы" in draft["text"]
     assert "добавит его в базу знаний" in "".join(e.data["text"] for e in ev if e.name == "token")
+    assert "есть общий ответ, но нужно твоё уточнение" in draft["text"]
+
+
+def test_LLM_09_a_polite_sign_off_is_not_a_reason_for_a_draft(monkeypatch, client):
+    """Rita 12.13: A-Vibe ends a full answer with «Если что-то не учтено — уточни у наставника»: no draft for that."""
+    from agent.llm.writer import StubWriter
+
+    def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
+        yield "Ревью делает наставник, MR до 400 строк.\n\nЕсли что-то не учтено — уточни у наставника или команды."
+
+    monkeypatch.setattr(StubWriter, "answer", fake)
+    ev = client.login("intern.anna").say("как проходит код-ревью?")
+    assert first(ev, "escalation_draft") is None
 
 
 def test_LLM_08_avibe_by_default_with_the_stub_while_it_loads_or_fails(monkeypatch):
