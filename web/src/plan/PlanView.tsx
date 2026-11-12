@@ -10,7 +10,7 @@ import { STATUS_LABELS } from '@/components/ui/badgeText'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { useAsk } from '@/store/ask'
-import { askLabel, askText, canToggle, NEXT_STEP_PROMPT, progress, shortDate, withTaskStatus } from './format'
+import { askLabel, askText, canToggle, CONFIRM_HINT, NEXT_STEP_PROMPT, nextStatus, progress, shortDate, withTaskStatus } from './format'
 import { GoalsSection } from './GoalsSection'
 import './plan.css'
 
@@ -30,8 +30,10 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
   const readOnly = Boolean(userId)
 
   // optimistic: the checkbox flips at once (R76 < 1 s), the server answer or a rollback follows
+  // a mentor-confirmed task asked as done shows «waiting» at once (organizers 12.13); the server decides the same
   const toggle = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: EditableStatus }) => updateTaskStatus(id, status),
+    mutationFn: ({ id, status }: { id: string; status: EditableStatus | 'waiting_approval' }) =>
+      updateTaskStatus(id, status === 'waiting_approval' ? 'done' : status),
     onMutate: async ({ id, status }) => {
       await qc.cancelQueries({ queryKey: key })
       const before = qc.getQueryData<Plan>(key)
@@ -42,6 +44,14 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
       if (ctx?.before) qc.setQueryData(key, ctx.before)
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: key }),
+  })
+  // the mentor or the lead confirms a task the intern marked (or returns it to work)
+  const review = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'done' | 'in_progress' }) => updateTaskStatus(id, status),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: key })
+      void qc.invalidateQueries({ queryKey: ['report'] })
+    },
   })
 
   function askBuddy(text: string) {
@@ -143,6 +153,9 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
                       <TaskRow
                         task={t}
                         readOnly={readOnly}
+                        canReview={canEditGoals}
+                        reviewing={review.isPending}
+                        onReview={(status) => review.mutate({ id: t.id, status })}
                         onToggle={(status) => toggle.mutate({ id: t.id, status })}
                         onToggleSub={(id, status) => toggle.mutate({ id, status })}
                         onAsk={() => askBuddy(askText(t))}
@@ -170,13 +183,19 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
 function TaskRow({
   task,
   readOnly,
+  canReview = false,
+  reviewing = false,
+  onReview,
   onToggle,
   onToggleSub,
   onAsk,
 }: {
   task: Task
   readOnly: boolean
-  onToggle: (s: EditableStatus) => void
+  canReview?: boolean
+  reviewing?: boolean
+  onReview?: (s: 'done' | 'in_progress') => void
+  onToggle: (s: EditableStatus | 'waiting_approval') => void
   onToggleSub: (id: string, s: EditableStatus) => void
   onAsk: () => void
 }) {
@@ -190,7 +209,7 @@ function TaskRow({
           className="plan-check"
           checked={done}
           disabled={!editable}
-          onChange={() => onToggle(done ? 'in_progress' : 'done')}
+          onChange={() => onToggle(nextStatus(task))}
           aria-label={`${done ? 'Вернуть в работу' : 'Отметить выполненной'}: ${task.title}`}
         />
         <div className="plan-task-text">
@@ -202,9 +221,12 @@ function TaskRow({
             )}
             {task.human_only && <span>делаешь вместе с командой — buddy напомнит и поможет подготовиться</span>}
             {task.source === 'action' && <span>заявка, статус обновится после решения</span>}
+            {task.confirm && CONFIRM_HINT[task.confirm] && !done && <span>{CONFIRM_HINT[task.confirm]}</span>}
           </span>
         </div>
-        <Badge variant={task.status}>{STATUS_LABELS[task.status]}</Badge>
+        <Badge variant={task.status}>
+          {task.confirm === 'mentor' && task.status === 'waiting_approval' ? 'Ждёт подтверждения' : STATUS_LABELS[task.status]}
+        </Badge>
       </div>
       {task.subtasks && task.subtasks.length > 0 && (
         <ul className="plan-subtasks">
@@ -231,6 +253,16 @@ function TaskRow({
         <button type="button" className="plan-ask" onClick={onAsk}>
           {askLabel(task)}
         </button>
+      )}
+      {canReview && task.confirm === 'mentor' && task.status === 'waiting_approval' && onReview && (
+        <div className="plan-goal-actions">
+          <Button size="sm" disabled={reviewing} onClick={() => onReview('done')}>
+            Подтвердить выполнение
+          </Button>
+          <Button size="sm" variant="ghost" disabled={reviewing} onClick={() => onReview('in_progress')}>
+            Вернуть в работу
+          </Button>
+        </div>
       )}
     </Card>
   )

@@ -82,6 +82,7 @@ export type StreamEvent =
   | { type: 'error'; data: StreamError }
   | { type: 'next_step'; data: NextStep }
   | { type: 'date_picker'; data: DatePicker }
+  | { type: 'quiz_passed'; data: { checklist_item_id: string } }
   | { type: 'done'; data: { message_id?: string } }
   /** an event this client does not know: contracts/agent-stream.md says new events are additive and must be skipped */
   | { type: 'ignored'; data: { name: string } }
@@ -97,6 +98,7 @@ const payloads = {
   error: streamErrorSchema,
   next_step: nextStepSchema,
   date_picker: datePickerSchema,
+  quiz_passed: z.object({ checklist_item_id: z.string() }),
   done: z.object({ message_id: z.string().optional() }),
 } as const
 

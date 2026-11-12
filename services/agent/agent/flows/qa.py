@@ -165,6 +165,18 @@ def _unknown_terms(turn: Turn, text: str) -> list[str]:
     return [t for t in stems(text) if len(t) >= 4 and CYRILLIC_WORD.match(t) and t not in known and t not in STOPWORDS]
 
 
+def _faq_matches(turn: Turn, text: str, hit: dict[str, Any]) -> bool:
+    """A mentor's answer is for the question it was written for: mcp-kb's «any word» fallback finds it for other
+    questions too («в офис с ноутбуком?» → the answer about dogs). It counts when the question's words are in it (85%)
+    and every word the KB does not know (a dog breed, a service name) is there."""
+    q = [t for t in stems(text) if t not in STOPWORDS and len(t) >= 3]
+    if not q:
+        return False
+    have = set(stems(f"{hit.get('title', '')} {hit.get('body') or hit.get('snippet', '')}"))
+    rare = set(_unknown_terms(turn, text))
+    return all(t in have for t in rare) and sum(t in have for t in q) / len(q) >= 0.85
+
+
 def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
     return not hits or max(turn.kb.coverage(text, h["doc_id"]) for h in hits) < 0.5
 
@@ -205,12 +217,16 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         faq = [
             h
             for h in hits
-            if turn.kb.by_id.get(h.get("doc_id")) is None and str(h.get("doc_id", "")).startswith("faq-")
+            if turn.kb.by_id.get(h.get("doc_id")) is None
+            and str(h.get("doc_id", "")).startswith("faq-")
+            and _faq_matches(turn, text, h)
         ]
         if faq:
             hits = faq + [h for h in local_hits if h["doc_id"] not in {f["doc_id"] for f in faq}]
         elif local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
             hits = local_hits
+        else:  # a mentor's answer to another question is not an answer to this one
+            hits = [h for h in hits if not str(h.get("doc_id", "")).startswith("faq-")]
     if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
     weak_kb = not hits or (turn.kb is not None and _weak(turn, hits, text))

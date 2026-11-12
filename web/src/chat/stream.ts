@@ -256,6 +256,7 @@ export function reduce(state: ChatState, event: StreamEvent): ChatState {
     case 'done':
       return handlers.done(state, event.data)
     case 'ignored':
+    case 'quiz_passed': // a side effect only: useChat refreshes the plan
       return state
   }
 }

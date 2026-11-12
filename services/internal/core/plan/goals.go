@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"aibuddy/services/internal/core/analytics"
 	"aibuddy/services/internal/core/notify"
 	"aibuddy/services/internal/platform/apierr"
+	"aibuddy/services/internal/platform/authn"
 	"aibuddy/services/internal/platform/httpx"
 )
 
@@ -125,4 +127,48 @@ func (h *Handler) proposeGoals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, out)
+}
+
+// reviewerOf: the caller is the mentor or the lead of the intern's team.
+func (h *Handler) reviewerOf(ctx context.Context, c authn.Claims, internID string) (bool, error) {
+	if c.Role != "mentor" && c.Role != "lead" {
+		return false, nil
+	}
+	return h.internInTeam(ctx, internID, c.TeamID)
+}
+
+// askReviewers tells the mentor and the lead of the team that a task waits for their confirmation.
+func (h *Handler) askReviewers(ctx context.Context, tx pgx.Tx, t taskRow) error {
+	var name, team, title string
+	if err := tx.QueryRow(ctx, `SELECT u.display_name, u.team_id, pt.title FROM core.users u, core.plan_tasks pt
+		WHERE u.id = $1 AND pt.plan_id = $2::uuid AND pt.checklist_item_id IS NOT DISTINCT FROM $3 AND pt.parent_task_id IS NULL
+		LIMIT 1`, t.owner, t.planID, t.item).Scan(&name, &team, &title); err != nil {
+		return fmt.Errorf("select intern: %w", err)
+	}
+	rows, err := tx.Query(ctx, `SELECT id FROM core.users WHERE team_id = $1 AND role IN ('mentor', 'lead') AND can_login`, team)
+	if err != nil {
+		return fmt.Errorf("select team: %w", err)
+	}
+	var people []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan team: %w", err)
+		}
+		people = append(people, id)
+	}
+	rows.Close()
+	item := ""
+	if t.item != nil {
+		item = *t.item
+	}
+	for _, id := range people {
+		n := notify.Notification{UserID: id, Kind: notify.KindStatusChange, ChecklistItemID: item,
+			Title: "Подтвердите задачу: " + name, Body: "«" + title + "» — стажёр отметил выполнение. Откройте план стажёра и подтвердите."}
+		if err := (notify.Store{}).Create(ctx, tx, n); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -283,3 +283,19 @@ def test_CO_25_trip_while_an_absence_draft_is_open(anna):
         "action_proposal",
     )
     assert p["kind"] == "trip_request"
+
+
+def test_CO_20_study_task_confirmed_by_the_quiz(anna):
+    """Organizers 12.13: «Проверить себя» on a study task of the plan → quiz on that task's documents → a full score
+    sends quiz_passed (core marks the task done); a partial score does not."""
+    title = "Изучи все необходимые документы и мануалы по работе в своей команде"  # CL-07, as the plan button sends it
+    anna.say(f"Проверь меня по задаче «{title}»")
+    state = _quiz_state(anna)
+    assert state["item"] == "CL-07" and state["doc_id"].startswith("delivery-"), state
+    ev = anna.say("мимо")
+    assert first(ev, "quiz_passed") is None
+    anna.say(f"Проверь меня по задаче «{title}»")
+    state = _quiz_state(anna)
+    ev = anna.say(", ".join(state["answers"]))
+    assert first(ev, "quiz_passed") == {"checklist_item_id": "CL-07"}
+    assert "отмечена выполненной" in text_of(ev)

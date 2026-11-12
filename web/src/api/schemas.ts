@@ -74,6 +74,8 @@ export interface Task {
   due_at?: string | null
   human_only: boolean
   linked_action_id?: string | null
+  /** who confirms it is done (organizers 12.13): self, a mini-check in the chat, or the mentor */
+  confirm?: 'self' | 'quiz' | 'mentor'
   subtasks?: Task[]
 }
 
@@ -90,6 +92,7 @@ export const taskSchema: z.ZodType<Task> = z.lazy(() =>
     due_at: z.string().nullable().optional(),
     human_only: z.boolean(),
     linked_action_id: z.string().nullable().optional(),
+    confirm: z.enum(['self', 'quiz', 'mentor']).optional(),
     subtasks: z.array(taskSchema).optional(),
   }),
 )

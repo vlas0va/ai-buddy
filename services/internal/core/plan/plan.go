@@ -84,8 +84,23 @@ type Task struct {
 	DueAt           *string `json:"due_at"`
 	HumanOnly       bool    `json:"human_only"`
 	LinkedActionID  *string `json:"linked_action_id"`
+	// Confirm says who confirms the task is done (organizers 12.13: our choice per task type): self — the intern ticks it;
+	// quiz — a mini-check in the chat marks it done; mentor — the intern asks, the mentor or the lead confirms.
+	Confirm string `json:"confirm"`
 
 	stored string // status as stored, before the overdue-on-read rule
+}
+
+// confirmModes: study tasks without steps are checked with a quiz, getting to know the team is confirmed by the mentor.
+var confirmModes = map[string]string{"CL-07": "quiz", "CL-09": "quiz", "CL-03": "mentor"}
+
+func confirmMode(item *string) string {
+	if item != nil {
+		if m, ok := confirmModes[*item]; ok {
+			return m
+		}
+	}
+	return "self"
 }
 
 // TopTask is a top-level task with its subtasks (always present, possibly empty).
@@ -239,6 +254,10 @@ func scanTask(row pgx.Row, today string) (Task, error) {
 		&t.Status, &t.DueAt, &t.HumanOnly, &t.LinkedActionID)
 	t.stored = t.Status
 	t.Status = effectiveStatus(t.Status, t.DueAt, today)
+	t.Confirm = "self"
+	if t.Source == "checklist" && t.ParentTaskID == nil {
+		t.Confirm = confirmMode(t.ChecklistItemID)
+	}
 	return t, err
 }
 
@@ -467,17 +486,42 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 			t.due_at::text, p.user_id
 		FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id WHERE t.id = $1 FOR UPDATE OF t`, id).
 		Scan(&t.planID, &t.source, &t.period, &t.status, &t.parent, &t.item, &t.due, &t.owner)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && t.owner != c.Sub) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, apierr.Forbidden() // unknown and foreign tasks look the same (R71)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("select task: %w", err)
 	}
-	if t.source != "checklist" || t.status == "waiting_approval" {
-		return nil, apierr.Conflict().WithMessage("Статус этой задачи меняется автоматически после решения по заявке")
+	mode := "self"
+	if t.source == "checklist" && t.parent == nil {
+		mode = confirmMode(t.item)
+	}
+	if t.owner != c.Sub {
+		// the mentor or the lead of the team confirms (done) or returns (in_progress) a task waiting for them
+		ok, err := h.reviewerOf(ctx, c, t.owner)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || mode != "mentor" || t.status != "waiting_approval" || (status != "done" && status != "in_progress") {
+			return nil, apierr.Forbidden()
+		}
+	} else {
+		switch {
+		case t.source != "checklist" || (t.status == "waiting_approval" && mode != "mentor"):
+			return nil, apierr.Conflict().WithMessage("Статус этой задачи меняется автоматически после решения по заявке")
+		case mode == "quiz" && status == "done":
+			return nil, apierr.Conflict().WithMessage("Эта задача отмечается после мини-проверки: нажми «Проверить себя»")
+		case mode == "mentor" && status == "done":
+			status = "waiting_approval" // the intern asks, the mentor confirms
+		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now() WHERE id = $1`, id, status); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
+	}
+	if status == "waiting_approval" && t.status != "waiting_approval" {
+		if err := h.askReviewers(ctx, tx, t); err != nil {
+			return nil, err
+		}
 	}
 	becameDone := status == "done" && t.status != "done"
 	if t.parent == nil {

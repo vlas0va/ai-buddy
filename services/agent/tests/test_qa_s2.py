@@ -167,3 +167,36 @@ def test_S2_17_mentor_answer_in_mcp_kb_beats_the_local_ranking(anna, monkeypatch
         ev, "escalation_draft"
     ) is None and "Наставник уже отвечал на такой вопрос:\n\nНет, только собаки-поводыри." in text_of(ev)
     assert first(ev, "sources")["items"][0]["doc_id"] == "faq-delivery-1a2b3c4d"
+
+
+def test_S2_18_a_mentor_answer_is_not_used_for_another_question(anna, monkeypatch):
+    """Feedback 12.13: mcp-kb's «any word» search returns the answer about dogs for «в офис с ноутбуком?» — not an answer."""
+    from agent.flows import qa
+    from agent.tools.base import ToolGateway
+
+    real = ToolGateway.read
+    faq = {
+        "doc_id": "faq-delivery-1a2b3c4d",
+        "title": "Можно ли приходить в офис с собакой породы бигль",
+        "snippet": "Вопрос: Можно ли приходить в офис с собакой породы бигль?",
+        "source_type": "test",
+        "url": "",
+        "score": 0.3,
+    }
+
+    def fake(self, tool, **args):
+        if tool == "kb.search":
+            return {"items": [faq]}
+        if tool == "kb.get":
+            return {
+                **faq,
+                "kind": "faq",
+                "body": "Вопрос: Можно ли приходить в офис с собакой породы бигль?\n\nОтвет: Нет.",
+            }
+        return real(self, tool, **args)
+
+    monkeypatch.setattr(ToolGateway, "read", fake)
+    monkeypatch.setattr(qa, "_remote_kb", lambda turn: True)
+    assert "Наставник уже отвечал" not in text_of(anna.say("можно ли приходить в офис с ноутбуком?"))
+    assert "Наставник уже отвечал" not in text_of(anna.say("можно ли приходить в офис с собакой породы хаски?"))
+    assert "Наставник уже отвечал" in text_of(anna.say("можно ли приходить в офис с собакой породы бигль?"))

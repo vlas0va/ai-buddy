@@ -31,6 +31,7 @@ closes). The agent emits its first `status` within ~100 ms, so the UI never wait
 | `escalation_draft` | `{"to_role":"mentor"\|"lead"\|"curator"\|"hrbp","text"}` → `to_user_id`, `to_name`, `topic` | agent | Editable draft + «Отправить» → `POST /api/escalations` |
 | `next_step` *(new, optional)* | `{"checklist_item_id","title","period","status","human_only","cta":{"kind":"ask"\|"access"\|"absence"\|"escalate","label","message"}}` → `task_id` | agent | «Следующий шаг» card in chat; the button sends `cta.message` as a new message (S1) |
 | `date_picker` *(new, optional)* | `{"purpose":"absence"\|"reschedule","kind","ref_id","min","max","label"}` | agent | Calendar under an absence answer; the chosen dates are sent back as a message («с … по …» or «перенеси заявку ABS-… на …»); stored with the message by core |
+| `quiz_passed` *(new, optional)* | `{"checklist_item_id"}` | agent | Full score of a mini-check on a study task confirmed by a quiz (CL-07, CL-09): core marks the caller's own task done (user from the JWT, only quiz-confirmed items) and relays the event so web refreshes the plan |
 | `refusal` | `{"reason":"no_rights"\|"out_of_scope","redirect_role":"hrbp"\|"lead"\|"mentor"\|"curator"\|null}` → `detail`, `redirect_name`, `text` | agent | Polite refusal block (R71, R72) |
 | `tool_result` | internal, see «Confirmation turn» | agent → core only | never relayed to web |
 | `error` | `{"code","message","retryable"}` | agent or core | Message + «Повторить» if retryable (R79) |

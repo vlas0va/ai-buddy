@@ -294,15 +294,61 @@ QUIZ_TOPIC_NOISE = re.compile(
 )
 
 
+# plan tasks confirmed by a quiz (= core plan.confirmModes «quiz»): a full score marks them done (organizers 12.13)
+QUIZ_ITEMS = {"CL-07", "CL-09"}
+TASK_TITLE = re.compile(r"«([^»]{8,})»")
+
+
+def _task_doc(turn: Turn, text: str) -> dict[str, Any] | None:
+    """«Проверь меня по задаче «…»» from the plan: the documents of that task's checklist item."""
+    m = TASK_TITLE.search(text)
+    if not m or turn.kb is None:
+        return None
+    title = normalize(m.group(1))
+    task = next((t for t in turn.user.tasks if t.checklist_item_id and normalize(t.title).startswith(title[:40])), None)
+    if task is None:
+        return None
+    docs = [
+        d
+        for d in turn.kb.docs
+        if task.checklist_item_id in d.checklist
+        and d.readable_by(turn.user.role, turn.user.team_id)
+        and len(_candidates(d.body)) >= 2
+    ]
+    docs.sort(key=lambda d: (turn.user.team_id not in d.teams, -len(_candidates(d.body))))  # own team first
+    if not docs:
+        return None
+    d = docs[0]
+    return {
+        "doc_id": d.doc_id,
+        "title": d.title,
+        "url": d.url,
+        "body": d.body,
+        "task": task.title,
+        "item": task.checklist_item_id,
+    }
+
+
 def _quiz_doc(turn: Turn, text: str) -> dict[str, Any] | None:
     if turn.kb is None:
         return None
+    by_task = _task_doc(turn, text)
+    if by_task:
+        return by_task
     query = QUIZ_TOPIC_NOISE.sub(" ", text).strip()
     if stems(query):
         hits = turn.kb.search(query, turn.user.role, turn.user.team_id, k=1)
         if hits and turn.kb.coverage(query, hits[0].doc.doc_id) >= 0.3 and len(_candidates(hits[0].doc.body)) >= 2:
             d = hits[0].doc
-            return {"doc_id": d.doc_id, "title": d.title, "url": d.url, "body": d.body, "task": _task_for(turn, d)}
+            task = _task_obj(turn, d)
+            return {
+                "doc_id": d.doc_id,
+                "title": d.title,
+                "url": d.url,
+                "body": d.body,
+                "task": task.title if task else "",
+                "item": task.checklist_item_id if task else "",
+            }
     # no topic: the first open plan task that has a matching document
     for t in turn.user.tasks:
         if t.status == "done" or not t.checklist_item_id:
@@ -313,15 +359,22 @@ def _quiz_doc(turn: Turn, text: str) -> dict[str, Any] | None:
                 and d.readable_by(turn.user.role, turn.user.team_id)
                 and len(_candidates(d.body)) >= 3
             ):
-                return {"doc_id": d.doc_id, "title": d.title, "url": d.url, "body": d.body, "task": t.title}
+                return {
+                    "doc_id": d.doc_id,
+                    "title": d.title,
+                    "url": d.url,
+                    "body": d.body,
+                    "task": t.title,
+                    "item": t.checklist_item_id,
+                }
     return None
 
 
-def _task_for(turn: Turn, doc: Any) -> str:
+def _task_obj(turn: Turn, doc: Any) -> Any:
     for t in turn.user.tasks:
         if t.status != "done" and t.checklist_item_id and t.checklist_item_id in doc.checklist:
-            return t.title
-    return ""
+            return t
+    return None
 
 
 def _candidates(body: str) -> list[str]:
@@ -374,6 +427,7 @@ def handle_quiz(turn: Turn, text: str) -> Iterator[Event]:
         "title": doc["title"],
         "answers": [q["a"] for q in quiz],
         "task": doc.get("task", ""),
+        "item": doc.get("item", ""),
     }
     turn.save_state(state)
     lines = [
@@ -415,12 +469,17 @@ def handle_quiz_answer(turn: Turn, text: str) -> Iterator[Event]:
     for i, exp, got, ok in results:
         mark = "верно" if ok else f"нужно: {exp}" + (f" (у тебя: {got})" if got else "")
         lines.append(f"{i + 1}. {mark}")
-    if score == len(answers):
+    passed = score == len(answers)
+    if passed:
         tail = "Отличный результат!"
-        if quiz.get("task"):
+        if quiz.get("task") and quiz.get("item") in QUIZ_ITEMS and turn.user.role == "intern":
+            tail += f" Задача плана «{quiz['task']}» отмечена выполненной."
+        elif quiz.get("task"):
             tail += f" Можно отметить задачу плана «{quiz['task']}» как выполненную."
         lines.append(tail)
     else:
         lines.append(f"Перечитай «{quiz['title']}» и попробуй ещё раз — напиши «проверь меня по …» снова.")
     turn.meta["quiz_score"] = f"{score}/{len(answers)}"
     yield from say("\n".join(lines))
+    if passed and quiz.get("item") in QUIZ_ITEMS and turn.user.role == "intern":
+        yield Event("quiz_passed", {"checklist_item_id": quiz["item"]})  # core marks the caller's task done

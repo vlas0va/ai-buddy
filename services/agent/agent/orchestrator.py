@@ -251,7 +251,10 @@ class Agent:
             return Route("trip", 0.9, "state")
         quiz_state = turn.state()
         if quiz_state.get("quiz"):
-            if route.source != "guardrail" and route.intent not in QUIZ_BREAK_INTENTS:
+            # only an explicit new request (a rule) ends the quiz: answers are bare words («ревью, пространство»), and the
+            # classifier reads them as some topic (QA 12.13)
+            breaks = route.source == "guardrail" or (route.source == "rule" and route.intent in QUIZ_BREAK_INTENTS)
+            if not breaks:
                 return Route("quiz_answer", 0.9, "state")
             quiz_state.pop("quiz")
             turn.save_state(quiz_state)

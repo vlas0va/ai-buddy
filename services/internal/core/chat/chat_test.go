@@ -936,3 +936,31 @@ func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
 		t.Fatalf("date picker %v", h.Messages[1])
 	}
 }
+
+// Organizers 12.13: a study task is confirmed by a mini-check; the agent names the item, core marks the caller's task.
+func TestChat_QuizPassedMarksOwnStudyTask_Organizers1213(t *testing.T) {
+	e := newEnv(t)
+	anna := e.anna()
+	sid := e.session(anna)
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Результат: 3 из 3."}},
+			{Name: "quiz_passed", Data: map[string]any{"checklist_item_id": "CL-07"}},
+			{Name: "quiz_passed", Data: map[string]any{"checklist_item_id": "CL-05"}}, // not a quiz task: ignored
+			agenttest.Done()}
+	})
+	s := e.message(sid, anna, "ответы: a, b, c")
+	if s.find("quiz_passed") == nil {
+		t.Fatalf("events: %s", s.names())
+	}
+	statuses := func(item string) string {
+		return e.str(`SELECT t.status FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id
+			WHERE p.user_id = 'intern.anna' AND p.plan_role = 'intern' AND t.checklist_item_id = $1 AND t.parent_task_id IS NULL`, item)
+	}
+	if statuses("CL-07") != "done" || statuses("CL-05") == "done" {
+		t.Fatalf("CL-07=%s CL-05=%s", statuses("CL-07"), statuses("CL-05"))
+	}
+	if n := e.count(`SELECT count(*) FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id
+		WHERE p.user_id = 'intern.ivan' AND t.checklist_item_id = 'CL-07' AND t.status = 'done'`); n != 0 {
+		t.Fatal("another intern's task must not change")
+	}
+}

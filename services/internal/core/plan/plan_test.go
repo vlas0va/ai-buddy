@@ -368,7 +368,8 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 		_ = json.Unmarshal(b, &m)
 		return code, m
 	}
-	cl07 := e.taskID("intern.anna", "intern", "CL-07")
+	// CL-07 is confirmed by a quiz since 12.13; CL-08 (month 1, with steps) is ticked by the intern
+	cl07 := e.taskID("intern.anna", "intern", "CL-08")
 	code, m := patch(anna, cl07, "done")
 	if code != 200 || m["status"] != "done" || m["id"] != cl07 {
 		t.Fatalf("done: %d %v", code, m)
@@ -376,7 +377,7 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 	if _, ok := m["subtasks"].([]any); !ok {
 		t.Fatalf("top-level answer must carry subtasks: %v", m)
 	}
-	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='plan.task_done' AND user_id='intern.anna' AND props->>'checklist_item_id'='CL-07' AND props->>'on_time'='true' AND props->>'period'='week_2'`); n != 1 {
+	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='plan.task_done' AND user_id='intern.anna' AND props->>'checklist_item_id'='CL-08' AND props->>'on_time'='true' AND props->>'period'='month_1'`); n != 1 {
 		t.Fatalf("task_done on time: %d", n)
 	}
 	// repeated done does not emit a second event; reopening works

@@ -17,6 +17,7 @@ EVENT_NAMES = frozenset(
         "escalation_draft",
         "next_step",
         "date_picker",  # feedback 12.11: a calendar to pick absence dates
+        "quiz_passed",  # organizers 12.13: a full quiz score confirms a study task of the plan (core marks it)
         "refusal",
         "tool_result",
         "error",

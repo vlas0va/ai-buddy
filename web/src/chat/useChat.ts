@@ -71,6 +71,10 @@ export function useChat() {
   const apply = useCallback(
     (event: StreamEvent) => {
       setState((s) => reduce(s, event))
+      if (event.type === 'quiz_passed') {
+        void qc.invalidateQueries({ queryKey: ['plan'] }) // organizers 12.13: the study task is done now
+        void qc.invalidateQueries({ queryKey: ['report'] })
+      }
       if (event.type === 'action_result') {
         void qc.invalidateQueries({ queryKey: ['plan'] })
         void qc.invalidateQueries({ queryKey: keys.actions })

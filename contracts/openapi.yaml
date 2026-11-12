@@ -784,6 +784,10 @@ components:
           type: boolean
           description: Buddy only reminds; people do it (R05)
         linked_action_id: { type: ["string", "null"], format: uuid }
+        confirm:
+          type: string
+          enum: [self, quiz, mentor]
+          description: "who confirms it is done: self — the intern; quiz — a mini-check in the chat (PATCH done → 409); mentor — PATCH done by the intern → waiting_approval, then the mentor or the lead of the team PATCHes done or in_progress"
         subtasks:
           type: array
           items: { $ref: "#/components/schemas/Task" }

@@ -111,3 +111,29 @@ test('Goals: the intern writes down the goals after the meeting, the lead approv
   await card.getByRole('button', { name: 'Достигнута', exact: true }).click()
   await expect(lead.getByRole('region', { name: 'Цели адаптации' }).locator('.plan-goal').filter({ hasText: title }).getByText('Достигнута', { exact: true })).toBeVisible()
 })
+
+test('Confirmation: a study task opens a mini-check, a team task is confirmed by the mentor (organizers 12.13)', async ({ browser }) => {
+  const ivan = await (await browser.newContext()).newPage()
+  await login(ivan, 'intern.ivan')
+  await ivan.goto('/plan')
+  const study = ivan.locator('.plan-task').filter({ hasText: 'Изучи все необходимые документы' })
+  await expect(study).toContainText('отмечается после мини-проверки')
+  await expect(study.getByRole('checkbox')).toBeDisabled()
+  const team = ivan.locator('.plan-task').filter({ hasText: 'Познакомься с командой' })
+  // a repeated run finds the task done or waiting: bring it back to work first
+  if (await team.getByRole('checkbox').isChecked()) await team.getByRole('checkbox').click()
+  await expect(team.getByRole('checkbox')).not.toBeChecked()
+  if (!(await team.textContent())?.includes('Ждёт подтверждения')) await team.getByRole('checkbox').click() // asks the mentor
+  await expect(team).toContainText('Ждёт подтверждения')
+
+  const sergey = await (await browser.newContext()).newPage()
+  await login(sergey, 'mentor.sergey')
+  await sergey.goto('/team/intern.ivan')
+  const card = sergey.locator('.plan-task').filter({ hasText: 'Познакомься с командой' })
+  await card.getByRole('button', { name: 'Подтвердить выполнение' }).click()
+  await expect(card).toContainText('Готово')
+
+  await study.getByRole('button', { name: 'Проверить себя' }).click()
+  await expect(ivan).toHaveURL(/\/chat/)
+  await expect(lastTurn(ivan)).toContainText('Вставь пропущенные слова', { timeout: 20000 })
+})
