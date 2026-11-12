@@ -82,6 +82,17 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 
 ## LLM и ключи
 
+**Для проверяющих — коротко.**
+
+| Вопрос | Ответ |
+|---|---|
+| Какая модель по умолчанию | **A-Vibe** (Авито, `AvitoTech/avibe`, 8B) в квантовании GGUF Q4_K_M: `hf.co/NightForger/avibe-GGUF:Q4_K_M` |
+| Где работает | локально, Ollama 0.9.6 в том же `docker compose` (сервис `ollama`); веса скачиваются с Hugging Face при первом запуске (~5 ГБ), ключ не нужен |
+| Пока модель не готова | отвечает stub с пометкой «упрощённый режим»; сценарии с заявками от модели не зависят |
+| Облачная модель с вашим ключом | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=…/v1` `LLM_API_KEY=…` `LLM_MODEL=…` в `.env` — готовый пример: [deploy/llm/openai-compatible.env](deploy/llm/openai-compatible.env) |
+| Какие переменные | `LLM_PROVIDER`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_TIMEOUT_S` (все — в `.env.example`) |
+| Все примеры конфигурации | [deploy/llm/](deploy/llm/README.md): A-Vibe в compose, A-Vibe в Ollama на компьютере, облачный API, stub |
+
 По умолчанию — A-Vibe в Ollama из compose, с откатом на `stub`, пока модель грузится или если она недоступна. Stub —
 детерминированный роутер намерений (guardrails → правила → обученный классификатор) и извлекающие ответы по базе
 знаний; на нём проходят все сценарии, e2e и eval (CI запускает стек с `LLM_DEFAULT_PROVIDER=stub AVIBE_PULL=false`).

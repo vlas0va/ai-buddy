@@ -175,6 +175,7 @@ services:
       AVIBE_MODEL: ${AVIBE_MODEL:-hf.co/NightForger/avibe-GGUF:Q4_K_M}
       AVIBE_PULL: ${AVIBE_PULL:-true}
       OLLAMA_KEEP_ALIVE: 24h
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}   # the prompt carries whole KB documents
     volumes:
       - ollama:/root/.ollama
 

@@ -1,7 +1,9 @@
 # LLM и ключи (раздел README, R44–R46)
 
-**Без ключа всё работает.** По умолчанию `LLM_PROVIDER=stub`: детерминированный роутер намерений (guardrails, правила и
-обученный классификатор), разбор русских дат и извлекающие ответы по базе знаний. На stub проходят все сценарии, e2e и eval.
+**Без ключа всё работает.** По умолчанию ответы пишет **A-Vibe** в Ollama из того же compose (веса скачиваются при
+первом запуске, ~5 ГБ). Пока модель грузится, упала или отвечает слишком медленно, работает stub: детерминированный роутер
+намерений (guardrails, правила и обученный классификатор), разбор русских дат и извлекающие ответы по базе знаний. На
+stub проходят все сценарии, e2e и eval (`LLM_PROVIDER=stub` в `.env`). Готовые примеры конфигурации — `deploy/llm/`.
 
 **Свой ключ или своя модель** подключаются переменными в `.env` (пример без секретов — `.env.example`):
 
@@ -30,7 +32,7 @@
 | **A-Vibe** (`AvitoTech/avibe`, 8B на базе Qwen3-8B, Apache-2.0) через vLLM, GPU NVIDIA ~23 ГБ (16 бит) | `docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d` | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=http://avibe:8000/v1` `LLM_MODEL=AvitoTech/avibe` `LLM_TIMEOUT_S=60` |
 | A-Vibe в FP8 (GPU Ada/Hopper, ~12 ГБ) | то же, плюс `AVIBE_QUANTIZATION_FLAG=--quantization=fp8` | то же |
 | **A-Vibe на ноутбуке** через Ollama для Windows/macOS (GPU от 6 ГБ: квантованная версия Q4_K_M, 4,8 ГБ; на 4 ГБ — Q3_K_M) | установить Ollama, `ollama pull hf.co/NightForger/avibe-GGUF:Q4_K_M` (GGUF-сборка `AvitoTech/avibe`), затем обычный `make up` | `LLM_PROVIDER=openai_compat` `LLM_BASE_URL=http://host.docker.internal:11434/v1` `LLM_MODEL=hf.co/NightForger/avibe-GGUF:Q4_K_M` `LLM_TIMEOUT_S=90` |
-| **Ollama** в контейнере (CPU/GPU, без ключа) | `docker compose ... --profile core --profile ollama up -d`, затем `docker compose exec ollama ollama pull qwen2.5:7b-instruct` | `LLM_BASE_URL=http://ollama:11434/v1` `LLM_MODEL=qwen2.5:7b-instruct` |
+| **A-Vibe в Ollama из compose** (по умолчанию; CPU, с GPU NVIDIA — `-f deploy/docker-compose.gpu.yml`) | обычный `make up`; модель скачивается в фоне, другая — `AVIBE_MODEL=…` | ничего не задавать (`LLM_*` пустые) |
 | Внешний API (любой OpenAI-совместимый) | — | `LLM_BASE_URL=https://<provider>/v1` `LLM_API_KEY=...` `LLM_MODEL=...` |
 
 A-Vibe построена на Qwen3 и умеет «рассуждать» (`<think>…</think>`): агент просит модель отвечать без рассуждений
