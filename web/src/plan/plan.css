@@ -70,7 +70,7 @@
 .report-stat--bad strong { color: #c62828; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 14px; }
 .report-table th, .report-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--color-border, #e6e6e3); }
-.report-saved { background: var(--color-accent-soft, #e8f2ff); box-shadow: inset 4px 0 0 var(--avito-blue); }
+.ui-card.report-saved { background: var(--color-accent-soft, #e8f2ff); box-shadow: inset 4px 0 0 var(--avito-blue); }
 .report-saved-main { margin: 0 0 6px; font-size: 16px; }
 .report-saved-main strong { font-size: 22px; color: var(--color-accent-ink, #004a99); }
 
@@ -80,3 +80,15 @@
 
 .esc-scope { display: grid; gap: 4px; margin: 4px 0 0 26px; font-size: 14px; }
 .esc-scope label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+
+/* «Польза buddy» panel (idea 13.11) */
+.ui-card.buddy-benefit { margin-bottom: 16px; background: var(--color-accent-soft, #e8f2ff); box-shadow: inset 4px 0 0 var(--avito-blue), var(--shadow-sm); }
+.buddy-benefit h3 { margin: 0 0 12px; }
+.buddy-benefit-head { display: flex; flex-wrap: wrap; gap: 12px 32px; margin-bottom: 10px; }
+.buddy-benefit-head > div { display: grid; gap: 2px; }
+.buddy-benefit-head span { font-size: 14px; color: var(--color-text-muted, #6b6b6b); }
+.buddy-benefit-percent { font-size: 28px; line-height: 1.1; color: var(--color-accent-ink, #004a99); }
+.buddy-benefit-meter { height: 10px; border-radius: 999px; background: #fff; overflow: hidden; margin-bottom: 14px; }
+.buddy-benefit-meter span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--avito-blue), var(--avito-green)); }
+.buddy-benefit-table { margin-top: 12px; }
+.buddy-benefit .hint { margin: 12px 0 0; }

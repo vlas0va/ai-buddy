@@ -32,6 +32,39 @@ export function listInterns() {
   return apiRequest('/api/team/interns', z.array(internProgressSchema))
 }
 
+const n = z.number().int()
+export const benefitSchema = z.object({
+  interns: n,
+  minutes_per_question: n,
+  asked: n,
+  escalated: n,
+  answered: n,
+  added_to_kb: n,
+  self_served: n,
+  self_served_percent: n,
+  saved_minutes: n,
+  useful: n,
+  not_useful: n,
+  rows: z.array(
+    z.object({
+      user_id: z.string(),
+      display_name: z.string(),
+      asked: n,
+      escalated: n,
+      self_served: n,
+      saved_minutes: n,
+      useful: n,
+      not_useful: n,
+    }),
+  ),
+})
+export type Benefit = z.infer<typeof benefitSchema>
+
+/** «Польза buddy» of the caller's interns (idea 13.11): mentor and lead only (R71: 403 otherwise). */
+export function getBenefit() {
+  return apiRequest('/api/team/benefit', benefitSchema)
+}
+
 const reportTaskSchema = z.object({ title: z.string(), due_at: z.string().nullable(), completed_at: z.string().nullable() })
 
 export const reportSchema = z.object({

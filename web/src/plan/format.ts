@@ -79,3 +79,19 @@ export function askLabel(t: Pick<Task, 'source'> & { checklist_item_id?: string 
   if (t.confirm === 'quiz') return 'Проверить себя'
   return t.checklist_item_id && ACCESS_ITEMS.has(t.checklist_item_id) ? 'Подать заявку' : 'Спросить buddy'
 }
+
+export function plural(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10
+  const m100 = n % 100
+  if (m10 === 1 && m100 !== 11) return one
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
+  return many
+}
+
+/** «40 мин», «1 ч 20 мин», «3 ч» */
+export function hours(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m} мин`
+  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`
+}

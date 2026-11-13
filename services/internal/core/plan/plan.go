@@ -53,6 +53,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("PATCH /api/plan/tasks/{task_id}", h.patchTask)
 	mux.HandleFunc("PUT /api/plan/goals", h.putGoals)
 	mux.HandleFunc("GET /api/team/interns", h.teamInterns)
+	mux.HandleFunc("GET /api/team/benefit", h.teamBenefit)
 	mux.HandleFunc("GET /api/plan/report", h.getReport)
 	mux.HandleFunc("POST /api/plan/goals/propose", h.proposeGoals)
 }
@@ -754,18 +755,9 @@ type Querier interface {
 // mentees): a mentor gets the interns of their own mentor plans, a lead the interns of their team, any other role
 // apierr.Forbidden. now is the clock for overdue tasks and the current period.
 func TeamInterns(ctx context.Context, q Querier, c authn.Claims, now time.Time) ([]InternProgress, error) {
-	var scope string
-	switch c.Role {
-	case "mentor":
-		scope = `u.id IN (SELECT intern_id FROM core.plans WHERE user_id = $1 AND plan_role = 'mentor')`
-	case "lead":
-		scope = `u.team_id = $1`
-	default:
-		return nil, apierr.Forbidden()
-	}
-	arg := c.Sub
-	if c.Role == "lead" {
-		arg = c.TeamID
+	scope, arg, err := internScope(c)
+	if err != nil {
+		return nil, err
 	}
 	now = now.UTC()
 	rows, err := q.Query(ctx, fmt.Sprintf(teamInternsSQL, scope), arg, now.Format("2006-01-02"))

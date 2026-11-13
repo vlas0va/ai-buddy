@@ -3,24 +3,8 @@ import { keys } from '@/api/keys'
 import { getReport, type Report } from '@/api/plan'
 import { QueryState } from '@/components/QueryState'
 import { Card } from '@/components/ui/Card'
-import { shortDate } from './format'
+import { hours, plural, shortDate } from './format'
 import { PERIOD_LABELS } from './periods'
-
-function plural(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10
-  const m100 = n % 100
-  if (m10 === 1 && m100 !== 11) return one
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few
-  return many
-}
-
-/** «40 мин», «1 ч 20 мин», «3 ч» */
-function hours(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m} мин`
-  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`
-}
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'warn' | 'bad' }) {
   return (

@@ -262,6 +262,19 @@ paths:
                 items: { $ref: "#/components/schemas/InternProgress" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/team/benefit:
+    get:
+      tags: [plan]
+      summary: "«Польза buddy» panel: questions of the caller's interns closed by buddy, saved mentor time, helpful marks (mentor and lead)"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TeamBenefit" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/chat/sessions:
     get:
       tags: [chat]
@@ -824,6 +837,36 @@ components:
             id: { type: string, format: uuid }
             created_by: { type: string }
 
+    TeamBenefit:
+      type: object
+      description: Counters only, no message texts (R71). saved_minutes = self_served × minutes_per_question (an estimate).
+      required: [interns, minutes_per_question, asked, escalated, answered, added_to_kb, self_served, self_served_percent, saved_minutes, useful, not_useful, rows]
+      properties:
+        interns: { type: integer }
+        minutes_per_question: { type: integer }
+        asked: { type: integer }
+        escalated: { type: integer }
+        answered: { type: integer }
+        added_to_kb: { type: integer }
+        self_served: { type: integer }
+        self_served_percent: { type: integer, minimum: 0, maximum: 100 }
+        saved_minutes: { type: integer }
+        useful: { type: integer }
+        not_useful: { type: integer }
+        rows:
+          type: array
+          items:
+            type: object
+            required: [user_id, display_name, asked, escalated, self_served, saved_minutes, useful, not_useful]
+            properties:
+              user_id: { type: string }
+              display_name: { type: string }
+              asked: { type: integer }
+              escalated: { type: integer }
+              self_served: { type: integer }
+              saved_minutes: { type: integer }
+              useful: { type: integer }
+              not_useful: { type: integer }
     InternProgress:
       type: object
       required: [user_id, display_name, current_period, done, total, overdue]
