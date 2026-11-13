@@ -112,7 +112,7 @@ func TestClient_ForwardsTokenAndRequestID(t *testing.T) {
 		if auths[i] != "Bearer "+tok {
 			t.Fatalf("request %d without the user token", i)
 		}
-		if i < 2 && ids[i] != "req-42" { // initialize and initialized carry the caller's context
+		if i < 2 && ids[i] != "req-42" { // initialize и initialized несут контекст вызывающего
 			t.Fatalf("request %d: request id %q", i, ids[i])
 		}
 	}
@@ -156,7 +156,7 @@ func TestClientResultDecoding(t *testing.T) {
 	}
 }
 
-// A server that answers success without structured content: Call reports internal.
+// Сервер отвечает успехом без структурированного содержимого: Call сообщает internal.
 func TestClient_SuccessWithoutStructuredContent(t *testing.T) {
 	srv := mcp.NewServer(&mcp.Implementation{Name: "odd", Version: "1"}, &mcp.ServerOptions{GetSessionID: func() string { return "" }})
 	srv.AddTool(&mcp.Tool{Name: "hello", InputSchema: json.RawMessage(`{"type":"object"}`)},
@@ -261,7 +261,7 @@ func TestCallerPlumbing(t *testing.T) {
 	if _, err := tokenInfo(context.Background(), "x", nil); err == nil {
 		t.Fatal("tokenInfo without caller must fail")
 	}
-	// A tools/call that somehow reaches the handler without identity is refused.
+	// tools/call, каким-то образом дошедший до обработчика без личности, отклоняется.
 	s := newAbsence(t, nil, &recorder{})
 	res, err := s.toolHandler(s.tools["get_policy"])(context.Background(), &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "get_policy"}})
 	if err != nil || !res.IsError || !strings.Contains(string(res.StructuredContent.(json.RawMessage)), `"forbidden"`) {

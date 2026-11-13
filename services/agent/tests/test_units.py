@@ -1,4 +1,4 @@
-"""Unit tests for building blocks: canonical tokens, dates, retrieval, state, config, metrics, mocks."""
+"""Юнит-тесты строительных блоков: канонические токены, даты, поиск, состояние, конфиг, метрики, моки."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from agent.text import name_stem, same_person
 TODAY = date(2026, 11, 9)
 
 
-# --------------------------------------------------------------------------- canonical / confirmation tokens
+# --------------------------------------------------------------------------- канонический JSON / токены подтверждения
 def test_CT_01_canonical_json_and_hash_ignore_service_fields():
     assert canonical_json({"b": 1, "a": "я"}) == '{"a":"я","b":1}'
     assert args_hash({"a": 1, "idempotency_key": "x", "confirmation_token": "y"}) == args_hash({"a": 1})
@@ -64,7 +64,7 @@ def test_CT_03_malformed_and_bad_signature():
     assert part
 
 
-# --------------------------------------------------------------------------- dates (S3-02)
+# --------------------------------------------------------------------------- даты (S3-02)
 @pytest.mark.parametrize(
     "text,start,end",
     [
@@ -102,7 +102,7 @@ def test_S3_02b_calendar_helpers():
     assert parse_range("31.02", TODAY) is None
 
 
-# --------------------------------------------------------------------------- retrieval
+# --------------------------------------------------------------------------- поиск
 def test_S2_15_retrieval_acl_before_ranking_and_snippets():
     kb = KnowledgeBase.from_dir(Path(__file__).resolve().parents[3] / "data" / "kb")
     assert all(d.source_type == "test" for d in kb.docs) and len(kb.docs) >= 30
@@ -172,7 +172,7 @@ def test_AG_17_memory_and_redis_stores():
     r.delete("x")
     assert r.get("x") is None
     assert isinstance(make_store(""), MemoryStore)
-    assert isinstance(make_store("redis://127.0.0.1:1/0"), MemoryStore)  # unreachable → memory fallback
+    assert isinstance(make_store("redis://127.0.0.1:1/0"), MemoryStore)  # недоступен → запасной вариант в памяти
 
 
 def test_AG_18_config_env_substitution_and_validation(tmp_path):

@@ -1,8 +1,8 @@
-// Package mcptest runs in-memory fakes of the absence, access, approvals and kb MCP servers for core tests.
+// Пакет mcptest запускает в памяти подделки MCP-серверов absence, access, approvals и kb для тестов ядра.
 //
-// The fakes are real mcpx servers built from contracts/schemas, so a test goes through the real mcpx.Client, JWT
-// check, role allow-list, input/output schemas and confirmation-token verification; only the storage is a map.
-// People and resources mirror the demo seed (migrations/0003_seed_demo.sql).
+// Подделки — настоящие серверы mcpx, собранные из contracts/schemas, поэтому тест проходит через настоящий mcpx.Client,
+// проверку JWT, белый список ролей, входные и выходные схемы и проверку токена подтверждения; подделано только
+// хранилище — это map. Люди и ресурсы повторяют демо-данные (migrations/0003_seed_demo.sql).
 package mcptest
 
 import (
@@ -62,24 +62,24 @@ type approvalRec struct {
 	res      mcpclient.Approval
 }
 
-// Server is a running set of fake MCP servers; use URL as MCP_BASE_URL.
+// Server — запущенный набор поддельных MCP-серверов; URL используйте как MCP_BASE_URL.
 type Server struct {
-	URL string // base URL, e.g. http://127.0.0.1:1234/mcp
+	URL string // базовый URL, например http://127.0.0.1:1234/mcp
 
 	mu        sync.Mutex
 	requests  int
 	calls     map[string]int
 	lastArgs  map[string]json.RawMessage
 	fail      map[string][]*apierr.Error
-	absence   map[string]*absenceRec // by idempotency key
-	access    map[string]*accessRec  // by idempotency key
+	absence   map[string]*absenceRec // по ключу идемпотентности
+	access    map[string]*accessRec  // по ключу идемпотентности
 	approvals []*approvalRec
 	faqs      map[string]mcpclient.FAQ
 	seqABS    int
 	seqACC    int
 }
 
-// New starts the fakes on an httptest server closed at test cleanup.
+// New запускает подделки на httptest-сервере, который закрывается при очистке теста.
 func New(t testing.TB, jwtSecret, confirmationSecret []byte) *Server {
 	t.Helper()
 	s := &Server{
@@ -125,7 +125,7 @@ func New(t testing.TB, jwtSecret, confirmationSecret []byte) *Server {
 	return s
 }
 
-// wrap counts handler calls, remembers the arguments and returns queued failures.
+// wrap считает вызовы обработчика, запоминает аргументы и возвращает поставленные в очередь сбои.
 func (s *Server) wrap(tool string, h mcpx.HandlerFunc) mcpx.HandlerFunc {
 	return func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 		s.mu.Lock()
@@ -143,35 +143,36 @@ func (s *Server) wrap(tool string, h mcpx.HandlerFunc) mcpx.HandlerFunc {
 	}
 }
 
-// Requests returns the number of HTTP requests received by all servers.
+// Requests возвращает число HTTP-запросов, полученных всеми серверами.
 func (s *Server) Requests() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.requests
 }
 
-// Calls returns how many times the handler of tool ("<server>.<tool>") ran (after mcpx accepted the call).
+// Calls возвращает, сколько раз выполнился обработчик инструмента ("<server>.<tool>") (после того как mcpx принял
+// вызов).
 func (s *Server) Calls(tool string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.calls[tool]
 }
 
-// LastArgs returns the arguments of the last accepted call of tool (with idempotency_key and confirmation_token).
+// LastArgs возвращает аргументы последнего принятого вызова инструмента (с idempotency_key и confirmation_token).
 func (s *Server) LastArgs(tool string) json.RawMessage {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastArgs[tool]
 }
 
-// FailNext makes the next len(errs) accepted calls of tool return these tool errors, in order.
+// FailNext заставляет следующие len(errs) принятых вызовов инструмента вернуть эти ошибки по порядку.
 func (s *Server) FailNext(tool string, errs ...*apierr.Error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.fail[tool] = append(s.fail[tool], errs...)
 }
 
-// AbsenceStatus returns the status of an absence request by id ("" when unknown).
+// AbsenceStatus возвращает статус заявки на отсутствие по id ("", если неизвестна).
 func (s *Server) AbsenceStatus(id string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -183,7 +184,7 @@ func (s *Server) AbsenceStatus(id string) string {
 	return ""
 }
 
-// FAQs returns the number of stored FAQ documents.
+// FAQs возвращает число сохранённых документов FAQ.
 func (s *Server) FAQs() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -205,7 +206,7 @@ func ruDate(d string) string {
 	return t.Format("02.01.2006")
 }
 
-// addApproval must be called with s.mu held.
+// addApproval нужно вызывать, удерживая s.mu.
 func (s *Server) addApproval(kind, ref, requester, approver, summary string) {
 	s.approvals = append(s.approvals, &approvalRec{approver: approver, res: mcpclient.Approval{
 		ID: fmt.Sprintf("APR-%08x", len(s.approvals)+1), Kind: kind, RefID: ref, RequesterID: requester,
@@ -213,10 +214,10 @@ func (s *Server) addApproval(kind, ref, requester, approver, summary string) {
 	}})
 }
 
-// HRAdmin is the HR admin who decides the second stage of an absence request.
+// HRAdmin — HR-администратор, который решает второй этап заявки на отсутствие.
 const HRAdmin = "hradmin.olga"
 
-// cancelRequest withdraws the caller's request while the HR admin has not approved it.
+// cancelRequest отзывает заявку вызывающего, пока HR-администратор её не согласовал.
 func (s *Server) cancelRequest(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in struct {
 		ID string `json:"id"`
@@ -244,7 +245,8 @@ func (s *Server) cancelRequest(_ context.Context, c mcpx.Caller, args json.RawMe
 	return nil, apierr.Forbidden()
 }
 
-// rescheduleRequest moves the caller's request while the HR admin has not approved it; approval starts again.
+// rescheduleRequest переносит заявку вызывающего, пока HR-администратор её не согласовал; согласование начинается
+// заново.
 func (s *Server) rescheduleRequest(_ context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in struct {
 		ID        string `json:"id"`
@@ -276,7 +278,7 @@ func (s *Server) rescheduleRequest(_ context.Context, c mcpx.Caller, args json.R
 	return nil, apierr.Forbidden()
 }
 
-// ---- absence ----
+// ---- absence (отсутствия) ----
 
 func (s *Server) getPolicy(_ context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	return map[string]any{"doc_id": "absence-policy-" + c.TeamID, "title": "Тестовая инструкция: отгул",
@@ -348,7 +350,7 @@ func (s *Server) getRequest(_ context.Context, c mcpx.Caller, args json.RawMessa
 	return nil, apierr.Forbidden()
 }
 
-// ---- access ----
+// ---- access (доступы) ----
 
 type accessItem struct {
 	ResourceID      string `json:"resource_id"`
@@ -425,7 +427,7 @@ func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMe
 		env := in.Environment
 		res.Environment = &env
 	}
-	if r.elevated || in.Level != "read" || in.Environment == "prod" { // checkpoint 11.11: write, admin and prod are approved
+	if r.elevated || in.Level != "read" || in.Environment == "prod" { // чекпоинт 11.11: запись, администрирование и prod согласуются
 		approver, _ := approverOf(c.Sub)
 		res.Status, res.ApproverID = "pending_approval", &approver
 		s.addApproval("access_request", res.ID, c.Sub, approver, "Доступ: "+r.name)
@@ -434,7 +436,7 @@ func (s *Server) requestAccess(_ context.Context, c mcpx.Caller, args json.RawMe
 	return res, nil
 }
 
-// ---- approvals ----
+// ---- approvals (согласования) ----
 
 func (s *Server) listPending(_ context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	s.mu.Lock()
@@ -479,7 +481,7 @@ func (s *Server) decide(_ context.Context, c mcpx.Caller, args json.RawMessage) 
 	return nil, apierr.Forbidden()
 }
 
-// applyDecision must be called with s.mu held.
+// applyDecision нужно вызывать, удерживая s.mu.
 func (s *Server) applyDecision(a mcpclient.Approval) {
 	for _, r := range s.absence {
 		if a.Kind != "absence_request" || r.res.ID != a.RefID {

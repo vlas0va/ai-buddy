@@ -1,4 +1,4 @@
-"""S1 in chat, AI-cron reminders, progress summary — openspec/specs/plan-assistant/spec.md."""
+"""S1 в чате, напоминания AI-cron, сводка прогресса — openspec/specs/plan-assistant/spec.md."""
 
 from __future__ import annotations
 

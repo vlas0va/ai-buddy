@@ -1,4 +1,4 @@
-"""SSE event model and wire encoding (contracts/agent-stream.md, section 3)."""
+"""Модель событий SSE и их кодирование для передачи (contracts/agent-stream.md, раздел 3)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ EVENT_NAMES = frozenset(
         "action_result",
         "escalation_draft",
         "next_step",
-        "date_picker",  # feedback 12.11: a calendar to pick absence dates
-        "quiz_passed",  # organizers 12.13: a full quiz score confirms a study task of the plan (core marks it)
+        "date_picker",  # отзыв 12.11: календарь для выбора дат отсутствия
+        "quiz_passed",  # организаторы 12.13: полный балл в тесте подтверждает учебную задачу плана (ядро её отмечает)
         "refusal",
         "tool_result",
         "error",
@@ -43,7 +43,9 @@ class Event:
             raise ValueError(f"unknown event {self.name}")
 
 
-STAGES = frozenset({"thinking", "searching_kb", "calling_service", "saving"})  # enum of contracts/agent-stream.md
+STAGES = frozenset(
+    {"thinking", "searching_kb", "calling_service", "saving"}
+)  # перечисление из contracts/agent-stream.md
 
 
 def status(stage: str, text: str | None = None) -> Event:
@@ -61,7 +63,7 @@ def encode(event: Event, seq: int) -> str:
 
 
 def parse_stream(raw: str) -> list[Event]:
-    """Parse an SSE body back into events (tests, eval runner, dev tools)."""
+    """Разобрать тело SSE обратно в события (тесты, запуск оценки, инструменты разработки)."""
     events: list[Event] = []
     for block in raw.strip().split("\n\n"):
         name, data = None, []

@@ -1,12 +1,12 @@
--- Accesses as at Avito (checkpoint 11.11): a request names a concrete resource (a Jira project, a Bitbucket repository,
--- a database), the environment and the level of rights; who approves depends on the resource. Synthetic data (R68).
+-- Доступы как в Авито (чекпоинт 11.11): заявка называет конкретный ресурс (проект Jira, репозиторий Bitbucket, базу
+-- данных), окружение и уровень прав; кто согласует, зависит от ресурса. Синтетические данные (R68).
 
 ALTER TABLE access.resources DROP CONSTRAINT IF EXISTS resources_kind_check;
 ALTER TABLE access.resources ADD CONSTRAINT resources_kind_check
     CHECK (kind IN ('tool','space','channel','project','repo','database'));
-ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS environments text[] NOT NULL DEFAULT '{}';  -- empty = no environments
+ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS environments text[] NOT NULL DEFAULT '{}';  -- пусто — без окружений
 ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS levels text[] NOT NULL DEFAULT '{read}';
-ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS optional boolean NOT NULL DEFAULT false;     -- requested on demand
+ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS optional boolean NOT NULL DEFAULT false;     -- запрашивается по необходимости
 ALTER TABLE access.resources ADD COLUMN IF NOT EXISTS approver_label text NOT NULL DEFAULT 'руководитель команды';
 
 ALTER TABLE access.requests ADD COLUMN IF NOT EXISTS environment text CHECK (environment IN ('dev','stage','prod'));

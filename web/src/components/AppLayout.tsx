@@ -24,12 +24,12 @@ export function AppLayout() {
     void navigate({ to: '/login' })
   }
 
-  // mock mode only: wipe the persisted demo db and the chat session pointer, then reload
+  // только в мок-режиме: стереть сохранённую демо-базу и указатель на сессию чата, затем перезагрузить
   function resetDemo() {
     try {
       localStorage.removeItem('ai-buddy-mock-db')
     } catch {
-      /* storage unavailable */
+      /* хранилище недоступно */
     }
     useChatStore.setState({ sessions: {} })
     window.location.reload()

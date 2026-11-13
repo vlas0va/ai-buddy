@@ -1,5 +1,6 @@
-"""S1 in chat: current stage, statuses, overdue items and the next step; progress summary for the equator;
-AI-cron reminder texts. Spec: openspec/specs/plan-assistant/spec.md (S1-01 … S1-10)."""
+"""S1 в чате: текущий этап, статусы, просроченное и следующий шаг; сводка прогресса для экватора; тексты напоминаний
+AI-cron. Спецификация: openspec/specs/plan-assistant/spec.md (S1-01 … S1-10).
+"""
 
 from __future__ import annotations
 
@@ -208,7 +209,9 @@ def build_summary(user: User, tasks: list[PlanTask], actions: list[dict[str, Any
 
 
 def reminder_text(item: dict[str, Any], user_name: str = "") -> dict[str, Any]:
-    """Template texts for AI-cron reminders (R54). Human-only items: remind and help prepare, never 'buddy will do it'."""
+    """Шаблонные тексты напоминаний AI-cron (R54). Пункты только для людей: напомнить и помочь подготовиться, никогда
+    «buddy сделает сам».
+    """
     title = item.get("title", "")
     reason = item.get("reason", "period_start")
     hello = f"{user_name}, " if user_name else ""
@@ -238,15 +241,17 @@ TASK_MESSAGE = re.compile(
 
 
 def handle_task_message(turn: Turn, text: str) -> Iterator[Event]:
-    """«Помоги написать наставнику про задачу «…»» from the plan: a concrete draft about that task, not a KB search (S1-14)."""
-    from .coach import _mentor_draft  # local import: coach imports plan helpers indirectly
+    """«Помоги написать наставнику про задачу «…»» из плана: конкретный черновик об этой задаче, а не поиск по базе знаний
+    (S1-14).
+    """
+    from .coach import _mentor_draft  # локальный импорт: coach косвенно импортирует помощники плана
 
     m = TASK_MESSAGE.search(text)
     title = m.group(4).strip() if m else ""
     task = next((t for t in turn.user.tasks if not t.parent_task_id and t.title.lower() == title.lower()), None)
     open_subs = [t.title for t in turn.user.tasks if task and t.parent_task_id == task.task_id and t.status != "done"]
     name = first_name(turn.contact("mentor"), "")
-    mentor = f"наставнику ({name})" if name else "наставнику"  # no declension of a name: «для Олег» read wrong
+    mentor = f"наставнику ({name})" if name else "наставнику"  # имя не склоняем: «для Олег» читалось неправильно
     if open_subs:
         points = "\n".join(f"— {s}" for s in open_subs[:4])
         body = f"Сейчас занимаюсь задачей «{title}» из плана адаптации. Хочу обсудить с тобой:\n{points}\nКогда тебе удобно?"

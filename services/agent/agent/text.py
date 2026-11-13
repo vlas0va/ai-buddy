@@ -1,4 +1,4 @@
-"""Russian text normalisation, tokenisation and stemming shared by NLU and retrieval."""
+"""Нормализация русского текста, токенизация и стемминг, общие для NLU и поиска."""
 
 from __future__ import annotations
 
@@ -223,7 +223,7 @@ _NAME_ENDINGS = ("ой", "ей", "ом", "ем", "ою", "ую", "у", "ю", "а
 
 
 def name_stem(word: str) -> str:
-    """«Анны», «Анне», «Анна» → «анн»: crude Russian first-name stem for matching people mentioned in a message."""
+    """«Анны», «Анне», «Анна» → «анн»: грубая основа русского имени для сопоставления людей, упомянутых в сообщении."""
     w = normalize(word)
     for end in _NAME_ENDINGS:
         if w.endswith(end) and len(w) - len(end) >= 3:
@@ -237,8 +237,9 @@ def same_person(mention: str, full_name: str) -> bool:
     return bool(a) and bool(b) and (a.startswith(b) or b.startswith(a))
 
 
-# Colloquial words interns actually type → the words the test KB is written with. Replacing (not appending) keeps the
-# coverage check honest: «будет ли у меня рабочий ноут?» must find «Ноутбук и техника», not escalate.
+# Разговорные слова, которые на самом деле пишут стажёры, → слова, которыми написана тестовая база знаний. Замена (а не
+# дописывание) сохраняет проверку покрытия честной: «будет ли у меня рабочий ноут?» должен найти «Ноутбук и техника», а
+# не уйти наставнику.
 _SLANG = [
     (r"ноут\w*|комп|компа|компу|макбук\w*|макбоок|ноутбук\w*", "ноутбук"),
     (r"впн|vpn", "vpn сеть"),
@@ -270,7 +271,7 @@ def canonical_query(text: str) -> str:
     return out
 
 
-# --- FAQ for every intern (checkpoint 11.11): no greetings, names or dates (= B's core/escalations.generalize) ---------
+# --- FAQ для любого стажёра (чекпоинт 11.11): без приветствий, имён и дат (= core/escalations.generalize у B) ---------
 ANY_DAY = "в нужный день"
 _MONTHS = r"(?:январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)\w*"
 _WEEKDAYS = r"(?:понедельник|вторник|сред[ау]|четверг|пятниц[ау]|суббот[ау]|воскресенье)"
@@ -290,7 +291,7 @@ _LEADING = re.compile(r"^[\s,.!:;—-]+")
 
 
 def generalize(text: str, names: list[str]) -> str:
-    """Remove greetings, people's names (with Russian endings) and concrete dates from a question or an answer."""
+    """Убрать из вопроса или ответа приветствия, имена людей (с русскими окончаниями) и конкретные даты."""
     out = text.strip()
     words = sorted({w for n in names for w in n.split() if len(w) >= 3}, key=len, reverse=True)
     for w in words:

@@ -1,6 +1,6 @@
-"""Spec → test trace (ADR-005): every `#### Scenario: <ID> ...` in openspec/specs must be referenced by a test.
+"""Трассировка спецификаций в тесты (ADR-005): на каждый `#### Scenario: <ID> ...` в openspec/specs должен ссылаться тест.
 
-python tools/spec_trace.py [--report ../../eval/reports/spec-trace.md]   → exit 1 if a scenario has no test.
+python tools/spec_trace.py [--report ../../eval/reports/spec-trace.md]   → exit 1, если у сценария нет теста.
 """
 
 from __future__ import annotations

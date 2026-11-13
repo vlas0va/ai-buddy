@@ -20,7 +20,7 @@ const KIND_TEXT: Record<Approval["kind"], string> = {
   access_request: "Доступ",
   trip_request: "Командировка",
 };
-/** What happens after the decision, so the lead knows what the button starts (Q&A 10.11: HR steps of a day off). */
+/** Что происходит после решения, чтобы руководитель знал, что запускает кнопка (ответы 10.11: HR-шаги отгула). */
 const AFTER_TEXT: Record<Approval["kind"], string> = {
   absence_request:
     "После вашего согласования заявку согласует HR-администратор; до этого сотрудник может перенести даты.",
@@ -39,7 +39,7 @@ const FILTERS: { id: "all" | Approval["kind"]; label: string }[] = [
 function ApprovalCard({ approval }: { approval: Approval }) {
   const client = useQueryClient();
   const [comment, setComment] = useState("");
-  // one key per card: a double click or a retry replays the same decision instead of creating a second one
+  // один ключ на карточку: двойной клик или повтор воспроизводит то же решение, а не создаёт второе
   const idempotencyKey = useRef(crypto.randomUUID());
   const decide = useMutation({
     mutationFn: (decision: Decision) =>
@@ -56,7 +56,8 @@ function ApprovalCard({ approval }: { approval: Approval }) {
     },
   });
   const busy = decide.isPending || decide.isSuccess;
-  // state updates are async: a ref also stops a second click that lands before the buttons are re-rendered as disabled
+  // обновления состояния асинхронны: ref ещё и останавливает второй клик, если он придёт раньше, чем кнопки
+  // перерисуются выключенными
   const inFlight = useRef(false);
   function submit(decision: Decision) {
     if (inFlight.current) return;

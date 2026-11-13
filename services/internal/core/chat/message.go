@@ -23,10 +23,11 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// kindApprovalDecision is the proposal kind of a lead's decision in chat (approvals.decide).
+// kindApprovalDecision — вид черновика для решения руководителя в чате (approvals.decide).
 const kindApprovalDecision = "approval_decision"
 
-// allowedTools maps a proposal kind to the only write tool a chat proposal of that kind may name (R71).
+// allowedTools сопоставляет виду черновика единственный инструмент записи, который может назвать черновик чата этого
+// вида (R71).
 var allowedTools = map[string]string{
 	"absence_request":    mcpclient.ToolCreateAbsence,
 	"access_request":     mcpclient.ToolRequestAccess,
@@ -34,35 +35,35 @@ var allowedTools = map[string]string{
 	"consent":            mcpclient.ToolSignConsent,
 	"absence_reschedule": mcpclient.ToolReschedule,
 	"absence_cancel":     mcpclient.ToolCancelAbsence,
-	kindApprovalDecision: mcpclient.ToolDecideApproval, // lead only
+	kindApprovalDecision: mcpclient.ToolDecideApproval, // только руководитель
 }
 
-// internalEvents are agent events never forwarded to web: tool_result is internal and action_result is emitted by
-// core only (after saving). The agent's done is replaced by core's (same data, core's message_id).
+// internalEvents — события агента, которые никогда не уходят в веб: tool_result внутренний, а action_result отправляет
+// только ядро (после сохранения). done агента заменяется на done ядра (те же данные, message_id ядра).
 var internalEvents = map[string]bool{
 	agentclient.EventToolResult: true, agentclient.EventActionResult: true,
 }
 
-// turnState collects what a turn persists and reports while its events are relayed.
+// turnState собирает то, что ход сохраняет и о чём сообщает, пока пересылаются его события.
 type turnState struct {
 	text          strings.Builder
 	sources       []json.RawMessage
-	summary       string          // summary of a stored proposal (assistant text fallback)
+	summary       string          // summary сохранённого черновика (запасной текст ассистента)
 	refusal       string          // refusal.reason
-	refusalText   string          // refusal.text (assistant text fallback)
+	refusalText   string          // refusal.text (запасной текст ассистента)
 	escalatedTo   string          // escalation_draft.to_role
-	queued        string          // escalation_draft.question with queue=true: goes to the addressee's stack (13.11)
-	done          json.RawMessage // the agent's done, relayed with core's message_id
+	queued        string          // escalation_draft.question с queue=true: попадает в список адресата (13.11)
+	done          json.RawMessage // done агента, пересылается с message_id ядра
 	doneProvider  string
 	doneLatencyMS *int64
 	doneEscalated bool
-	tooLarge      bool // text or sources over the per-turn bounds
-	// cards shown with the message and restored by the history: proposal, escalation, refusal, next_step
+	tooLarge      bool // текст или источники сверх ограничений на ход
+	// карточки, показанные с сообщением и восстанавливаемые из истории: proposal, escalation, refusal, next_step
 	cards     map[string]json.RawMessage
-	proposals []json.RawMessage // every stored proposal of the turn (a list of accesses has several)
+	proposals []json.RawMessage // все сохранённые черновики хода (у списка доступов их несколько)
 }
 
-// maxCard bounds one stored card; a bigger one is relayed but not kept.
+// maxCard ограничивает одну сохраняемую карточку; большая пересылается, но не хранится.
 const maxCard = 32 << 10
 
 func (s *turnState) card(name string, data json.RawMessage) {
@@ -75,7 +76,7 @@ func (s *turnState) card(name string, data json.RawMessage) {
 	s.cards[name] = data
 }
 
-// addText appends assistant text unless the turn would exceed maxTurnText (then tooLarge is set).
+// addText дописывает текст ассистента, если ход не превысит maxTurnText (иначе выставляется tooLarge).
 func (s *turnState) addText(t string) {
 	if s.text.Len()+len(t) > maxTurnText {
 		s.tooLarge = true
@@ -84,7 +85,7 @@ func (s *turnState) addText(t string) {
 	s.text.WriteString(t)
 }
 
-// collect records the parts of an event core persists or reports.
+// collect запоминает части события, которые ядро сохраняет или о которых сообщает.
 func (s *turnState) collect(ev agentclient.Event) {
 	switch ev.Name {
 	case agentclient.EventToken:
@@ -129,7 +130,7 @@ func (s *turnState) collect(ev agentclient.Event) {
 		s.card("escalation", ev.Data)
 	case agentclient.EventNextStep:
 		s.card("next_step", ev.Data)
-	case "date_picker": // feedback 12.11: the calendar under an absence answer comes back with the history
+	case "date_picker": // отзыв 12.11: календарь под ответом про отсутствие возвращается вместе с историей
 		s.card("date_picker", ev.Data)
 	case agentclient.EventDone:
 		s.done = ev.Data
@@ -144,7 +145,7 @@ func (s *turnState) collect(ev agentclient.Event) {
 	}
 }
 
-// doneEvent is the agent's done (if any) with message_id set to messageID; core adds nothing else.
+// doneEvent — done агента (если был) с message_id = messageID; больше ядро ничего не добавляет.
 func (s *turnState) doneEvent(messageID string) json.RawMessage {
 	var m map[string]json.RawMessage
 	if json.Unmarshal(s.done, &m) != nil || m == nil {
@@ -152,7 +153,7 @@ func (s *turnState) doneEvent(messageID string) json.RawMessage {
 	}
 	id, _ := json.Marshal(messageID)
 	m["message_id"] = id
-	out, _ := json.Marshal(m) // values are valid JSON: cannot fail
+	out, _ := json.Marshal(m) // значения — корректный JSON: ошибки быть не может
 	return out
 }
 
@@ -266,7 +267,7 @@ loop:
 			}
 			st.summary = summary
 			if len(ev.Data) <= maxCard && len(st.proposals) < 10 {
-				st.proposals = append(st.proposals, ev.Data) // only a proposal core stored can be restored and confirmed
+				st.proposals = append(st.proposals, ev.Data) // восстановить и подтвердить можно только черновик, сохранённый ядром
 				if raw, err := json.Marshal(st.proposals); err == nil {
 					st.card("proposals", raw)
 				}
@@ -275,8 +276,9 @@ loop:
 				return
 			}
 		case ev.Name == "quiz_passed":
-			// organizers 12.13: a study task is confirmed by a mini-check; core marks the caller's own task done (the
-			// user comes from the JWT, the agent only names the checklist item) and tells web to refresh the plan
+			// организаторы 12.13: учебная задача подтверждается мини-проверкой; ядро отмечает выполненной собственную
+			// задачу вызывающего (пользователь берётся из JWT, агент только называет пункт чек-листа) и просит веб
+			// обновить план
 			if err := h.quizPassed(ctx, c, ev.Data); err != nil {
 				h.log.Warn("quiz_passed not applied", "session", sid, "err", err)
 				continue
@@ -290,9 +292,9 @@ loop:
 			return
 		case ev.Name == agentclient.EventDone:
 			break loop
-		default: // status, token, sources, escalation_draft, next_step, refusal and events added later
+		default: // status, token, sources, escalation_draft, next_step, refusal и события, добавленные позже
 			if sse.Send(ev.Name, ev.Data) != nil {
-				return // client went away; ctx cancels the agent call
+				return // клиент ушёл; ctx отменяет вызов агента
 			}
 		}
 	}
@@ -305,7 +307,7 @@ loop:
 	_ = sse.Send(agentclient.EventDone, st.doneEvent(assistantID))
 }
 
-// reportAnswer writes chat.answered, chat.refused and chat.escalated from the turn (contracts/events.md).
+// reportAnswer записывает chat.answered, chat.refused и chat.escalated по итогам хода (contracts/events.md).
 func (h *Handler) reportAnswer(ctx context.Context, c authn.Claims, sid, messageID string, started time.Time, st *turnState) {
 	latency := h.Now().Sub(started).Milliseconds()
 	if st.doneLatencyMS != nil {
@@ -328,8 +330,8 @@ func (h *Handler) reportAnswer(ctx context.Context, c authn.Claims, sid, message
 	}
 }
 
-// saveAssistant stores the assistant message of a turn (tokens, else the proposal summary or refusal text) so
-// done.message_id always names a stored message, and reports success.
+// saveAssistant сохраняет сообщение ассистента за ход (токены, иначе summary черновика или текст отказа), чтобы
+// done.message_id всегда указывал на сохранённое сообщение, и сообщает об успехе.
 func (h *Handler) saveAssistant(ctx context.Context, id, sessionID string, st *turnState) bool {
 	text := st.text.String()
 	for _, alt := range []string{st.summary, st.refusalText} {
@@ -346,14 +348,14 @@ func (h *Handler) saveAssistant(ctx context.Context, id, sessionID string, st *t
 	return true
 }
 
-// draft is the part of a proposal draft core checks; the whole draft is stored and sent back unchanged.
+// draft — часть черновика, которую проверяет ядро; черновик целиком сохраняется и возвращается без изменений.
 type draft struct {
 	Tool string
 	Args json.RawMessage
 }
 
-// decodeDraft reads tool and args with exact keys (no case variants of tool, args or display); args must be an
-// object without idempotency_key and confirmation_token.
+// decodeDraft читает tool и args с точными ключами (без вариантов регистра tool, args или display); args должен быть
+// объектом без idempotency_key и confirmation_token.
 func decodeDraft(raw json.RawMessage) (draft, error) {
 	m, err := exactObject(raw, "tool", "args", "display")
 	if err != nil {
@@ -375,9 +377,9 @@ func decodeDraft(raw json.RawMessage) (draft, error) {
 	return d, nil
 }
 
-// storeProposal validates an action_proposal and stores it in core.proposals for the caller and session with
-// draft_hash = canonical SHA-256 of draft.args and expiry ProposalTTL. Only allow-listed write tools are accepted;
-// approval decisions only from leads.
+// storeProposal проверяет action_proposal и сохраняет его в core.proposals для вызывающего и сессии с draft_hash =
+// канонический SHA-256 от draft.args и сроком ProposalTTL. Принимаются только разрешённые инструменты записи; решения
+// по согласованию — только от руководителей.
 func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID string, data json.RawMessage) (string, error) {
 	bad := apierr.Forbidden().WithMessage(msgBadProposal)
 	ev, err := exactObject(data, "proposal_id", "kind", "draft", "summary")
@@ -423,8 +425,8 @@ func (h *Handler) storeProposal(ctx context.Context, c authn.Claims, sessionID s
 	return p.Summary, nil
 }
 
-// quizPassed marks the caller's quiz-confirmed checklist task done (with its subtasks). Only tasks whose confirmation is
-// a quiz are touched; anything else is ignored.
+// quizPassed отмечает выполненной задачу чек-листа вызывающего, подтверждаемую проверкой (вместе с подзадачами).
+// Затрагиваются только задачи с подтверждением через проверку; остальное игнорируется.
 func (h *Handler) quizPassed(ctx context.Context, c authn.Claims, data json.RawMessage) error {
 	var in struct {
 		ChecklistItemID string `json:"checklist_item_id"`
@@ -441,11 +443,11 @@ func (h *Handler) quizPassed(ctx context.Context, c authn.Claims, data json.RawM
 	return err
 }
 
-// quizItems mirror plan.confirmModes («quiz»): study tasks without steps.
+// quizItems повторяют plan.confirmModes («quiz»): учебные задачи без шагов.
 var quizItems = map[string]bool{"CL-07": true, "CL-09": true}
 
-// enqueue puts the intern's question that buddy could not answer into the addressee's stack (organizers 13.11). The
-// user comes from the JWT and the message is the one just saved; a failure is logged and never breaks the turn.
+// enqueue кладёт вопрос стажёра, на который buddy не ответил, в список адресата (организаторы 13.11). Пользователь
+// берётся из JWT, сообщение — только что сохранённое; сбой логируется и никогда не ломает ход.
 func (h *Handler) enqueue(ctx context.Context, c authn.Claims, sid, messageID string, st *turnState) {
 	if st.queued == "" {
 		return

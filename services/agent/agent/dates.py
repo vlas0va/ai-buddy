@@ -1,4 +1,4 @@
-"""Russian date expressions → date ranges, working-day calendar (stub NLU for S3)."""
+"""Русские выражения дат → диапазоны дат, календарь рабочих дней (stub-NLU для S3)."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ NUMBER_WORDS = {
     "неделю": 5,
 }
 
-# Test production calendar of the prototype (public holidays and moved days off). Synthetic policy data.
+# Тестовый производственный календарь прототипа (праздники и перенесённые выходные). Синтетические данные правил.
 HOLIDAYS = frozenset(
     date.fromisoformat(d)
     for d in [
@@ -131,7 +131,7 @@ def working_days(start: date, end: date) -> int:
 
 
 def add_working_days(start: date, n: int) -> date:
-    """Return the date of the n-th working day counting `start` as the first one (if it is working)."""
+    """Вернуть дату n-го рабочего дня, считая `start` первым (если он рабочий)."""
     d = start
     while not is_working_day(d):
         d += timedelta(days=1)
@@ -186,7 +186,7 @@ def _weekday_date(token: str, today: date, next_week: bool) -> date:
 
 
 def _parse_point(text: str, today: date) -> tuple[date, int] | None:
-    """Find the first single date expression; return (date, position)."""
+    """Найти первое выражение одной даты; вернуть (дата, позиция)."""
     candidates: list[tuple[int, date]] = []
     for m in re.finditer(r"\b(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?\b", text):
         d = _infer_year(int(m.group(1)), int(m.group(2)), today, int(m.group(3)) if m.group(3) else None)
@@ -228,7 +228,9 @@ def _duration_days(text: str) -> int | None:
 
 
 def parse_range(text: str, today: date) -> DateRange | None:
-    """Parse expressions like «в пятницу», «завтра», «14 ноября», «14.11», «с 14 по 16 ноября», «с пн по ср», «на 2 дня»."""
+    """Разбирает выражения вроде «в пятницу», «завтра», «14 ноября», «14.11», «с 14 по 16 ноября», «с пн по ср», «на 2
+    дня».
+    """
     t = normalize(text)
     # «14-16 ноября», «с 14 по 16 ноября»
     m = re.search(rf"\b(?:с\s+)?(\d{{1,2}})\s*(?:-|–|—|по|до)\s*(\d{{1,2}})\s+{_MONTH_RE}", t)

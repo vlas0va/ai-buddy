@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { API_URL, login } from './helpers'
 
-// Role views come from /api/me; the server enforces rights, the menu only reflects them.
+// Представления по ролям берутся из /api/me; права проверяет сервер, меню их только отражает.
 const MENUS: Record<string, string[]> = {
   'intern.anna': ['Чат', 'Мой план', 'Мои вопросы'],
   'mentor.oleg': ['Чат', 'Мой план', 'Мои стажёры', 'Вопросы стажёров'],

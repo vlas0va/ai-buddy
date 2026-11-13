@@ -70,7 +70,7 @@ func TestGetFlags_Defaults_R55(t *testing.T) {
 	}
 	var got map[string]bool
 	_ = json.Unmarshal([]byte(body), &got)
-	if len(got) != 6 || !got["scenario_s3"] || !got["escalation_to_kb"] { // on by default since 0013 (feedback 12.13)
+	if len(got) != 6 || !got["scenario_s3"] || !got["escalation_to_kb"] { // включён по умолчанию с миграции 0013 (отзыв 12.13)
 		t.Fatalf("flags: %v", got)
 	}
 	if code, _ := e.call(t, "GET", "/api/flags", "", "", "", ""); code != 401 {
@@ -107,8 +107,8 @@ func TestPutFlags_DemoLeadOnlyAndTargeting_R55(t *testing.T) {
 			t.Errorf("%s: %d", name, code)
 		}
 	}
-	// start from «off» (the demo default is on since 0013), warm the cache, then change: the new value must be visible
-	// immediately (cache invalidated)
+	// начать с «выключен» (в демо по умолчанию включён с 0013), прогреть кеш, затем изменить: новое значение должно
+	// быть видно сразу (кеш сброшен)
 	if _, err := e.pool.Exec(ctx, `UPDATE core.feature_flags SET enabled = false WHERE key = 'escalation_to_kb'`); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestPutFlags_DemoLeadOnlyAndTargeting_R55(t *testing.T) {
 	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM core.analytics_events WHERE name='flag.changed' AND props->>'key'='escalation_to_kb' AND (props->>'teams_count')::int = 1 AND user_id='lead.maria'`).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("flag.changed events: %d %v", n, err)
 	}
-	// disabling for everyone
+	// выключение для всех
 	if code, _ := put("lead.maria", "lead", "delivery", "escalation_to_kb", `{"enabled":false}`); code != 200 {
 		t.Fatalf("disable: %d", code)
 	}
@@ -154,24 +154,24 @@ func TestFlags_CacheFailOpenAndTTL_R55(t *testing.T) {
 	if !e.mr.Exists("flags:v1") || e.mr.TTL("flags:v1") != flags.CacheTTL {
 		t.Fatalf("cache entry missing or wrong ttl: %v", e.mr.TTL("flags:v1"))
 	}
-	// the cache wins while fresh
+	// пока кеш свежий, побеждает он
 	if _, err := e.pool.Exec(ctx, `UPDATE core.feature_flags SET enabled=false WHERE key='scenario_s1'`); err != nil {
 		t.Fatal(err)
 	}
 	if !e.svc.Enabled(ctx, "scenario_s1", "delivery") {
 		t.Fatal("expected cached value")
 	}
-	// after expiry the database is read again
+	// после истечения срока база читается снова
 	e.mr.FastForward(31 * time.Second)
 	if e.svc.Enabled(ctx, "scenario_s1", "delivery") {
 		t.Fatal("expected fresh value after TTL")
 	}
-	// garbage in the cache falls back to the database
+	// мусор в кеше — читаем из базы
 	_ = e.mr.Set("flags:v1", "not json")
 	if e.svc.Enabled(ctx, "scenario_s1", "delivery") {
 		t.Fatal("garbage cache must fall back to DB")
 	}
-	// Redis down: fail-open to the database
+	// Redis недоступен: читаем из базы
 	e.mr.Close()
 	m, err := e.svc.ForTeam(ctx, "delivery")
 	if err != nil || m["scenario_s2"] != true {

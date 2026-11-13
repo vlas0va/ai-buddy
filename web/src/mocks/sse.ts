@@ -1,4 +1,5 @@
-// Builds an SSE body exactly as described in contracts/agent-stream.md: incrementing id, event name, one JSON object per data line.
+// Собирает тело SSE ровно как описано в contracts/agent-stream.md: возрастающий id, имя события, один JSON-объект на
+// строку data.
 
 export const mockConfig = { stepDelayMs: 250 }
 

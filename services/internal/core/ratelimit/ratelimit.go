@@ -1,5 +1,5 @@
-// Package ratelimit is a Redis fixed-window rate limiter (used for chat messages per user, R76-R79).
-// It fails open: when Redis is unreachable the request is allowed and the error is returned for logging.
+// Пакет ratelimit — ограничитель частоты на Redis с фиксированным окном (для сообщений чата от пользователя, R76-R79).
+// При сбое пропускает: если Redis недоступен, запрос разрешается, а ошибка возвращается для логирования.
 package ratelimit
 
 import (
@@ -10,26 +10,26 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Allower is what callers depend on, so tests can fake the limiter.
+// Allower — то, от чего зависят вызывающие, чтобы тесты могли подменить ограничитель.
 type Allower interface {
-	// Allow counts one hit for key and reports whether it is within limit hits per window.
-	// On error the returned bool is true (fail-open).
+	// Allow засчитывает одно обращение по key и сообщает, укладывается ли оно в limit обращений за window. При ошибке
+	// возвращает true (пропускает).
 	Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error)
 }
 
-// Limiter implements Allower on Redis.
+// Limiter реализует Allower на Redis.
 type Limiter struct {
 	rdb redis.Cmdable
 	now func() time.Time
 }
 
-// New returns a Limiter. A nil rdb means "no limiting".
+// New возвращает Limiter. Nil rdb означает «без ограничения».
 func New(rdb redis.Cmdable) *Limiter {
 	return &Limiter{rdb: rdb, now: time.Now}
 }
 
-// Allow implements Allower. The window is aligned to the Unix epoch (fixed window); a non-positive limit or
-// window disables limiting for the call.
+// Allow реализует Allower. Окно выровнено по эпохе Unix (фиксированное окно); неположительные limit или window
+// отключают ограничение для вызова.
 func (l *Limiter) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error) {
 	if l == nil || l.rdb == nil || limit <= 0 || window <= 0 {
 		return true, nil

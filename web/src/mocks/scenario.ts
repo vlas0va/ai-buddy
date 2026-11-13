@@ -3,7 +3,7 @@ import { MOCK_USERS, saveState, state, uuid, type MockProposal } from './db'
 import { BASE_WEEK_2_TASKS } from './plan'
 import { words, type MockEvent } from './sse'
 
-// Scripted mock conversations. They emit only events from contracts/agent-stream.md; lists are plain token text.
+// Мок-разговоры по сценарию. Отправляют только события из contracts/agent-stream.md; списки — обычный текст в токенах.
 
 const src = (doc_id: string, title: string) => ({ doc_id, title, source_type: 'test', url: `/kb/${doc_id}` })
 const ABSENCE_SOURCE = src('kb-absence-001', 'Порядок оформления отгула')
@@ -28,7 +28,7 @@ const searching = (): MockEvent => ({ event: 'status', data: { stage: 'searching
 const sources = (...items: unknown[]): MockEvent => ({ event: 'sources', data: { items } })
 const done = (): MockEvent => ({ event: 'done', data: { message_id: uuid() } })
 
-// ---- access resources -------------------------------------------------------------------------------------------
+// ---- ресурсы доступа ---------------------------------------------------------------------------------------------
 
 interface Resource {
   id: string
@@ -47,7 +47,7 @@ function resourcesFor(user: User): Resource[] {
 type AccessStatus = 'есть' | 'нет' | 'запрошен'
 
 function accessStatus(user: User, res: Resource): AccessStatus {
-  if (res.id === 'confluence') return 'есть' // baseline: every intern gets it on day one
+  if (res.id === 'confluence') return 'есть' // базовый: каждый стажёр получает в первый день
   const hit = (state.actions.get(user.id) ?? []).find(
     (a) => a.kind === 'access_request' && a.summary.startsWith(`Доступ: ${res.name}`) && a.status !== 'rejected' && a.status !== 'failed',
   )
@@ -55,7 +55,7 @@ function accessStatus(user: User, res: Resource): AccessStatus {
   return hit.status === 'pending_approval' ? 'запрошен' : 'есть'
 }
 
-// ---- intents ----------------------------------------------------------------------------------------------------
+// ---- намерения ----------------------------------------------------------------------------------------------------
 
 function isRefusal(lower: string): boolean {
   if (/зарплат|оклад|премия|бонус|компенсаци|медицин|диагноз|страховк/.test(lower)) return true
@@ -202,7 +202,7 @@ function weekEvents(user: User): MockEvent[] {
     thinking(),
     searching(),
     ...words(`На этой неделе в вашем плане:\n${lines}\n`),
-    // client-side link, see MessageBubble: agent-stream.md has no link event
+    // ссылка на стороне клиента, см. MessageBubble: в agent-stream.md нет события-ссылки
     { event: 'token', data: { text: 'Открыть мой план' } },
     sources(ONBOARDING_SOURCE),
     done(),
@@ -228,7 +228,10 @@ export interface MockAttachment {
 
 const SECRET = /\b(\w*?(?:password|secret|token|api[_-]?key)\w*)([ \t]*[=:][ \t]*)\S+/gi
 
-/** Attachments as the real agent answers them (openspec attachments-websearch): logs masked, screenshots and docs not read. */
+/**
+ * Вложения — так, как на них отвечает настоящий агент (openspec attachments-websearch): логи маскируются, скриншоты и
+ * документы не читаются.
+ */
 function attachmentEvents(files: MockAttachment[]): MockEvent[] {
   const text = files.filter((f) => f.kind === 'text').map((f) => f.text ?? '').join('\n')
   const masked = (text.match(SECRET) ?? []).length
@@ -261,11 +264,12 @@ export function messageEvents(sessionId: string, user: User, text: string, files
   return genericEvents()
 }
 
-// ---- confirm ----------------------------------------------------------------------------------------------------
+// ---- подтверждение
+// ----------------------------------------------------------------------------------------------------
 
 export function confirmEvents(proposal: MockProposal): MockEvent[] {
   if (proposal.state === 'executed' && proposal.result) {
-    // replay of an executed proposal: no second request (R79)
+    // повтор выполненного черновика: второй заявки нет (R79)
     return [{ event: 'action_result', data: proposal.result }, done()]
   }
   const isAccess = proposal.draft.tool.startsWith('access.')

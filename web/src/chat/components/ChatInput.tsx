@@ -9,7 +9,7 @@ interface Props {
   onSend: (text: string, attachments: OutgoingAttachment[]) => void
 }
 
-// The only input of the chat: auto-growing field with an autocomplete list of suggestions (combobox pattern).
+// Единственное поле ввода чата: растущее поле со списком подсказок для автодополнения (паттерн combobox).
 export function ChatInput({ disabled, onSend }: Props) {
   const [text, setText] = useState('')
   const [open, setOpen] = useState(false)
@@ -31,7 +31,7 @@ export function ChatInput({ disabled, onSend }: Props) {
     const el = areaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px` // capped at 5 lines by max-height in CSS
+    el.style.height = `${el.scrollHeight}px` // ограничено 5 строками через max-height в CSS
   }, [text])
 
   useEffect(() => {
@@ -171,7 +171,7 @@ export function ChatInput({ disabled, onSend }: Props) {
           aria-expanded={expanded}
           onClick={() => {
             const next = !expanded
-            areaRef.current?.focus() // onFocus opens the list; the explicit toggle below wins
+            areaRef.current?.focus() // onFocus открывает список; явное переключение ниже имеет приоритет
             setOpen(next)
           }}
         >

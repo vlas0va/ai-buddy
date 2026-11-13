@@ -1,4 +1,4 @@
-# Held-out test set: phrasings NOT present in train.yaml. Used for an honest accuracy estimate of the router.
+# Отложенный тестовый набор: формулировки, которых НЕТ в train.yaml. Нужен для честной оценки точности маршрутизатора.
 absence:
 - мне бы выходной в четверг
 - оформи отпуск с 8 по 12 декабря

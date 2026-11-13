@@ -80,7 +80,7 @@ func TestEmit_WithoutKafka_R24(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.outbox`); n != 0 {
 		t.Fatalf("outbox rows without Kafka: %d", n)
 	}
-	// system event: NULL user, now() timestamp
+	// системное событие: пользователь NULL, время now()
 	if err := e.Emit(ctx, pool, analytics.Event{Name: "notification.created"}); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func TestEmit_KafkaOutboxSameTx_R62(t *testing.T) {
 	if n := count(t, pool, `SELECT (SELECT count(*) FROM core.outbox) + (SELECT count(*) FROM core.analytics_events)`); n != 0 {
 		t.Fatalf("rolled back tx left %d rows", n)
 	}
-	// with the pool the pair is still written by one statement
+	// с пулом пара всё равно пишется одним запросом
 	if err := e.Emit(ctx, pool, analytics.Event{Name: "action.created", UserID: "intern.anna", Role: "intern", TeamID: "delivery"}); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestEmit_KafkaOutboxSameTx_R62(t *testing.T) {
 type fakeProducer struct {
 	mu     sync.Mutex
 	sent   []string
-	failAt int // 1-based index of the message that fails; 0 = never
+	failAt int // номер (с 1) сообщения, на котором сбой; 0 — никогда
 }
 
 func (f *fakeProducer) Produce(_ context.Context, topic, key string, value []byte) error {
@@ -197,7 +197,7 @@ func TestPublisher_RunLoop_R62(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	// a failing producer is logged, not fatal
+	// сбой продюсера логируется, но не фатален
 	fp.failAt = 1
 	_ = e.Emit(ctx, pool, analytics.Event{Name: "ui.page_view"})
 	time.Sleep(60 * time.Millisecond)
@@ -314,7 +314,7 @@ func TestFeedback_OwnAssistantMessagesOnly_R24_R71(t *testing.T) {
 	if code, b := e.post(t, "/api/feedback", "intern.anna", "intern", `{"message_id":"`+mid+`","useful":true,"comment":" ok "}`); code != 204 {
 		t.Fatalf("%d %s", code, b)
 	}
-	// second vote overwrites
+	// второй голос перезаписывает первый
 	if code, _ := e.post(t, "/api/feedback", "intern.anna", "intern", `{"message_id":"`+mid+`","useful":false}`); code != 204 {
 		t.Fatalf("revote %d", code)
 	}
@@ -324,7 +324,7 @@ func TestFeedback_OwnAssistantMessagesOnly_R24_R71(t *testing.T) {
 	if n := count(t, e.pool, `SELECT count(*) FROM core.analytics_events WHERE name='chat.feedback' AND props->>'message_id'=$1`, mid); n != 2 {
 		t.Fatalf("events: %d", n)
 	}
-	// foreign user, user message and unknown id all look the same
+	// чужой пользователь, сообщение пользователя и неизвестный id выглядят одинаково
 	for name, c := range map[string][2]string{
 		"foreign":      {"intern.ivan", mid},
 		"own user msg": {"intern.anna", umid},

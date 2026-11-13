@@ -11,7 +11,7 @@ import { createAppRouter } from '@/router'
 import { useChatStore } from '@/store/chat'
 import { signInAs } from '@/test/mockWorld'
 
-// Scripted answers for every suggestion (S2/S4 blocks) against the same handlers as `npm run dev:mock`.
+// Ответы по сценарию на каждую подсказку (блоки S2/S4) на тех же обработчиках, что в `npm run dev:mock`.
 const server = setupServer(...handlers)
 beforeAll(() => server.listen())
 afterAll(() => server.close())

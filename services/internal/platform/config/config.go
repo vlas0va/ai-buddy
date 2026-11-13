@@ -1,11 +1,11 @@
-// Package config reads service settings from environment variables. An Env collects every missing or invalid
-// variable, so a service reports all configuration problems at once and refuses to start (docs/backend §7).
+// Пакет config читает настройки сервиса из переменных окружения. Env собирает все отсутствующие или некорректные
+// переменные, чтобы сервис сразу сообщил обо всех проблемах конфигурации и отказался стартовать (docs/backend §7).
 //
 //	env := config.New(os.Getenv)
 //	cfg := Config{Port: env.Int("CORE_PORT", 8080), JWTSecret: env.Required("JWT_SECRET")}
 //	if err := env.Err(); err != nil { return err }
 //
-// Values are trimmed; an empty value counts as unset (compose often passes VAR= ).
+// Значения обрезаются по краям; пустое значение считается незаданным (compose часто передаёт VAR= ).
 package config
 
 import (
@@ -16,14 +16,15 @@ import (
 	"time"
 )
 
-// Env reads variables through a getenv function and records problems for Err. Not safe for concurrent use.
+// Env читает переменные через функцию getenv и записывает проблемы для Err. Не безопасен для конкурентного
+// использования.
 type Env struct {
 	getenv  func(string) string
 	missing []string
 	invalid []string
 }
 
-// New returns an Env over getenv; nil means os.Getenv.
+// New возвращает Env поверх getenv; nil означает os.Getenv.
 func New(getenv func(string) string) *Env {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -33,7 +34,7 @@ func New(getenv func(string) string) *Env {
 
 func (e *Env) get(key string) string { return strings.TrimSpace(e.getenv(key)) }
 
-// String returns the value of key, or def when it is unset.
+// String возвращает значение key или def, если оно не задано.
 func (e *Env) String(key, def string) string {
 	if v := e.get(key); v != "" {
 		return v
@@ -41,7 +42,7 @@ func (e *Env) String(key, def string) string {
 	return def
 }
 
-// Required returns the value of key; when it is unset the key is recorded as missing and "" is returned.
+// Required возвращает значение key; если оно не задано, ключ записывается как отсутствующий и возвращается "".
 func (e *Env) Required(key string) string {
 	v := e.get(key)
 	if v == "" {
@@ -50,7 +51,8 @@ func (e *Env) Required(key string) string {
 	return v
 }
 
-// Int returns key as a decimal integer, def when unset; an unparsable value is recorded as invalid (def returned).
+// Int возвращает key как десятичное целое, def — если не задано; неразбираемое значение записывается как некорректное
+// (возвращается def).
 func (e *Env) Int(key string, def int) int {
 	v := e.get(key)
 	if v == "" {
@@ -64,8 +66,8 @@ func (e *Env) Int(key string, def int) int {
 	return n
 }
 
-// Duration returns key as a Go duration ("24h", "90s") or a bare number of seconds ("30"), def when unset;
-// an unparsable or negative value is recorded as invalid (def returned).
+// Duration возвращает key как длительность Go ("24h", "90s") или просто число секунд ("30"), def — если не задано;
+// неразбираемое или отрицательное значение записывается как некорректное (возвращается def).
 func (e *Env) Duration(key string, def time.Duration) time.Duration {
 	v := e.get(key)
 	if v == "" {
@@ -87,7 +89,8 @@ func (e *Env) Duration(key string, def time.Duration) time.Duration {
 	return d
 }
 
-// List returns key split on commas with blanks dropped (e.g. CORS_ORIGINS), def when unset or empty.
+// List возвращает key, разделённый по запятым, без пустых элементов (например, CORS_ORIGINS), def — если не задано или
+// пусто.
 func (e *Env) List(key string, def []string) []string {
 	var out []string
 	for _, part := range strings.Split(e.get(key), ",") {
@@ -101,7 +104,8 @@ func (e *Env) List(key string, def []string) []string {
 	return out
 }
 
-// Err returns nil, or one error listing every missing required variable and every invalid value read so far.
+// Err возвращает nil или одну ошибку со списком всех отсутствующих обязательных переменных и всех некорректных
+// значений, прочитанных к этому моменту.
 func (e *Env) Err() error {
 	var parts []string
 	if len(e.missing) > 0 {

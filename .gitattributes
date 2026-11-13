@@ -1,4 +1,4 @@
-# LF everywhere: the team works on Windows, the services run in Linux containers.
+# LF везде: команда работает в Windows, сервисы — в Linux-контейнерах.
 * text=auto eol=lf
 *.png binary
 *.jpg binary

@@ -1,12 +1,12 @@
-// Package plan serves the onboarding plan built from the Avito checklist (S1, R18-R20): GET /api/plan,
-// PATCH /api/plan/tasks/{task_id}, PUT /api/plan/goals and GET /api/team/interns.
+// Пакет plan отдаёт план адаптации, собранный из чек-листа Авито (S1, R18-R20): GET /api/plan, PATCH
+// /api/plan/tasks/{task_id}, PUT /api/plan/goals и GET /api/team/interns.
 //
-// Rights (R71): an intern sees only the own plan; a mentor sees the own mentor plans and the intern plans of their
-// team; a lead sees the intern and mentor plans of their team; everyone else gets 403. A foreign or unknown resource
-// is always 403, never 404, so existence is not revealed.
+// Права (R71): стажёр видит только свой план; наставник — свои планы наставника и планы стажёров своей команды;
+// руководитель — планы стажёров и наставников своей команды; все остальные получают 403. Чужой или неизвестный ресурс —
+// всегда 403, никогда 404, чтобы не раскрывать существование.
 //
-// Status "overdue" is computed on read: a task whose due_at is before today and which is neither done nor
-// waiting_approval is reported as overdue (AI-cron also stores it, see package cron).
+// Статус "overdue" вычисляется при чтении: задача, у которой due_at раньше сегодняшнего дня и которая не done и не
+// waiting_approval, показывается как просроченная (AI-cron тоже его сохраняет, см. пакет cron).
 package plan
 
 import (
@@ -30,16 +30,16 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// Handler serves the plan endpoints.
+// Handler обслуживает эндпоинты плана.
 type Handler struct {
 	pool    *pgxpool.Pool
 	emitter *analytics.Emitter
 	log     *slog.Logger
-	// Now is the clock (tests); defaults to time.Now.
+	// Now — часы (для тестов); по умолчанию time.Now.
 	Now func() time.Time
 }
 
-// New returns the plan HTTP handler. emitter and log may be nil.
+// New возвращает HTTP-обработчик плана. emitter и log могут быть nil.
 func New(pool *pgxpool.Pool, emitter *analytics.Emitter, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -47,7 +47,7 @@ func New(pool *pgxpool.Pool, emitter *analytics.Emitter, log *slog.Logger) *Hand
 	return &Handler{pool: pool, emitter: emitter, log: log, Now: time.Now}
 }
 
-// Register adds the plan routes (auth required).
+// Register добавляет маршруты плана (нужна авторизация).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/plan", h.getPlan)
 	mux.HandleFunc("PATCH /api/plan/tasks/{task_id}", h.patchTask)
@@ -70,9 +70,9 @@ func claims(w http.ResponseWriter, r *http.Request) (authn.Claims, bool) {
 	return c, ok
 }
 
-// ---- JSON shapes (openapi Plan, Task, NextStep, Goal) ----
+// ---- формы JSON (openapi Plan, Task, NextStep, Goal) ----
 
-// Task is the openapi Task without nested subtasks.
+// Task — это openapi Task без вложенных подзадач.
 type Task struct {
 	ID              string  `json:"id"`
 	Source          string  `json:"source"`
@@ -85,14 +85,15 @@ type Task struct {
 	DueAt           *string `json:"due_at"`
 	HumanOnly       bool    `json:"human_only"`
 	LinkedActionID  *string `json:"linked_action_id"`
-	// Confirm says who confirms the task is done (organizers 12.13: our choice per task type): self — the intern ticks it;
-	// quiz — a mini-check in the chat marks it done; mentor — the intern asks, the mentor or the lead confirms.
+	// Confirm говорит, кто подтверждает выполнение задачи (организаторы 12.13: выбор по типу задачи за нами): self —
+	// стажёр отмечает сам; quiz — мини-проверка в чате отмечает выполнение; mentor — стажёр просит, наставник или
+	// руководитель подтверждает.
 	Confirm string `json:"confirm"`
 
-	stored string // status as stored, before the overdue-on-read rule
+	stored string // статус как сохранён, до правила «просрочено при чтении»
 }
 
-// confirmModes: study tasks without steps are checked with a quiz, getting to know the team is confirmed by the mentor.
+// confirmModes: учебные задачи без шагов проверяются тестом, знакомство с командой подтверждает наставник.
 var confirmModes = map[string]string{"CL-07": "quiz", "CL-09": "quiz", "CL-03": "mentor"}
 
 func confirmMode(item *string) string {
@@ -104,20 +105,20 @@ func confirmMode(item *string) string {
 	return "self"
 }
 
-// TopTask is a top-level task with its subtasks (always present, possibly empty).
+// TopTask — задача верхнего уровня с подзадачами (поле есть всегда, может быть пустым).
 type TopTask struct {
 	Task
 	Subtasks []Task `json:"subtasks"`
 }
 
-// PeriodTasks is one period of the plan.
+// PeriodTasks — один этап плана.
 type PeriodTasks struct {
 	ID    string    `json:"id"`
 	Label string    `json:"label"`
 	Tasks []TopTask `json:"tasks"`
 }
 
-// NextStep is the openapi NextStep.
+// NextStep — это openapi NextStep.
 type NextStep struct {
 	TaskID string `json:"task_id"`
 	Title  string `json:"title"`
@@ -125,7 +126,7 @@ type NextStep struct {
 	Prompt string `json:"prompt,omitempty"`
 }
 
-// Goal is the openapi Goal.
+// Goal — это openapi Goal.
 type Goal struct {
 	ID        string  `json:"id"`
 	Title     string  `json:"title"`
@@ -136,7 +137,7 @@ type Goal struct {
 
 var goalStatuses = map[string]bool{"proposed": true, "active": true, "achieved": true, "missed": true}
 
-// Plan is the openapi Plan.
+// Plan — это openapi Plan.
 type Plan struct {
 	UserID        string        `json:"user_id"`
 	PlanRole      string        `json:"plan_role"`
@@ -147,7 +148,7 @@ type Plan struct {
 	NextStep      *NextStep     `json:"next_step"`
 }
 
-// effectiveStatus applies the "overdue on read" rule. today and due are YYYY-MM-DD.
+// effectiveStatus применяет правило «просрочено при чтении». today и due — YYYY-MM-DD.
 func effectiveStatus(status string, due *string, today string) string {
 	if status == "done" || status == "waiting_approval" || status == "overdue" {
 		return status
@@ -158,7 +159,7 @@ func effectiveStatus(status string, due *string, today string) string {
 	return status
 }
 
-// ---- plan resolution (R71) ----
+// ---- выбор плана (R71) ----
 
 type planRef struct {
 	id       string
@@ -186,7 +187,7 @@ func (h *Handler) internInTeam(ctx context.Context, id, team string) (bool, erro
 	return ok, err
 }
 
-// resolve picks the plan the caller asked for or returns a 400/403/404 apierr.
+// resolve выбирает план, который запросил вызывающий, или возвращает apierr 400/403/404.
 func (h *Handler) resolve(ctx context.Context, c authn.Claims, userID, internID string) (planRef, error) {
 	one := func(where string, args ...any) (planRef, error) {
 		p, err := scanPlan(h.pool.QueryRow(ctx, planSelect+" WHERE "+where+" ORDER BY p.created_at, p.intern_id LIMIT 1", args...))
@@ -244,7 +245,7 @@ func (h *Handler) resolve(ctx context.Context, c authn.Claims, userID, internID 
 	}
 }
 
-// ---- loading ----
+// ---- загрузка ----
 
 const taskCols = `t.id::text, t.parent_task_id::text, t.source, t.checklist_item_id, t.period, t.title, t.description,
 	t.status, t.due_at::text, t.human_only, t.linked_action_id::text`
@@ -262,7 +263,8 @@ func scanTask(row pgx.Row, today string) (Task, error) {
 	return t, err
 }
 
-// loadTasks returns the top-level tasks of a plan grouped by period, in checklist order, with subtasks nested.
+// loadTasks возвращает задачи верхнего уровня плана, сгруппированные по этапам, в порядке чек-листа, с вложенными
+// подзадачами.
 func (h *Handler) loadTasks(ctx context.Context, planID, today string) ([]PeriodTasks, []TopTask, error) {
 	rows, err := h.pool.Query(ctx, `SELECT `+taskCols+` FROM core.plan_tasks t WHERE t.plan_id = $1
 		ORDER BY (t.source <> 'checklist'), t.position, t.title, t.id`, planID)
@@ -357,9 +359,9 @@ func (h *Handler) getPlan(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ---- next step (R20) ----
+// ---- следующий шаг (R20) ----
 
-// statusRank: overdue first, then in progress, then not started. waiting_approval and done are never next.
+// statusRank: сначала просроченные, затем в работе, затем не начатые. waiting_approval и done следующими не бывают.
 var statusRank = map[string]int{"overdue": 0, "in_progress": 1, "not_started": 2}
 
 var askPrompts = map[string]string{
@@ -369,10 +371,10 @@ var askPrompts = map[string]string{
 	"CL-10": "Помоги подготовиться к экваторной встрече: что нужно сделать и где взять материалы",
 }
 
-// nextStep picks the first not-done checklist task of the current or an earlier period: tasks that people do
-// (human_only) come last; within a group overdue > in progress > not started. Among equals a task that nobody has
-// started yet goes before one stored as in_progress (work on it is already under way), then period and position.
-// Tasks created by actions (source = action) are skipped.
+// nextStep выбирает первую невыполненную задачу чек-листа текущего или более раннего этапа: задачи, которые делают люди
+// (human_only), идут последними; внутри группы просроченные > в работе > не начатые. Среди равных задача, за которую
+// ещё никто не брался, идёт раньше сохранённой как in_progress (работа над ней уже идёт), затем этап и позиция. Задачи,
+// созданные действиями (source = action), пропускаются.
 func nextStep(tops []TopTask, cur period.Period) *NextStep {
 	var best *TopTask
 	bestKey := [5]int{}
@@ -488,7 +490,7 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 		FROM core.plan_tasks t JOIN core.plans p ON p.id = t.plan_id WHERE t.id = $1 FOR UPDATE OF t`, id).
 		Scan(&t.planID, &t.source, &t.period, &t.status, &t.parent, &t.item, &t.due, &t.owner)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, apierr.Forbidden() // unknown and foreign tasks look the same (R71)
+		return nil, apierr.Forbidden() // неизвестные и чужие задачи выглядят одинаково (R71)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("select task: %w", err)
@@ -498,7 +500,7 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 		mode = confirmMode(t.item)
 	}
 	if t.owner != c.Sub {
-		// the mentor or the lead of the team confirms (done) or returns (in_progress) a task waiting for them
+		// наставник или руководитель команды подтверждает (done) или возвращает (in_progress) задачу, которая ждёт его
 		ok, err := h.reviewerOf(ctx, c, t.owner)
 		if err != nil {
 			return nil, err
@@ -513,7 +515,7 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 		case mode == "quiz" && status == "done":
 			return nil, apierr.Conflict().WithMessage("Эта задача отмечается после мини-проверки: нажми «Проверить себя»")
 		case mode == "mentor" && status == "done":
-			status = "waiting_approval" // the intern asks, the mentor confirms
+			status = "waiting_approval" // стажёр просит, наставник подтверждает
 		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now() WHERE id = $1`, id, status); err != nil {
@@ -553,7 +555,8 @@ func (h *Handler) setStatus(ctx context.Context, c authn.Claims, id, status stri
 	return out, nil
 }
 
-// syncParent completes the parent when all its subtasks are done and reopens a done parent when a subtask is reopened.
+// syncParent завершает родителя, когда выполнены все его подзадачи, и переоткрывает выполненного родителя, когда
+// переоткрыта подзадача.
 func (h *Handler) syncParent(ctx context.Context, tx pgx.Tx, c authn.Claims, parentID, newStatus, oldStatus string) error {
 	if newStatus == "done" {
 		var all bool
@@ -613,7 +616,7 @@ func (h *Handler) loadTop(ctx context.Context, q pgx.Tx, id string) (TopTask, er
 type goalInput struct {
 	Title    string `json:"title"`
 	Criteria string `json:"criteria"`
-	Status   string `json:"status"` // empty = active
+	Status   string `json:"status"` // пусто — active
 }
 
 func (h *Handler) putGoals(w http.ResponseWriter, r *http.Request) {
@@ -690,7 +693,7 @@ func (h *Handler) replaceGoals(ctx context.Context, c authn.Claims, internID str
 	out := make([]Goal, 0, len(in))
 	for _, g := range in {
 		var saved Goal
-		// clock_timestamp() keeps the input order: created_at differs per row inside one transaction.
+		// clock_timestamp() сохраняет порядок ввода: внутри одной транзакции created_at у строк разный.
 		err := tx.QueryRow(ctx, `INSERT INTO core.goals (plan_id, title, criteria, created_by, created_at, status)
 			VALUES ($1, $2, NULLIF($3, ''), $4, clock_timestamp(), $5) RETURNING id::text, title, criteria, created_by, status`,
 			planID, g.Title, g.Criteria, c.Sub, g.Status).Scan(&saved.ID, &saved.Title, &saved.Criteria, &saved.CreatedBy, &saved.Status)
@@ -711,7 +714,7 @@ func (h *Handler) replaceGoals(ctx context.Context, c authn.Claims, internID str
 
 // ---- GET /api/team/interns ----
 
-// InternProgress is the openapi InternProgress.
+// InternProgress — это openapi InternProgress.
 type InternProgress struct {
 	UserID                string `json:"user_id"`
 	DisplayName           string `json:"display_name"`
@@ -746,14 +749,14 @@ func (h *Handler) teamInterns(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// Querier is the subset of *pgxpool.Pool and pgx.Tx used by TeamInterns.
+// Querier — подмножество *pgxpool.Pool и pgx.Tx, которое использует TeamInterns.
 type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// TeamInterns returns the progress of the interns the caller looks after (GET /api/team/interns; chat user_context
-// mentees): a mentor gets the interns of their own mentor plans, a lead the interns of their team, any other role
-// apierr.Forbidden. now is the clock for overdue tasks and the current period.
+// TeamInterns возвращает прогресс стажёров, которых ведёт вызывающий (GET /api/team/interns; подопечные в user_context
+// чата): наставник получает стажёров своих планов наставника, руководитель — стажёров своей команды, остальные роли —
+// apierr.Forbidden. now — часы для просроченных задач и текущего этапа.
 func TeamInterns(ctx context.Context, q Querier, c authn.Claims, now time.Time) ([]InternProgress, error) {
 	scope, arg, err := internScope(c)
 	if err != nil {

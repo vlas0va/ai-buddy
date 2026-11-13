@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ask, lastTurn, login, newDialog, waitAnswer } from './helpers'
 
-// S4: required accesses with statuses, a request through access MCP, channels and a draft to the mentor.
+// S4: обязательные доступы со статусами, заявка через access MCP, каналы и черновик наставнику.
 test('S4: required accesses are listed with statuses; a missing one is requested and saved', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)
@@ -9,13 +9,14 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   await waitAnswer(page)
   await expect(lastTurn(page)).toContainText('Confluence')
   await expect(lastTurn(page)).toContainText('Bitbucket')
-  // feedback 12.11: the missing accesses are one list with checkboxes; ordinary ones are checked
+  // отзыв 12.11: недостающие доступы — один список с галочками; обычные отмечены
   const list = page.getByLabel('Набор заявок на доступ').last()
   if (await list.count()) {
     await list.getByRole('button', { name: /Запросить выбранные/ }).click()
-    // results land in the rows of the list; every request is saved and listed in «Мои заявки» (R66)
+    // результаты появляются в строках списка; каждая заявка сохраняется и видна в «Мои заявки» (R66)
     await expect(list).toContainText(/выдан · ACC-\d+/)
-    // a fresh base also offers the elevated incident space, unchecked: the intern declines it, and the list is done
+    // свежая база ещё предлагает пространство инцидентов с повышенными правами, без галочки: стажёр от него
+    // отказывается, и список готов
     const rest = list.getByRole('button', { name: 'Отменить остальные' })
     if (await rest.isVisible()) await rest.click()
     await expect(list).toContainText('Готово', { timeout: 20000 })
@@ -27,7 +28,7 @@ test('S4: required accesses are listed with statuses; a missing one is requested
   }
 })
 
-// checkpoint 11.11: adding to groups is asked in personal messages, so buddy gives advice without a draft
+// чекпоинт 11.11: о добавлении в группы просят в личных сообщениях, поэтому buddy даёт совет без черновика
 test('S4: channels of the team come with advice to write the mentor personally', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)
@@ -47,7 +48,7 @@ test('S4: a clone question is engineering help, not an access request', async ({
   await expect(lastTurn(page).getByLabel('Черновик заявки')).toHaveCount(0)
 })
 
-// checkpoint 11.11: the accesses are a table; a request names the resource, the environment and the rights
+// чекпоинт 11.11: доступы — таблица; заявка называет ресурс, окружение и права
 test('S4: accesses table and a database request on stage for reading', async ({ page }) => {
   await login(page, 'mentor.oleg')
   await newDialog(page)

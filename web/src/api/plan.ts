@@ -9,7 +9,7 @@ export interface GoalInput {
   status?: 'proposed' | 'active' | 'achieved' | 'missed'
 }
 
-/** Own plan without arguments; a mentor or lead passes `userId` of an intern of their team (R71: 403 otherwise). */
+/** Свой план без аргументов; наставник или руководитель передаёт `userId` стажёра своей команды (R71: иначе 403). */
 export function getPlan(userId?: string) {
   const query = userId ? `?user_id=${encodeURIComponent(userId)}` : ''
   return apiRequest(`/api/plan${query}`, planSchema)
@@ -23,7 +23,7 @@ export function saveGoals(userId: string, goals: GoalInput[]) {
   return apiRequest('/api/plan/goals', z.array(goalSchema), { method: 'PUT', body: { user_id: userId, goals } })
 }
 
-/** The intern writes down the goals agreed with the lead; they wait for the mentor or the lead (organizers 12.11). */
+/** Стажёр записывает цели, согласованные с руководителем; они ждут наставника или руководителя (организаторы 12.11). */
 export function proposeGoals(goals: GoalInput[]) {
   return apiRequest('/api/plan/goals/propose', z.array(goalSchema), { method: 'POST', body: { goals } })
 }
@@ -60,7 +60,7 @@ export const benefitSchema = z.object({
 })
 export type Benefit = z.infer<typeof benefitSchema>
 
-/** «Польза buddy» of the caller's interns (idea 13.11): mentor and lead only (R71: 403 otherwise). */
+/** «Польза buddy» по стажёрам вызывающего (идея 13.11): только наставник и руководитель (R71: иначе 403). */
 export function getBenefit() {
   return apiRequest('/api/team/benefit', benefitSchema)
 }
@@ -103,7 +103,7 @@ export const reportSchema = z.object({
 })
 export type Report = z.infer<typeof reportSchema>
 
-/** Internship report (idea 12.11): the mentor or lead of the team passes the intern's `userId` (R71: 403 otherwise). */
+/** Отчёт за стажировку (идея 12.11): наставник или руководитель команды передаёт `userId` стажёра (R71: иначе 403). */
 export function getReport(userId: string) {
   return apiRequest(`/api/plan/report?user_id=${encodeURIComponent(userId)}`, reportSchema)
 }

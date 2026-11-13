@@ -10,7 +10,7 @@ import { useChatStore } from '@/store/chat'
 import { useSession } from '@/store/session'
 import { ChatPage } from './ChatPage'
 
-// Full S3 flow against the same MSW handlers that power `npm run dev:mock`.
+// Полный сценарий S3 на тех же обработчиках MSW, что работают в `npm run dev:mock`.
 const server = setupServer(...handlers)
 beforeAll(() => server.listen())
 afterAll(() => server.close())
@@ -48,7 +48,7 @@ describe('S3 day off flow', () => {
     const draft = await screen.findByLabelText('Черновик заявки')
     expect(within(draft).getByText('Мария Лебедева')).toBeInTheDocument()
     expect(screen.getByText('Тестовая инструкция прототипа')).toBeInTheDocument() // R69
-    // nothing is created before the click
+    // до клика ничего не создаётся
     expect(screen.queryByLabelText('Результат заявки')).not.toBeInTheDocument()
 
     await userEvent.click(within(draft).getByRole('button', { name: 'Отправить' }))
@@ -59,9 +59,9 @@ describe('S3 day off flow', () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ['plan'] })
     expect(spy).toHaveBeenCalledWith({ queryKey: ['actions'] })
     expect(await screen.findByText('ABS-1042')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled() // empty input
+    expect(screen.getByRole('button', { name: 'Отправить' })).toBeDisabled() // пустой ввод
 
-    // reload: a fresh page restores the conversation (GET /api/chat/sessions/{id}) and the request list
+    // перезагрузка: новая страница восстанавливает разговор (GET /api/chat/sessions/{id}) и список заявок
     unmount()
     mount()
     expect(await screen.findByText('ABS-1042')).toBeInTheDocument()
@@ -137,7 +137,7 @@ describe('S3 day off flow', () => {
     await userEvent.click(within(alert).getByRole('button', { name: 'Повторить' }))
     expect(await screen.findByText(/тестовый ответ прототипа/i)).toBeInTheDocument()
     await ask('другая ошибка')
-    expect(await screen.findByRole('alert')).toBeInTheDocument() // the flag is per text, not global
+    expect(await screen.findByRole('alert')).toBeInTheDocument() // флаг — для каждого текста, а не глобальный
   })
 
   it('R79: a retryable error shows "Повторить" and the retry succeeds', async () => {
@@ -148,7 +148,7 @@ describe('S3 day off flow', () => {
     await userEvent.click(within(alert).getByRole('button', { name: 'Повторить' }))
     expect(await screen.findByText(/тестовый ответ прототипа/i)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getAllByText('ошибка при ответе')).toHaveLength(1) // the user bubble is not duplicated
+    expect(screen.getAllByText('ошибка при ответе')).toHaveLength(1) // пузырь пользователя не дублируется
   })
 
   it('R69: any other message answers with a test source and the badge', async () => {

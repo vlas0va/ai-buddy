@@ -33,7 +33,7 @@ func TestTeamBenefit_SharesAndSavedTime_Idea1311(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: code %d %v", u.id, code, m)
 		}
-		// 4 questions of Anna, 1 sent to the mentor: 3 closed by buddy = 75%, 30 minutes; Ivan of another team is not counted.
+		// 4 вопроса Анны, 1 передан наставнику: 3 закрыл buddy = 75%, 30 минут; Иван из другой команды не считается.
 		if num(m, "asked") != 4 || num(m, "escalated") != 1 || num(m, "answered") != 1 || num(m, "added_to_kb") != 1 ||
 			num(m, "self_served") != 3 || num(m, "self_served_percent") != 75 || num(m, "saved_minutes") != 30 ||
 			num(m, "useful") != 1 || num(m, "not_useful") != 0 || num(m, "minutes_per_question") != 10 {
@@ -45,7 +45,7 @@ func TestTeamBenefit_SharesAndSavedTime_Idea1311(t *testing.T) {
 			t.Fatalf("%s: rows %v", u.id, rows)
 		}
 	}
-	// Another team: Ivan's question only, nothing from Anna.
+	// Другая команда: только вопрос Ивана, ничего от Анны.
 	if _, m := e.benefit(dmitry); num(m, "asked") != 1 || num(m, "self_served_percent") != 100 {
 		t.Fatalf("other team: %v", m)
 	}

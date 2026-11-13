@@ -29,7 +29,7 @@ func TestCurrent_Boundaries(t *testing.T) {
 
 func TestDaysSince_IgnoresTimeOfDayAndZone(t *testing.T) {
 	msk := time.FixedZone("MSK", 3*3600)
-	// 2026-11-09 01:00 in Moscow is still 2026-11-08 in UTC; the calendar date in its own zone counts.
+	// 2026-11-09 01:00 по Москве — это ещё 2026-11-08 по UTC; считается календарная дата в собственном поясе.
 	today := time.Date(2026, 11, 9, 1, 0, 0, 0, msk)
 	if got := DaysSince(start, today); got != 7 {
 		t.Fatalf("got %d", got)
@@ -37,7 +37,7 @@ func TestDaysSince_IgnoresTimeOfDayAndZone(t *testing.T) {
 	if got := DaysSince(start.Add(23*time.Hour), start.AddDate(0, 0, 1)); got != 1 {
 		t.Fatalf("time of day must be ignored, got %d", got)
 	}
-	// Across a DST change in a zone that has one.
+	// Через переход на летнее время в поясе, где он есть.
 	berlin, err := time.LoadLocation("Europe/Berlin")
 	if err == nil {
 		a := time.Date(2026, 3, 28, 12, 0, 0, 0, berlin)

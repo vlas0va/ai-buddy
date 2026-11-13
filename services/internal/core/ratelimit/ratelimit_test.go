@@ -27,11 +27,11 @@ func TestAllow_FixedWindow_R77(t *testing.T) {
 			t.Fatalf("hit %d: allowed=%v want %v", i, ok, want)
 		}
 	}
-	// other key and other user are independent
+	// другой ключ и другой пользователь независимы
 	if ok, _ := l.Allow(ctx, "chat:intern.ivan", 3, time.Minute); !ok {
 		t.Fatal("other user must be allowed")
 	}
-	// the next window starts from zero
+	// следующее окно начинается с нуля
 	time.Sleep(1100 * time.Millisecond)
 	if ok, _ := l.Allow(ctx, "chat:intern.anna", 3, time.Second); !ok {
 		t.Fatal("new window must be allowed")

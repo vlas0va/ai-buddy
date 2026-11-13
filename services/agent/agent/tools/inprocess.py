@@ -1,8 +1,8 @@
-"""In-process mocks of the corporate MCP servers (absence, approvals, access, checklist, directory, kb, trips, consents).
+"""Моки корпоративных MCP-серверов в процессе (absence, approvals, access, checklist, directory, kb, trips, consents).
 
-Used when MCP_<SERVER>_URL is empty: standalone demo, unit tests, eval, and until B's Go servers implement a tool.
-Inputs and outputs follow contracts/schemas/*.json exactly (B's contract), errors follow contracts/mcp-tools.md:
-every mock verifies the user JWT ITSELF (ADR-003 layer 3), checks confirmation tokens on writes and is idempotent.
+Используются, когда MCP_<SERVER>_URL пуст: автономное демо, юнит-тесты, оценка, а также пока Go-серверы B не реализовали
+инструмент. Входы и выходы в точности следуют contracts/schemas/*.json (контракт B), ошибки — contracts/mcp-tools.md:
+каждый мок САМ проверяет JWT пользователя (ADR-003, слой 3), проверяет токены подтверждения при записи и идемпотентен.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from ..errors import ToolDenied, ToolError, ToolValidationError
 from ..retrieval import KnowledgeBase
 
 PERIODS = [("week_1", 7), ("week_2", 14), ("month_1", 30), ("month_2", 90)]  # = B's platform/period.Current
-TOOL_ROLES = {  # mirrors "roles" in contracts/schemas/*.json
+TOOL_ROLES = {  # повторяет "roles" в contracts/schemas/*.json
     "absence.get_policy": {"intern", "mentor", "lead"},
     "absence.list_my_requests": {"intern", "mentor", "lead"},
     "absence.validate_request": {"intern", "mentor", "lead"},
@@ -92,7 +92,7 @@ def _now_iso() -> str:
 
 
 class MockServices:
-    """Shared in-memory state of all mock services."""
+    """Общее состояние всех мок-сервисов в памяти."""
 
     def __init__(
         self,
@@ -146,7 +146,7 @@ class MockServices:
                 "CNS": 299,
             }
 
-    # ------------------------------------------------------------------ helpers
+    # ------------------------------------------------------------------ помощники
     def _next_id(self, prefix: str) -> str:
         self.seq[prefix] += 1
         return f"{prefix}-{self.seq[prefix]:06d}" if prefix != "APR" else f"APR-{self.seq[prefix]:08x}"
@@ -211,16 +211,16 @@ class MockServices:
         stored = self.idempotency.get(key)
         return {**stored, "replayed": True} if stored else None
 
-    # ------------------------------------------------------------------ dispatch
+    # ------------------------------------------------------------------ диспетчеризация
     def call(self, tool: str, args: dict[str, Any], user_token: str) -> Any:
-        claims = decode_token(self.jwt_secret, user_token)  # the mock service authenticates the user itself
+        claims = decode_token(self.jwt_secret, user_token)  # мок-сервис сам аутентифицирует пользователя
         roles = TOOL_ROLES.get(tool)
         if roles is not None and claims["role"] not in roles:
-            raise ToolDenied("Операция недоступна.")  # forbidden never reveals whether a resource exists
+            raise ToolDenied("Операция недоступна.")  # forbidden никогда не раскрывает, существует ли ресурс
         allowed = ALLOWED_ARGS.get(tool, set())
         unknown = set(args) - allowed
         if unknown:
-            raise ToolValidationError(f"Неизвестные поля: {', '.join(sorted(unknown))}.")  # identity only from JWT
+            raise ToolValidationError(f"Неизвестные поля: {', '.join(sorted(unknown))}.")  # личность только из JWT
         handler = getattr(self, "t_" + tool.replace(".", "__"), None)
         if handler is None:
             raise ToolError(f"Неизвестный инструмент {tool}", code="bad_request", retryable=False, http_status=400)
@@ -230,7 +230,7 @@ class MockServices:
             self._fault(tool, "after")
             return result
 
-    # ------------------------------------------------------------------ directory
+    # ------------------------------------------------------------------ directory (справочник)
     def t_directory__whoami(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         e = self.employees.get(c["sub"], {})
         out = {
@@ -269,7 +269,7 @@ class MockServices:
                 )
         return {"items": items}
 
-    # ------------------------------------------------------------------ checklist
+    # ------------------------------------------------------------------ checklist (чек-лист)
     def t_checklist__get_plan_template(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         role = a.get("role", "intern")
         if role not in ("intern", "mentor"):
@@ -278,7 +278,7 @@ class MockServices:
         items = [{k: i[k] for k in keep if k in i} for i in self.checklist["items"] if i["role"] in (role, "both")]
         return {"periods": self.checklist["periods"], "items": items}
 
-    # ------------------------------------------------------------------ absence
+    # ------------------------------------------------------------------ absence (отсутствия)
     def t_absence__get_policy(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         doc = self.kb.by_id[self.fixtures["absence_policy"]["doc_id"]]
         return {"doc_id": doc.doc_id, "title": doc.title, "text": doc.body, "source_type": "test", "url": doc.url}
@@ -297,7 +297,9 @@ class MockServices:
         return next((k for k, e in sorted(self.employees.items()) if e.get("role") == "hr_admin"), "")
 
     def _absence_steps(self, r: dict[str, Any]) -> list[dict[str, Any]]:
-        """lead approves → HR admin registers in the HR system → HR BP is notified (= B's absence.steps)."""
+        """руководитель согласует → HR-администратор оформляет в HR-системе → HR BP получает уведомление (= absence.steps у
+        B).
+        """
         hrbp = r.get("hrbp_id") or self.employees.get(r["employee_id"], {}).get("hrbp_id", "")
         lead = {"role": "lead", "display_name": self.name(r["approver_id"]), "status": "waiting", "at": None}
         admin = {
@@ -326,7 +328,7 @@ class MockServices:
         items = [
             self._absence_view(r)
             for r in self.absences
-            if r["employee_id"] == c["sub"]  # own records only
+            if r["employee_id"] == c["sub"]  # только свои записи
             and (not a.get("status") or r["status"] == a["status"])
         ]
         return {"items": items}
@@ -365,7 +367,7 @@ class MockServices:
         return out
 
     def _type_problems(self, kind: str, start: date, end: date, docs: int) -> list[str]:
-        """= B's absence.typeProblems: the rules of each kind of absence."""
+        """= absence.typeProblems у B: правила каждого вида отсутствия."""
         today, problems = clock.today(), []
         days = (end - start).days + 1
         if kind == "day_off":
@@ -423,7 +425,7 @@ class MockServices:
         if (replay := self._replay(key)) is not None:
             return replay
         old = None
-        if a.get("replaces"):  # feedback 12.13: a longer absence over a pending request replaces it
+        if a.get("replaces"):  # отзыв 12.13: более длинное отсутствие поверх несогласованной заявки заменяет её
             old = next((r for r in self.absences if r["id"] == a["replaces"]), None)
             if old is None or old["employee_id"] != c["sub"]:
                 raise ToolDenied("Операция недоступна.")
@@ -467,7 +469,7 @@ class MockServices:
                 p["status"] = "cancelled"
 
     def t_absence__cancel_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
-        """Withdraw a request until the HR admin approves it (= B's absence.cancelRequest, feedback 12.13)."""
+        """Отозвать заявку, пока её не согласовал HR-администратор (= absence.cancelRequest у B, отзыв 12.13)."""
         self._check_confirmation(c, a)
         key = f"cancel:{a['idempotency_key']}"
         if (replay := self._replay(key)) is not None:
@@ -485,7 +487,9 @@ class MockServices:
         return result
 
     def t_absence__reschedule_request(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
-        """Move a request until the HR admin approves it; it goes back to the lead (= B's absence.rescheduleRequest)."""
+        """Перенести заявку, пока её не согласовал HR-администратор; она возвращается руководителю (=
+        absence.rescheduleRequest у B).
+        """
         self._check_confirmation(c, a)
         key = f"reschedule:{a['idempotency_key']}"
         if (replay := self._replay(key)) is not None:
@@ -513,7 +517,7 @@ class MockServices:
         self.idempotency[key] = result
         return result
 
-    # ------------------------------------------------------------------ approvals
+    # ------------------------------------------------------------------ approvals (согласования)
     def _approval_view(self, p: dict[str, Any]) -> dict[str, Any]:
         keys = ("id", "kind", "ref_id", "requester_id", "summary", "status", "comment", "created_at")
         return {
@@ -523,7 +527,7 @@ class MockServices:
         }
 
     def _team_absent(self, ref_id: str) -> list[str]:
-        """= B's approvals.teamAbsent (feedback 12.13): teammates away on the same days."""
+        """= approvals.teamAbsent у B (отзыв 12.13): коллеги, отсутствующие в те же дни."""
         r = next((x for x in self.absences if x["id"] == ref_id), None)
         if r is None:
             return []
@@ -561,7 +565,7 @@ class MockServices:
         if a.get("decision") not in ("approved", "rejected"):
             raise ToolValidationError("Решение должно быть approved или rejected.")
         p = next((p for p in self.approvals if p["id"] == a.get("approval_id")), None)
-        if p is None or p["approver_id"] != c["sub"]:  # manager acts only on own team's requests
+        if p is None or p["approver_id"] != c["sub"]:  # руководитель действует только с заявками своей команды
             raise ToolDenied("Операция недоступна.")
         if p["status"] != "pending":
             raise ToolValidationError("По этой заявке решение уже принято.", code="conflict")
@@ -569,7 +573,7 @@ class MockServices:
         if p["kind"] == "absence_request":
             ref = next(r for r in self.absences if r["id"] == p["ref_id"])
             if p.get("stage", "lead") == "lead" and a["decision"] == "approved":
-                # the lead approved: the request goes to the HR admin (checkpoint 11.11)
+                # руководитель согласовал: заявка уходит HR-администратору (чекпоинт 11.11)
                 ref |= {"status": "pending_hr", "lead_decided_at": _now_iso()}
                 self._open_approval(
                     "absence_request", ref["id"], ref["employee_id"], self._hr_admin(), p["summary"], stage="hr_admin"
@@ -594,9 +598,9 @@ class MockServices:
         self.idempotency[key] = result
         return result
 
-    # ------------------------------------------------------------------ access
+    # ------------------------------------------------------------------ access (доступы)
     def _required_ids(self, team_id: str) -> list[str]:
-        order = ["tool", "project", "repo", "space", "database"]  # = B's list_required order
+        order = ["tool", "project", "repo", "space", "database"]  # = порядок list_required у B
         rids = [
             rid
             for rid, r in self.fixtures["access_resources"].items()
@@ -652,7 +656,7 @@ class MockServices:
         rid = a.get("resource_id", "")
         res = self.fixtures["access_resources"].get(rid)
         if res is None or res["team_id"] not in (None, c.get("team_id")):
-            raise ToolDenied("Операция недоступна.")  # other team's resource: same answer as a missing one
+            raise ToolDenied("Операция недоступна.")  # ресурс другой команды: тот же ответ, что и для отсутствующего
         env, level = a.get("environment") or "", a.get("level") or "read"
         envs, levels = list(res.get("environments") or []), list(res.get("levels") or ["read"])
         if envs and env not in envs:
@@ -675,7 +679,7 @@ class MockServices:
             last["status"] == "pending_approval" or (last["status"] == "granted" and last.get("level", "read") == level)
         ):
             raise ToolValidationError("Доступ уже выдан или ждёт согласования.", code="conflict")
-        elevated = bool(res["elevated"]) or level != "read" or env == "prod"  # checkpoint 11.11
+        elevated = bool(res["elevated"]) or level != "read" or env == "prod"  # чекпоинт 11.11
         approver = self.employees.get(c["sub"], {}).get("lead_id") if elevated else None
         rec = {
             "id": self._next_id("ACC"),
@@ -716,7 +720,7 @@ class MockServices:
             raise ToolValidationError("Слишком короткий запрос.")
         hits = self.kb.search(
             query, c["role"], c.get("team_id", ""), k=min(int(a.get("k", 5)), 10), team_boost=1.0, stage_boost=1.0
-        )  # plain ACL-filtered ranking, like mcp-kb; the agent re-ranks by context
+        )  # простое ранжирование с фильтром ACL, как в mcp-kb; агент переранжирует по контексту
         return {
             "items": [
                 {
@@ -737,8 +741,9 @@ class MockServices:
             raise ToolError("Документ не найден или недоступен.")
         return {"doc_id": doc.doc_id, "title": doc.title, "body": doc.body, "source_type": "test", "kind": "doc"}
 
-    # ------------------------------------------------------------------ dev/demo helpers (not MCP tools)
-    # ------------------------------------------------------------------ trips (= B's mocks/trips)
+    # ------------------------------------------------------------------ помощники для разработки и демо (не инструменты
+    # MCP)
+    # ------------------------------------------------------------------ командировки (= mocks/trips у B)
     def t_trips__get_policy(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         return {
             "offices": list(TRIP_OFFICES),
@@ -845,7 +850,7 @@ class MockServices:
         self.idempotency[key] = result
         return result
 
-    # ------------------------------------------------------------------ consents (= B's mocks/consents)
+    # ------------------------------------------------------------------ согласия (= mocks/consents у B)
     def t_consents__list(self, c: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
         out = []
         for t in self.consent_types:
@@ -920,7 +925,7 @@ def current_period(cohort_start: date, today: date) -> str:
 
 
 class InProcessServer:
-    """Adapter so each MCP server name maps to the shared MockServices state."""
+    """Адаптер, чтобы имя каждого MCP-сервера указывало на общее состояние MockServices."""
 
     def __init__(self, services: MockServices, server: str) -> None:
         self.services = services

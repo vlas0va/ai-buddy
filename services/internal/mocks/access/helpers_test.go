@@ -22,11 +22,11 @@ var (
 	confSecret = []byte("test-confirm-secret")
 )
 
-// Demo seed people (migrations/0003_seed_demo.sql).
+// Люди из демо-данных (migrations/0003_seed_demo.sql).
 var (
-	anna  = caller("intern.anna", "intern", "delivery") // lead: lead.maria
-	ivan  = caller("intern.ivan", "intern", "search")   // lead: lead.dmitry
-	oleg  = caller("mentor.oleg", "mentor", "delivery") // lead: lead.maria
+	anna  = caller("intern.anna", "intern", "delivery") // руководитель: lead.maria
+	ivan  = caller("intern.ivan", "intern", "search")   // руководитель: lead.dmitry
+	oleg  = caller("mentor.oleg", "mentor", "delivery") // руководитель: lead.maria
 	maria = caller("lead.maria", "lead", "delivery")
 )
 
@@ -127,7 +127,7 @@ func (e *env) exec(sql string, args ...any) {
 	}
 }
 
-// addRequest inserts a request of employee for resource with status, created minutes ago.
+// addRequest вставляет заявку employee на resource со статусом status, созданную minutes минут назад.
 func (e *env) addRequest(employee, resource, status string, minutesAgo int) {
 	e.t.Helper()
 	e.exec(`INSERT INTO access.requests (employee_id, resource_id, status, idempotency_key, created_at)

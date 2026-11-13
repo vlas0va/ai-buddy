@@ -11,14 +11,14 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Handler serves GET /api/actions.
+// Handler обслуживает GET /api/actions.
 type Handler struct {
 	pool *pgxpool.Pool
 	svc  *Service
 	log  *slog.Logger
 }
 
-// New returns the actions HTTP handler.
+// New возвращает HTTP-обработчик действий.
 func New(pool *pgxpool.Pool, svc *Service, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -26,12 +26,12 @@ func New(pool *pgxpool.Pool, svc *Service, log *slog.Logger) *Handler {
 	return &Handler{pool: pool, svc: svc, log: log}
 }
 
-// Register adds GET /api/actions (behind authn.Middleware).
+// Register добавляет GET /api/actions (за authn.Middleware).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/actions", h.list)
 }
 
-// list answers the caller's own actions, newest first; they survive a reload (R66).
+// list отдаёт собственные действия вызывающего, новые сначала; они сохраняются после перезагрузки (R66).
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	c, ok := authn.FromContext(r.Context())
 	if !ok {

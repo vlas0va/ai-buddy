@@ -1,10 +1,9 @@
-// Package analytics records product analytics events (contracts/events.md, R24, R62) and serves POST /api/events and
-// POST /api/feedback.
+// Пакет analytics записывает события продуктовой аналитики (contracts/events.md, R24, R62) и обслуживает POST
+// /api/events и POST /api/feedback.
 //
-// Emitter.Emit writes core.analytics_events and, when Kafka is enabled, core.outbox in the same statement, so a
-// caller passing a pgx.Tx gets both rows in its transaction (and a caller passing a pool gets both or neither).
-// Publisher drains the outbox to Kafka. Props are filtered by a per-event whitelist: message text and names never
-// reach the tables (R72).
+// Emitter.Emit пишет core.analytics_events и, если включена Kafka, core.outbox одним запросом, поэтому вызывающий с
+// pgx.Tx получает обе строки в своей транзакции (а вызывающий с пулом — обе или ни одной). Publisher выгружает outbox в
+// Kafka. Props фильтруются по белому списку для каждого события: текст сообщений и имена в таблицы не попадают (R72).
 package analytics
 
 import (
@@ -21,47 +20,47 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// DBTX is the subset of pgxpool.Pool and pgx.Tx used here.
+// DBTX — подмножество pgxpool.Pool и pgx.Tx, которое здесь используется.
 type DBTX interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// Kafka topics (outbox.topic).
+// Топики Kafka (outbox.topic).
 const (
 	TopicDomain      = "buddy.domain"
 	TopicClickstream = "buddy.clickstream"
 )
 
-// ErrInvalid is returned by Emit for a malformed event name.
+// ErrInvalid возвращает Emit для некорректного имени события.
 var ErrInvalid = errors.New("analytics: invalid event")
 
-// Event is one analytics event. UserID, Role and TeamID may be empty (system events such as AI-cron).
+// Event — одно аналитическое событие. UserID, Role и TeamID могут быть пустыми (системные события, например AI-cron).
 type Event struct {
 	Name   string
 	UserID string
 	Role   string
 	TeamID string
 	Props  map[string]any
-	// TS is optional; zero means now.
+	// TS необязателен; нулевое значение означает «сейчас».
 	TS time.Time
 }
 
-// Emitter writes events. A nil *Emitter drops events (useful in tests of other packages).
+// Emitter пишет события. Nil *Emitter отбрасывает события (удобно в тестах других пакетов).
 type Emitter struct {
 	kafka bool
 	now   func() time.Time
 }
 
-// NewEmitter returns an Emitter; kafkaEnabled adds an outbox row per event (KAFKA_BROKERS is set).
+// NewEmitter возвращает Emitter; kafkaEnabled добавляет строку outbox на каждое событие (задан KAFKA_BROKERS).
 func NewEmitter(kafkaEnabled bool) *Emitter {
 	return &Emitter{kafka: kafkaEnabled, now: time.Now}
 }
 
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$`)
 
-// propKeys is the props whitelist per event name (contracts/events.md).
+// propKeys — белый список props для каждого имени события (contracts/events.md).
 var propKeys = map[string][]string{
 	"session.started":       {"period"},
 	"chat.message_sent":     {"session_id"},
@@ -87,7 +86,7 @@ var propKeys = map[string][]string{
 	"ui.source_opened":      {"doc_id"},
 }
 
-// unknownKeys is the union of all whitelisted keys; events with a name outside the contract keep only these.
+// unknownKeys — объединение всех разрешённых ключей; события с именем вне контракта сохраняют только их.
 var unknownKeys = func() map[string]bool {
 	m := map[string]bool{}
 	for _, ks := range propKeys {
@@ -100,7 +99,7 @@ var unknownKeys = func() map[string]bool {
 
 const maxPropString = 100
 
-// SanitizeProps keeps only whitelisted keys of the event with scalar values (short strings, bools, numbers).
+// SanitizeProps оставляет только разрешённые ключи события со скалярными значениями (короткие строки, bool, числа).
 func SanitizeProps(name string, props map[string]any) map[string]any {
 	allowed := map[string]bool{}
 	if ks, ok := propKeys[name]; ok {
@@ -138,13 +137,13 @@ func nullable(s string) *string {
 
 func newUUID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:]) // crypto/rand does not fail on supported platforms
+	_, _ = rand.Read(b[:]) // crypto/rand не падает на поддерживаемых платформах
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// Emit stores ev through q. With Kafka enabled the envelope is also queued in core.outbox by the same statement.
+// Emit сохраняет ev через q. При включённой Kafka конверт ещё и ставится в core.outbox тем же запросом.
 func (e *Emitter) Emit(ctx context.Context, q DBTX, ev Event) error {
 	if e == nil {
 		return nil

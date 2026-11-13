@@ -1,17 +1,18 @@
-// Package chat serves the chat API (S2, S3, S4): sessions, messages streamed from the agent as SSE, and the
-// confirmation of write proposals (contracts/agent-stream.md, contracts/openapi.yaml).
+// Пакет chat обслуживает API чата (S2, S3, S4): сессии, сообщения, которые приходят от агента потоком SSE, и
+// подтверждение черновиков записи (contracts/agent-stream.md, contracts/openapi.yaml).
 //
-// Message turn: core saves the user message, builds user_context from verified JWT claims and its own DB (R71),
-// calls the agent and relays its events to the browser unchanged and in order (unknown events too; tool_result and
-// agent-sent action_result never), persisting on the way: tokens become the assistant message, sources are stored
-// with it, action_proposal is stored in core.proposals (only for the allow-listed write tools). The agent's done is
-// relayed with message_id set to the saved assistant message (core sends done{message_id} when the agent did not)
-// and feeds chat.answered / chat.refused / chat.escalated.
+// Ход-сообщение: ядро сохраняет сообщение пользователя, собирает user_context из проверенных claims JWT и своей базы
+// (R71), вызывает агента и пересылает его события в браузер без изменений и по порядку (неизвестные тоже; tool_result и
+// присланный агентом action_result — никогда), по пути сохраняя: токены становятся сообщением ассистента, источники
+// сохраняются вместе с ним, action_proposal сохраняется в core.proposals (только для разрешённых инструментов записи).
+// done агента пересылается с message_id сохранённого сообщения ассистента (ядро само отправляет done{message_id}, если
+// агент этого не сделал) и питает chat.answered / chat.refused / chat.escalated.
 //
-// Confirm turn: core checks the proposal (owner, session, status, expiry), signs a confirmation token over
-// draft_hash for the caller (key = proposal_id) and sends the agent a confirm turn. The agent calls the MCP write
-// and answers with the internal event tool_result, which core saves (core.actions + plan task, R66) and turns into
-// action_result. A repeated confirm of an executed proposal replays the stored result without calling anyone (R79).
+// Ход подтверждения: ядро проверяет черновик (владелец, сессия, статус, срок), подписывает для вызывающего токен
+// подтверждения по draft_hash (key = proposal_id) и отправляет агенту ход подтверждения. Агент вызывает запись в MCP и
+// отвечает внутренним событием tool_result, которое ядро сохраняет (core.actions + задача плана, R66) и превращает в
+// action_result. Повторное подтверждение выполненного черновика воспроизводит сохранённый результат, никого не вызывая
+// (R79).
 package chat
 
 import (
@@ -37,69 +38,69 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Agent opens a turn on the agent service; *agentclient.Client implements it.
+// Agent открывает ход в сервисе агента; реализован в *agentclient.Client.
 type Agent interface {
 	Turn(ctx context.Context, userToken string, req agentclient.TurnRequest) (*agentclient.Stream, error)
 }
 
-// Limiter is the chat rate limiter; *ratelimit.Limiter implements it (fail-open: true with an error).
+// Limiter — ограничитель частоты чата; реализован в *ratelimit.Limiter (при ошибке пропускает: true с ошибкой).
 type Limiter interface {
 	Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error)
 }
 
-// FlagSource gives the runtime flags of a team; *flags.Service implements it.
+// FlagSource выдаёт runtime-флаги команды; реализован в *flags.Service.
 type FlagSource interface {
 	ForTeam(ctx context.Context, team string) (map[string]bool, error)
 }
 
-// Emitter records analytics events; *analytics.Emitter implements it (a nil *analytics.Emitter drops events).
+// Emitter пишет аналитические события; реализован в *analytics.Emitter (nil *analytics.Emitter отбрасывает события).
 type Emitter interface {
 	Emit(ctx context.Context, q analytics.DBTX, ev analytics.Event) error
 }
 
-// MCP executes a confirmed write with a core-signed confirmation token; *mcpclient.Client implements it. Core uses it
-// to read back a lead's approvals.decide by its idempotency key instead of trusting the agent's tool_result (R71).
+// MCP выполняет подтверждённую запись с токеном подтверждения, подписанным ядром; реализован в *mcpclient.Client. Ядро
+// через него перечитывает approvals.decide руководителя по ключу идемпотентности, а не верит tool_result агента (R71).
 type MCP interface {
 	Execute(ctx context.Context, userToken, tool string, args map[string]any, key string) (json.RawMessage, error)
 }
 
-// Defaults of Config.
+// Значения Config по умолчанию.
 const (
-	DefaultProposalTTL     = 30 * time.Minute // same as the agent (PROPOSAL_TTL_S) and the core.proposals default
+	DefaultProposalTTL     = 30 * time.Minute // так же, как у агента (PROPOSAL_TTL_S) и по умолчанию в core.proposals
 	DefaultConfirmationTTL = 5 * time.Minute
 	DefaultRatePerMin      = 20
 	historyLimit           = 10
 	maxTextRunes           = 4000
 	openTasksLimit         = 50
-	// Bounds of what one agent turn may make core relay and store (the agent stream itself is bounded by
-	// agentclient: 256 KiB per event, 4 MiB per answer). Over a bound the turn ends with upstream_unavailable.
-	maxTurnText   = 64 << 10 // assistant text (tokens and follow-up) per turn, bytes
-	maxSources    = 50       // source items per turn
-	maxDraftBytes = 16 << 10 // stored proposal draft
+	// Ограничения того, что один ход агента может заставить ядро переслать и сохранить (сам поток агента ограничен в
+	// agentclient: 256 КиБ на событие, 4 МиБ на ответ). При превышении ход заканчивается upstream_unavailable.
+	maxTurnText   = 64 << 10 // текст ассистента (токены и дополнение) за ход, байт
+	maxSources    = 50       // источников за ход
+	maxDraftBytes = 16 << 10 // сохранённый черновик
 )
 
-// Config holds chat settings.
+// Config хранит настройки чата.
 type Config struct {
-	ConfirmationSecret []byte        // CONFIRMATION_HMAC_SECRET (required for confirm)
-	ProposalTTL        time.Duration // how long a proposal can be confirmed; <= 0 means DefaultProposalTTL
-	ConfirmationTTL    time.Duration // exp of the confirmation token; <= 0 means DefaultConfirmationTTL
-	RatePerMin         int           // CHAT_RATE_PER_MIN; 0 means DefaultRatePerMin, < 0 disables limiting
-	KeepAlive          time.Duration // SSE ping interval; <= 0 means httpx.DefaultKeepAlive
+	ConfirmationSecret []byte        // CONFIRMATION_HMAC_SECRET (обязателен для подтверждения)
+	ProposalTTL        time.Duration // сколько черновик можно подтверждать; <= 0 — DefaultProposalTTL
+	ConfirmationTTL    time.Duration // exp токена подтверждения; <= 0 — DefaultConfirmationTTL
+	RatePerMin         int           // CHAT_RATE_PER_MIN; 0 — DefaultRatePerMin, < 0 — без ограничения
+	KeepAlive          time.Duration // интервал пингов SSE; <= 0 — httpx.DefaultKeepAlive
 }
 
-// Deps are the collaborators of the chat handler. Pool, Agent and Actions are required.
+// Deps — зависимости обработчика чата. Pool, Agent и Actions обязательны.
 type Deps struct {
 	Pool    *pgxpool.Pool
 	Agent   Agent
 	Actions *actions.Service
-	Limiter Limiter    // nil: no rate limiting
-	Flags   FlagSource // nil: no flags in user_context
-	Emitter Emitter    // nil: no analytics
-	MCP     MCP        // nil: lead decisions in chat (approval_decision) are refused
+	Limiter Limiter    // nil: без ограничения частоты
+	Flags   FlagSource // nil: без флагов в user_context
+	Emitter Emitter    // nil: без аналитики
+	MCP     MCP        // nil: решения руководителя в чате (approval_decision) отклоняются
 	Log     *slog.Logger
 }
 
-// Handler serves the chat endpoints.
+// Handler обслуживает эндпоинты чата.
 type Handler struct {
 	pool    *pgxpool.Pool
 	agent   Agent
@@ -110,11 +111,11 @@ type Handler struct {
 	mcp     MCP
 	log     *slog.Logger
 	cfg     Config
-	// Now is the clock (proposal expiry, current period); tests may replace it.
+	// Now — часы (срок черновика, текущий этап); тесты могут их подменить.
 	Now func() time.Time
 }
 
-// New returns the chat HTTP handler.
+// New возвращает HTTP-обработчик чата.
 func New(d Deps, cfg Config) *Handler {
 	if d.Log == nil {
 		d.Log = slog.Default()
@@ -132,7 +133,7 @@ func New(d Deps, cfg Config) *Handler {
 		emitter: d.Emitter, mcp: d.MCP, log: d.Log, cfg: cfg, Now: time.Now}
 }
 
-// Register adds the chat routes (behind authn.Middleware).
+// Register добавляет маршруты чата (за authn.Middleware).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/chat/sessions", h.createSession)
 	mux.HandleFunc("GET /api/chat/sessions", h.listSessions)
@@ -145,7 +146,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 
 var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// caller returns the verified claims and raw token of the request, or answers 401.
+// caller возвращает проверенные claims и исходный токен запроса или отвечает 401.
 func caller(w http.ResponseWriter, r *http.Request) (authn.Claims, string, bool) {
 	c, ok := authn.FromContext(r.Context())
 	token, tok := authn.TokenFromContext(r.Context())
@@ -156,8 +157,8 @@ func caller(w http.ResponseWriter, r *http.Request) (authn.Claims, string, bool)
 	return c, token, true
 }
 
-// ownSession checks that sessionID is a session of userID: a malformed id is not_found, an unknown or foreign one
-// is forbidden (existence is not revealed, R71).
+// ownSession проверяет, что sessionID — сессия userID: некорректный id — not_found, неизвестный или чужой — forbidden
+// (существование не раскрывается, R71).
 func (h *Handler) ownSession(ctx context.Context, userID, sessionID string) error {
 	if !uuidRE.MatchString(sessionID) {
 		return apierr.NotFound()
@@ -186,7 +187,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, map[string]string{"session_id": id})
 }
 
-// SessionSummary is one earlier conversation in the list of dialogs (feedback 12.11: «Новый диалог» keeps the old one).
+// SessionSummary — один из прежних разговоров в списке диалогов (отзыв 12.11: «Новый диалог» сохраняет старый).
 type SessionSummary struct {
 	SessionID string `json:"session_id"`
 	Title     string `json:"title"`
@@ -194,7 +195,7 @@ type SessionSummary struct {
 	UpdatedAt string `json:"updated_at"`
 }
 
-// listSessions returns the caller's conversations that have messages, newest first; the title is the first question.
+// listSessions возвращает разговоры вызывающего, в которых есть сообщения, новые сначала; заголовок — первый вопрос.
 func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	c, _, ok := caller(w, r)
 	if !ok {
@@ -230,7 +231,7 @@ func (h *Handler) listSessions(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// Message is the openapi ChatMessage.
+// Message — это openapi ChatMessage.
 type Message struct {
 	ID          string            `json:"id"`
 	Author      string            `json:"author"`
@@ -238,20 +239,21 @@ type Message struct {
 	Sources     []json.RawMessage `json:"sources"`
 	Attachments []attachmentMeta  `json:"attachments"`
 	CreatedAt   string            `json:"created_at"`
-	// cards restored after leaving the chat (feedback 11.11); the proposal state and the result come from core's tables
+	// карточки, восстанавливаемые после ухода из чата (отзыв 11.11); состояние черновика и результат берутся из таблиц
+	// ядра
 	Proposal      json.RawMessage `json:"proposal,omitempty"`
 	ProposalState string          `json:"proposal_state,omitempty"`
-	// several drafts of one message (the list of accesses with checkboxes), each with its state
+	// несколько черновиков одного сообщения (список доступов с галочками), у каждого своё состояние
 	Proposals      []historyProposal `json:"proposals,omitempty"`
 	Result         *actions.Result   `json:"result,omitempty"`
 	Escalation     json.RawMessage   `json:"escalation,omitempty"`
-	EscalationSent bool              `json:"escalation_sent,omitempty"` // a message to that role was sent after the draft
+	EscalationSent bool              `json:"escalation_sent,omitempty"` // после черновика было отправлено сообщение этой роли
 	Refusal        json.RawMessage   `json:"refusal,omitempty"`
 	NextStep       json.RawMessage   `json:"next_step,omitempty"`
 	DatePicker     json.RawMessage   `json:"date_picker,omitempty"`
 }
 
-// attachmentMeta is what the history returns about an attachment: never the text, so a reload stays light.
+// attachmentMeta — то, что история отдаёт о вложении: никогда не текст, чтобы перезагрузка оставалась лёгкой.
 type attachmentMeta struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"`
@@ -312,7 +314,7 @@ func (h *Handler) getSession(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, fmt.Errorf("read messages: %w", err))
 		return
 	}
-	// result cards with the current status of the action they announced (an approval made later is shown)
+	// карточки результата с текущим статусом действия, о котором они сообщали (видно и согласование, сделанное позже)
 	if list, err := h.actions.List(r.Context(), h.pool, c.Sub); err == nil {
 		byMessage := map[string]actions.Result{}
 		for _, a := range list {
@@ -336,7 +338,8 @@ type historyProposal struct {
 	State    string          `json:"state"`
 }
 
-// restoreProposals pairs the stored drafts with the state of their proposal; a draft core does not know is dropped.
+// restoreProposals сопоставляет сохранённые черновики с состоянием их черновиков в ядре; незнакомый ядру черновик
+// отбрасывается.
 func restoreProposals(raw json.RawMessage, rawStatuses []byte) []historyProposal {
 	var list []json.RawMessage
 	var statuses map[string]string
@@ -358,14 +361,14 @@ func restoreProposals(raw json.RawMessage, rawStatuses []byte) []historyProposal
 	return out
 }
 
-// KBReader reads one KB document through the agent (its ACL check); *agentclient.Client implements it.
+// KBReader читает один документ базы знаний через агента (с его проверкой ACL); реализован в *agentclient.Client.
 type KBReader interface {
 	KBDoc(ctx context.Context, userToken, docID string) (json.RawMessage, bool, error)
 }
 
 var docIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}$`)
 
-// kbDoc opens a source chip of an answer: the test document, only if the user may read it (R69, R71).
+// kbDoc открывает чип источника из ответа: тестовый документ, только если пользователю можно его читать (R69, R71).
 func (h *Handler) kbDoc(w http.ResponseWriter, r *http.Request) {
 	_, token, ok := caller(w, r)
 	if !ok {
@@ -390,7 +393,7 @@ func (h *Handler) kbDoc(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// proposalState is what the chat card shows for a stored proposal.
+// proposalState — то, что карточка чата показывает для сохранённого черновика.
 func proposalState(status string) string {
 	switch status {
 	case "executed", "confirmed":
@@ -398,10 +401,10 @@ func proposalState(status string) string {
 	case "cancelled", "expired":
 		return "cancelled"
 	}
-	return "pending" // pending or failed: the card can still be sent
+	return "pending" // pending или failed: карточку ещё можно отправить
 }
 
-// insertMessage stores a message with an explicit id (clock_timestamp keeps the order inside one request).
+// insertMessage сохраняет сообщение с явным id (clock_timestamp сохраняет порядок внутри одного запроса).
 func insertMessage(ctx context.Context, q actions.DBTX, id, sessionID, author, text string, sources []json.RawMessage,
 	cards map[string]json.RawMessage) error {
 	if sources == nil {
@@ -425,7 +428,7 @@ func insertMessage(ctx context.Context, q actions.DBTX, id, sessionID, author, t
 	return nil
 }
 
-// emit records an analytics event; failures are logged, never shown to the user.
+// emit записывает аналитическое событие; сбои логируются и никогда не показываются пользователю.
 func (h *Handler) emit(ctx context.Context, c authn.Claims, name string, props map[string]any) {
 	if h.emitter == nil {
 		return
@@ -435,23 +438,23 @@ func (h *Handler) emit(ctx context.Context, c authn.Claims, name string, props m
 	}
 }
 
-// newUUID returns a random UUID v4.
+// newUUID возвращает случайный UUID v4.
 func newUUID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:]) // crypto/rand does not fail on supported platforms
+	_, _ = rand.Read(b[:]) // crypto/rand не падает на поддерживаемых платформах
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// streamError is the data of an error event.
+// streamError — data события error.
 type streamError struct {
 	Code      string `json:"code"`
 	Message   string `json:"message"`
 	Retryable bool   `json:"retryable"`
 }
 
-// Russian messages of errors core emits on a stream.
+// Русские тексты ошибок, которые ядро отправляет в поток.
 const (
 	msgAgentUnavailable = "Ассистент временно недоступен, попробуйте ещё раз"
 	msgNoResult         = "Не удалось получить результат заявки, попробуйте ещё раз"
@@ -461,8 +464,8 @@ const (
 	msgBadResult        = "Не удалось подтвердить результат заявки, попробуйте ещё раз"
 )
 
-// agentError turns a failed agent call into the error event of the stream: an agent that answered 4xx with a JSON
-// error keeps its code and message; everything else is upstream_unavailable, retryable.
+// agentError превращает неудачный вызов агента в событие error потока: если агент ответил 4xx с JSON-ошибкой,
+// сохраняются его код и текст; всё остальное — upstream_unavailable с возможностью повтора.
 func agentError(err error) streamError {
 	var ue *agentclient.UnavailableError
 	if errors.As(err, &ue) && ue.Status >= 400 && ue.Status < 500 && ue.Code != "" {
@@ -475,11 +478,12 @@ func agentError(err error) streamError {
 	return streamError{Code: string(apierr.CodeUpstreamUnavailable), Message: msgAgentUnavailable, Retryable: true}
 }
 
-// errTooLarge ends a turn whose content exceeds the bounds (R76).
+// errTooLarge завершает ход, содержимое которого превышает ограничения (R76).
 var errTooLarge = streamError{Code: string(apierr.CodeUpstreamUnavailable), Message: msgTooLarge, Retryable: true}
 
-// exactObject decodes a JSON object and rejects keys that differ only in case from one of want: Go's struct decoding
-// would match them case-insensitively while the agent reads the exact key, so both sides must see the same value.
+// exactObject декодирует JSON-объект и отклоняет ключи, отличающиеся от одного из want только регистром: декодирование
+// структур Go сопоставило бы их без учёта регистра, а агент читает точный ключ, поэтому обе стороны должны видеть одно
+// и то же значение.
 func exactObject(raw json.RawMessage, want ...string) (map[string]json.RawMessage, error) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
@@ -495,7 +499,7 @@ func exactObject(raw json.RawMessage, want ...string) (map[string]json.RawMessag
 	return m, nil
 }
 
-// str returns the string value of key in m ("" when missing or not a string).
+// str возвращает строковое значение key в m ("", если ключа нет или это не строка).
 func str(m map[string]json.RawMessage, key string) string {
 	var s string
 	_ = json.Unmarshal(m[key], &s)

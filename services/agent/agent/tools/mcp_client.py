@@ -1,7 +1,7 @@
-"""Minimal MCP client over streamable HTTP (JSON-RPC 2.0) used to reach B's Go MCP servers.
+"""Минимальный MCP-клиент поверх streamable HTTP (JSON-RPC 2.0), через который агент ходит к Go MCP-серверам B.
 
-Per call: forwards the user's bearer token (servers re-check rights, ADR-003 layer 3), handles the
-initialize handshake and `Mcp-Session-Id`, accepts both JSON and SSE responses, maps failures to ToolError.
+На каждый вызов: передаёт bearer-токен пользователя (серверы перепроверяют права, ADR-003, слой 3), выполняет
+рукопожатие initialize и `Mcp-Session-Id`, принимает ответы и в JSON, и в SSE, превращает сбои в ToolError.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ class McpHttpServer:
             }
             resp = self._post(payload, user_token)
             if resp.status_code in (400, 404) and self._session:
-                self._initialize(user_token)  # session expired on the server → re-handshake once
+                self._initialize(user_token)  # сессия истекла на сервере → повторное рукопожатие один раз
                 resp = self._post(payload, user_token)
         if resp.status_code in (401, 403):
             raise ToolDenied("Сервис отказал в доступе.")

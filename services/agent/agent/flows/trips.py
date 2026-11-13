@@ -1,7 +1,8 @@
-"""Business trip to another Avito office: explain → collect city, dates, purpose → validate → draft → confirm → MCP write.
+"""Командировка в другой офис Авито: объяснить → собрать город, даты, цель → проверить → черновик → подтверждение → запись
+в MCP.
 
-Spec: openspec/specs/trips-consents/spec.md (TR-xx). Tool shapes: contracts/schemas/trips.json. Tickets and hotel are
-booked by the travel service after approval: buddy never books or pays (R72).
+Спецификация: openspec/specs/trips-consents/spec.md (TR-xx). Формы инструментов: contracts/schemas/trips.json. Билеты и
+гостиницу после согласования бронирует служба командировок: buddy никогда не бронирует и не платит (R72).
 """
 
 from __future__ import annotations

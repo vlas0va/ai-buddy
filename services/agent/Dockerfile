@@ -1,4 +1,4 @@
-# Agent service (owner A). Build context = repository root (needs data/kb and data/checklist):
+# Сервис агента (владелец A). Контекст сборки — корень репозитория (нужны data/kb и data/checklist):
 #   docker build -f services/agent/Dockerfile -t aibuddy-agent .
 FROM python:3.12-slim
 
@@ -23,6 +23,6 @@ USER nobody
 HEALTHCHECK --interval=10s --timeout=3s --retries=10 \
   CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"AGENT_PORT\",\"8090\")}/healthz')"
 
-# One worker with threads: SSE streams are I/O-bound; in-process mocks keep state per process (use Redis + MCP servers
-# to scale to several workers).
+# Один воркер с потоками: потоки SSE упираются в ввод-вывод; моки в процессе хранят состояние в процессе (чтобы
+# масштабироваться на несколько воркеров, используйте Redis + MCP-серверы).
 CMD ["sh", "-c", "exec gunicorn -k gthread -w 1 --threads 16 --timeout 120 -b 0.0.0.0:${AGENT_PORT} 'agent.app:create_app()'"]

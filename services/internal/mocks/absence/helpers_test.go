@@ -23,22 +23,22 @@ var (
 	confSecret = []byte("test-confirm-secret")
 )
 
-// monday is Monday 2026-11-09 12:00 Moscow time: tomorrow is Tuesday 2026-11-10, 14-15 Nov is a weekend.
+// monday — понедельник 2026-11-09 12:00 по Москве: завтра вторник 2026-11-10, 14-15 ноября — выходные.
 var monday = time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 
-// Demo seed people (migrations/0003_seed_demo.sql).
+// Люди из демо-данных (migrations/0003_seed_demo.sql).
 var (
-	anna  = caller("intern.anna", "intern", "delivery") // lead: lead.maria
-	ivan  = caller("intern.ivan", "intern", "search")   // lead: lead.dmitry
-	oleg  = caller("mentor.oleg", "mentor", "delivery") // lead: lead.maria
-	maria = caller("lead.maria", "lead", "delivery")    // no lead
+	anna  = caller("intern.anna", "intern", "delivery") // руководитель: lead.maria
+	ivan  = caller("intern.ivan", "intern", "search")   // руководитель: lead.dmitry
+	oleg  = caller("mentor.oleg", "mentor", "delivery") // руководитель: lead.maria
+	maria = caller("lead.maria", "lead", "delivery")    // без руководителя
 )
 
 func caller(sub, role, team string) mcpx.Caller {
 	return mcpx.Caller{Claims: authn.Claims{Sub: sub, Role: role, TeamID: team}}
 }
 
-// clock is an adjustable test clock.
+// clock — тестовые часы, которые можно переводить.
 type clock struct {
 	mu  sync.Mutex
 	now time.Time
@@ -63,7 +63,7 @@ type env struct {
 	clock *clock
 }
 
-// newEnv returns an absence server over a fresh migrated database with the clock at monday.
+// newEnv возвращает сервер absence поверх свежей базы с миграциями и часами на monday.
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	pool := pgtest.New(t)
@@ -94,7 +94,7 @@ func (e *env) call(c mcpx.Caller, tool string, args any) (json.RawMessage, *apie
 	return e.srv.Invoke(context.Background(), c, tool, args)
 }
 
-// mustCall fails the test on a tool error and decodes the result into T.
+// mustCall валит тест при ошибке инструмента и декодирует результат в T.
 func mustCall[T any](e *env, c mcpx.Caller, tool string, args any) T {
 	e.t.Helper()
 	raw, terr := e.call(c, tool, args)
@@ -108,7 +108,7 @@ func mustCall[T any](e *env, c mcpx.Caller, tool string, args any) T {
 	return out
 }
 
-// wantCode fails unless the call returned a tool error with code.
+// wantCode валит тест, если вызов не вернул ошибку инструмента с кодом code.
 func (e *env) wantCode(c mcpx.Caller, tool string, args any, code apierr.Code) *apierr.Error {
 	e.t.Helper()
 	raw, terr := e.call(c, tool, args)
@@ -118,7 +118,7 @@ func (e *env) wantCode(c mcpx.Caller, tool string, args any, code apierr.Code) *
 	return terr
 }
 
-// confirmed returns args with idempotency_key and a valid confirmation token for c.
+// confirmed возвращает args с idempotency_key и корректным токеном подтверждения для c.
 func confirmed(t *testing.T, c mcpx.Caller, key string, args map[string]any) map[string]any {
 	t.Helper()
 	out, err := mcpx.WithConfirmation(confSecret, c.Sub, key, args, time.Minute)

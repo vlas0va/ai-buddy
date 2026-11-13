@@ -28,7 +28,7 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("code %d: %v", code, m)
 	}
-	if m["name"] != "Анна Котова" || num(m, "total_days") != 90 || m["final"] != false || num(m, "days") < 9 || num(m, "days") > 10 { // 10 days, 9 right after midnight UTC
+	if m["name"] != "Анна Котова" || num(m, "total_days") != 90 || m["final"] != false || num(m, "days") < 9 || num(m, "days") > 10 { // 10 дней, 9 сразу после полуночи UTC
 		t.Fatalf("header: %v", m)
 	}
 	if num(m, "tasks", "early") != 1 || num(m, "tasks", "done") != 1 || num(m, "tasks", "overdue_now") < 1 {
@@ -42,7 +42,8 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 		t.Fatalf("periods/discuss: %v", m)
 	}
 
-	// The overdue CL-05 done today counts as late; going back to work clears the completion time.
+	// Просроченная CL-05, выполненная сегодня, считается выполненной с опозданием; возврат в работу стирает время
+	// выполнения.
 	e.setItem("intern.anna", "intern", "CL-05", "done")
 	_, m = e.report(oleg, "?user_id=intern.anna")
 	if num(m, "tasks", "late") != 1 || num(m, "tasks", "done") != 2 {
@@ -53,7 +54,8 @@ func TestReport_FactsFromThePlan_Idea1211(t *testing.T) {
 		t.Fatal("completed_at must be cleared and was_overdue kept")
 	}
 
-	// Questions: two asked in chat, one of them sent to the mentor (one closed by buddy = 10 minutes of the mentor saved), answered and added to the KB.
+	// Вопросы: два заданы в чате, один из них передан наставнику (один закрыл buddy = сэкономлено 10 минут наставника),
+	// на него ответили и добавили в базу знаний.
 	e.exec(`INSERT INTO core.chat_sessions (id, user_id) VALUES ('00000000-0000-0000-0000-0000000000a1', 'intern.anna')`)
 	e.exec(`INSERT INTO core.chat_messages (session_id, author, text) VALUES ('00000000-0000-0000-0000-0000000000a1', 'user', 'как дела?'),
 		('00000000-0000-0000-0000-0000000000a1', 'assistant', 'хорошо'),

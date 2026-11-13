@@ -1,4 +1,6 @@
-"""Request-scoped clock: real time by default, overridable for demo/e2e (AGENT_ALLOW_CLOCK_OVERRIDE) and tests."""
+"""Часы в рамках запроса: по умолчанию реальное время, можно переопределить для демо/e2e (AGENT_ALLOW_CLOCK_OVERRIDE) и
+тестов.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +24,6 @@ def reset(token: contextvars.Token) -> None:
 
 
 def set_default(value: date | None) -> None:
-    """Process-wide default (tests, eval)."""
+    """Значение по умолчанию для всего процесса (тесты, оценка)."""
     global _default
     _default = value

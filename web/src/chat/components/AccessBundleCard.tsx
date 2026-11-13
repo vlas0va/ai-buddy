@@ -13,7 +13,7 @@ const LEVEL_TEXT: Record<string, string> = {
   admin: "администрирование",
 };
 
-/** One label per draft: «Jira: проект DLV · чтение · stage». */
+/** Одна подпись на черновик: «Jira: проект DLV · чтение · stage». */
 function itemLabel(p: Item): string {
   const { args, display } = p.draft;
   const name = str(display?.resource_name) || str(args.resource_id);
@@ -21,7 +21,7 @@ function itemLabel(p: Item): string {
   return [name, level, str(args.environment)].filter(Boolean).join(" · ");
 }
 
-/** «выдан · ACC-000041» or «ждёт руководителя · ACC-000046» after sending */
+/** «выдан · ACC-000041» или «ждёт руководителя · ACC-000046» после отправки */
 function resultText(p: Item): string {
   const r = p.result;
   if (!r) return "отправлено";
@@ -43,10 +43,10 @@ function needsApproval(p: Item): boolean {
 interface Props {
   proposals: Item[];
   disabled?: boolean;
-  /** sends the chosen drafts one after another: plain reading is granted at once, the rest goes to the lead */
+  /** отправляет выбранные черновики один за другим: обычное чтение выдаётся сразу, остальное уходит руководителю */
   onConfirmMany: (proposalIds: string[]) => void;
   onCancel: (proposalId: string) => void;
-  /** organizers 12.11: a justification for an access with approval, or a question to the mentor whether it is needed */
+  /** организаторы 12.11: обоснование для доступа с согласованием или вопрос наставнику, нужен ли он */
   onAsk?: (text: string) => void;
 }
 
@@ -98,7 +98,7 @@ function ApprovalExtras({ p, onAsk, disabled }: { p: Item; onAsk: (text: string)
   );
 }
 
-/** Feedback 12.11: the missing accesses are one list with checkboxes instead of a card per access. */
+/** Отзыв 12.11: недостающие доступы — один список с галочками вместо карточки на каждый доступ. */
 export function AccessBundleCard({
   proposals,
   disabled,
@@ -107,8 +107,8 @@ export function AccessBundleCard({
   onAsk,
 }: Props) {
   const open = proposals.filter((p) => p.state === "pending");
-  // drafts arrive one by one while the answer streams: keep only what the user flipped, so every new ordinary draft
-  // starts checked and every draft needing approval starts unchecked
+  // черновики приходят по одному, пока идёт поток ответа: храним только то, что пользователь переключил, чтобы каждый
+  // новый обычный черновик начинался отмеченным, а каждый требующий согласования — неотмеченным
   const [flipped, setFlipped] = useState<Set<string>>(() => new Set());
   const isChosen = (p: Item) => needsApproval(p) === flipped.has(p.proposal_id);
   const busy = proposals.some((p) => p.state === "confirming");

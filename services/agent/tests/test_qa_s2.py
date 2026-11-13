@@ -92,7 +92,9 @@ def test_S2_14_kb_doc_endpoint_respects_acl(client, anna):
 
 
 def test_S2_15_kb_doc_endpoint_opens_a_mentor_answer_from_mcp_kb(client, anna, monkeypatch):
-    """Feedback 12.11: a mentor answer added to the KB lives in mcp-kb; its source link must open, not «Не найдено»."""
+    """Отзыв 12.11: ответ наставника, добавленный в базу знаний, живёт в mcp-kb; ссылка на источник должна открываться, а
+    не «Не найдено».
+    """
     from agent.tools.base import ToolGateway
 
     real = ToolGateway.read
@@ -119,18 +121,22 @@ def test_S2_15_kb_doc_endpoint_opens_a_mentor_answer_from_mcp_kb(client, anna, m
 
 
 def test_S2_16_topic_the_kb_does_not_know_goes_to_the_mentor(anna):
-    """QA 12.13: «собака», «стейдж» are in no document: a document matching only «офис» or «заказ» is not an answer."""
+    """QA 12.13: «собака», «стейдж» нет ни в одном документе: документ, совпадающий только по «офис» или «заказ», — не
+    ответ.
+    """
     for q in ("можно ли приходить в офис с собакой?", "как создать тестовый заказ на стейдже доставки?"):
         ev = anna.say(q)
         assert first(ev, "escalation_draft")["to_role"] == "mentor", q
         assert "Точного ответа в базе знаний нет" in text_of(ev)
-    ev = anna.say("где посмотреть логи delivery-api на stage?")  # engineering, not off-topic
+    ev = anna.say("где посмотреть логи delivery-api на stage?")  # инженерное, а не не по теме
     assert first(ev, "escalation_draft") is not None and first(ev, "refusal") is None
     assert first(anna.say("где взять ноутбук в первый день?"), "escalation_draft") is None
 
 
 def test_S2_17_mentor_answer_in_mcp_kb_beats_the_local_ranking(anna, monkeypatch):
-    """Feedback 12.13: the answer Oleg added to the KB lives only in mcp-kb; the next intern gets it, not «not found»."""
+    """Отзыв 12.13: ответ, который Олег добавил в базу знаний, живёт только в mcp-kb; следующий стажёр получает его, а не
+    «не нашёл».
+    """
     from agent.flows import qa
     from agent.tools.base import ToolGateway
 
@@ -170,7 +176,7 @@ def test_S2_17_mentor_answer_in_mcp_kb_beats_the_local_ranking(anna, monkeypatch
 
 
 def test_S2_18_a_mentor_answer_is_not_used_for_another_question(anna, monkeypatch):
-    """Feedback 12.13: mcp-kb's «any word» search returns the answer about dogs for «в офис с ноутбуком?» — not an answer."""
+    """Отзыв 12.13: поиск mcp-kb «по любому слову» возвращает ответ про собак на «в офис с ноутбуком?» — это не ответ."""
     from agent.flows import qa
     from agent.tools.base import ToolGateway
 

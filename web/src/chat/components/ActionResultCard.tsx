@@ -8,7 +8,8 @@ import { ACTION_STATUS_TEXT, ACTION_STATUS_VARIANT, absenceSteps, withoutApprove
 import { Steps } from './Steps'
 
 export function ActionResultCard({ result }: { result: ActionResult }) {
-  // the card is a snapshot from the stream; the live status (approved/rejected) comes from the actions list (refetched on focus)
+  // карточка — снимок из потока; актуальный статус (approved/rejected) берётся из списка действий (перезапрашивается
+  // при фокусе)
   const actions = useQuery({ queryKey: keys.actions, queryFn: listActions, refetchOnWindowFocus: true })
   const live = actions.data?.find((a) => a.id === result.action_id)
   const status = live?.status ?? result.status

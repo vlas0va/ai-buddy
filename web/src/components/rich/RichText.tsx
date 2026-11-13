@@ -1,8 +1,9 @@
 import { Fragment, type ReactNode } from 'react'
 import { parseBlocks } from './blocks'
 
-// A tiny, safe subset of markdown for buddy answers: paragraphs, "- " and "1. " lists, **bold**, `code`, tables
-// rendered as plain rows. Built from React elements only (no innerHTML), so document text can never inject markup.
+// Небольшое безопасное подмножество markdown для ответов buddy: абзацы, списки «- » и «1. », **жирный**, `код`, таблицы
+// в виде простых строк. Собирается только из элементов React (без innerHTML), поэтому текст документа никогда не может
+// внедрить разметку.
 
 function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = []

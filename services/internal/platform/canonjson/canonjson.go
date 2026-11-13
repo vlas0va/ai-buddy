@@ -1,26 +1,26 @@
-// Package canonjson produces canonical JSON: the byte-exact form that core, the MCP servers and the Python agent
-// hash and sign (contracts/mcp-tools.md: "keys sorted, no whitespace, UTF-8").
+// Пакет canonjson выдаёт канонический JSON: побайтно точную форму, которую хешируют и подписывают ядро, MCP-серверы и
+// агент на Python (contracts/mcp-tools.md: «ключи отсортированы, без пробелов, UTF-8»).
 //
-// The output is identical to Python's
+// Результат совпадает с Python
 //
 //	json.dumps(json.loads(text), sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 //
-// for every value made of objects, arrays, strings, integers, booleans and null:
-//   - object keys are sorted by Unicode code point (byte order of UTF-8, which is the same order);
-//     duplicate keys in JSON text keep the last value, like Python;
-//   - no whitespace between tokens;
-//   - strings are raw UTF-8; only '"', '\\' and control characters U+0000–U+001F are escaped:
-//     \b \f \n \r \t use the short form, the rest \u00XX with lowercase hex; '/', '<', '>', '&', U+007F,
-//     U+2028 and U+2029 are written as is;
-//   - invalid UTF-8 in Go strings is replaced by U+FFFD (as encoding/json does).
+// для любого значения из объектов, массивов, строк, целых чисел, булевых значений и null:
+//   - ключи объектов отсортированы по кодовым точкам Unicode (это тот же порядок, что байтовый порядок UTF-8);
+//     при дубликатах ключей в тексте JSON остаётся последнее значение, как в Python;
+//   - между токенами нет пробелов;
+//   - строки — «сырой» UTF-8; экранируются только '"', '\\' и управляющие символы U+0000–U+001F:
+//     \b \f \n \r \t — в короткой форме, остальные — \u00XX со строчными hex; '/', '<', '>', '&', U+007F,
+//     U+2028 и U+2029 пишутся как есть;
+//   - некорректный UTF-8 в строках Go заменяется на U+FFFD (как делает encoding/json).
 //
-// Numbers: number text is preserved as given (json.Number, json.RawMessage) or as encoding/json formats Go
-// numbers. Integers therefore match Python exactly (any size); the only rewrite is "-0" → "0", as in Python.
-// Non-integer numbers are NOT normalised: Python re-formats floats with repr ("1.0", "1e+16", 1e2 → "100.0"),
-// Go keeps "1", "1e2" or whatever the producer wrote. Do not put non-integer numbers into signed arguments;
-// the current write-tool schemas contain none.
+// Числа: текст числа сохраняется как передан (json.Number, json.RawMessage) или как encoding/json форматирует числа Go.
+// Поэтому целые совпадают с Python в точности (любого размера); единственная правка — "-0" → "0", как в Python. Нецелые
+// числа НЕ нормализуются: Python переформатирует float через repr ("1.0", "1e+16", 1e2 → "100.0"), Go оставляет "1",
+// "1e2" или то, что записал производитель. Не кладите нецелые числа в подписываемые аргументы; в текущих схемах
+// инструментов записи их нет.
 //
-// Invariant: Marshal(v) == Marshal(json.RawMessage(json.Marshal(v))) for every v encoding/json accepts.
+// Инвариант: Marshal(v) == Marshal(json.RawMessage(json.Marshal(v))) для любого v, которое принимает encoding/json.
 package canonjson
 
 import (
@@ -32,9 +32,9 @@ import (
 	"slices"
 )
 
-// Marshal returns the canonical JSON encoding of v. v may be any value accepted by encoding/json (maps, structs
-// with json tags, slices, json.Marshaler implementations, json.RawMessage, json.Number). A []byte is encoded as a
-// base64 string, as encoding/json does; wrap JSON text in json.RawMessage instead.
+// Marshal возвращает каноническое JSON-представление v. v может быть любым значением, которое принимает encoding/json
+// (map, структуры с json-тегами, срезы, реализации json.Marshaler, json.RawMessage, json.Number). []byte кодируется
+// строкой base64, как в encoding/json; текст JSON вместо этого оборачивайте в json.RawMessage.
 func Marshal(v any) ([]byte, error) {
 	raw, err := json.Marshal(v)
 	if err != nil {
@@ -54,7 +54,7 @@ func Marshal(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// SHA256Hex returns the lowercase hex SHA-256 of Marshal(v), the form of `args_hash` and `draft_hash`.
+// SHA256Hex возвращает SHA-256 от Marshal(v) строчным hex — форма `args_hash` и `draft_hash`.
 func SHA256Hex(v any) (string, error) {
 	b, err := Marshal(v)
 	if err != nil {
@@ -118,8 +118,8 @@ func encode(buf *bytes.Buffer, v any) error {
 
 const hexDigits = "0123456789abcdef"
 
-// writeString writes s as a JSON string. s is valid UTF-8 (it comes from encoding/json), and every byte of a
-// multi-byte sequence is >= 0x80, so escaping byte by byte is safe.
+// writeString пишет s как строку JSON. s — корректный UTF-8 (приходит из encoding/json), и каждый байт многобайтовой
+// последовательности >= 0x80, поэтому экранировать побайтно безопасно.
 func writeString(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 	start := 0

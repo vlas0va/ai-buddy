@@ -9,7 +9,10 @@ export interface RawSseEvent {
   data: string
 }
 
-/** Incremental SSE parser: feed text chunks, get complete events. Handles chunk splits, CRLF, multi-line data, comments. */
+/**
+ * Инкрементальный разбор SSE: подаём куски текста, получаем готовые события. Справляется с разрывами кусков, CRLF,
+ * многострочным data, комментариями.
+ */
 export class SseParser {
   private buffer = ''
   private id: string | undefined
@@ -23,7 +26,7 @@ export class SseParser {
     while ((idx = this.buffer.search(/\r\n|\n|\r/)) !== -1) {
       const m = /^(\r\n|\n|\r)/.exec(this.buffer.slice(idx))
       const eol = m ? m[0].length : 1
-      // a lone \r at the end of the buffer may be the first half of \r\n: wait for more input
+      // одиночный \r в конце буфера может быть первой половиной \r\n: ждём ещё ввода
       if (this.buffer[idx] === '\r' && idx + 1 === this.buffer.length) break
       const line = this.buffer.slice(0, idx)
       this.buffer = this.buffer.slice(idx + eol)
@@ -33,7 +36,7 @@ export class SseParser {
     return out
   }
 
-  /** Flush an unterminated final event (stream closed without a blank line). */
+  /** Сбросить незавершённое последнее событие (поток закрылся без пустой строки). */
   end(): RawSseEvent[] {
     const out: RawSseEvent[] = []
     if (this.buffer) {
@@ -71,7 +74,7 @@ export class SseParser {
   }
 }
 
-/** Reads a response body as typed stream events. */
+/** Читает тело ответа как типизированные события потока. */
 export async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<StreamEvent> {
   const reader = body.getReader()
   const decoder = new TextDecoder()
@@ -89,7 +92,7 @@ export async function* readEvents(body: ReadableStream<Uint8Array>): AsyncGenera
   }
 }
 
-/** POST that answers text/event-stream (EventSource cannot POST). Throws ApiError for non-2xx, AbortError on abort. */
+/** POST с ответом text/event-stream (EventSource не умеет POST). Бросает ApiError для не-2xx, AbortError при отмене. */
 export async function* streamPost(path: string, body: unknown, signal?: AbortSignal): AsyncGenerator<StreamEvent> {
   const { token, clear } = useSession.getState()
   const headers: Record<string, string> = { Accept: 'text/event-stream' }

@@ -13,7 +13,7 @@ interface BubbleProps {
   message: ChatMessage
   typing: boolean
   status: string | null
-  /** rendered inside the buddy column (next to the avatar) when the message has no text of its own */
+  /** показывается в колонке buddy (рядом с аватаром), если у сообщения нет своего текста */
   error?: ReactNode
 }
 
@@ -37,11 +37,12 @@ export function MessageBubble({ message, typing, status, error }: BubbleProps) {
       </div>
     )
   }
-  // "Открыть мой план" is a client-side link: agent-stream.md has no link event, the script ends its text with the phrase.
+  // «Открыть мой план» — ссылка на стороне клиента: в agent-stream.md нет события-ссылки, сценарий заканчивает текст
+  // этой фразой.
   const planLink = message.text.trimEnd().endsWith(PLAN_LINK_TEXT)
   const body = planLink ? message.text.trimEnd().slice(0, -PLAN_LINK_TEXT.length).trimEnd() : message.text
   const showBubble = body !== '' || typing
-  // the status line belongs before the answer: it goes away with the first token and never stays under a finished answer
+  // строка статуса идёт перед ответом: она исчезает с первым токеном и никогда не остаётся под готовым ответом
   const showStatus = typing && !!status && message.text === ''
   return (
     <div className="chat-row chat-row-buddy">
@@ -76,7 +77,7 @@ export function MessageBubble({ message, typing, status, error }: BubbleProps) {
   )
 }
 
-/** Client-side greeting for an empty conversation; never sent to the server. */
+/** Приветствие на стороне клиента для пустого разговора; на сервер никогда не отправляется. */
 export function WelcomeBubble({ name }: { name: string }) {
   return (
     <div className="chat-row chat-row-buddy">

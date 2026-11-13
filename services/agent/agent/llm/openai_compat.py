@@ -1,8 +1,8 @@
-"""OpenAI-compatible chat completions client (cloud provider, vLLM, Ollama `http://ollama:11434/v1`).
+"""Клиент OpenAI-совместимых chat completions (облачный провайдер, vLLM, Ollama `http://ollama:11434/v1`).
 
-A-Vibe is built on Qwen3, a reasoning model: with `no_think` the request asks for no reasoning (`/no_think` and
-`chat_template_kwargs.enable_thinking=false`, understood by vLLM and ignored elsewhere), and any `<think>…</think>`
-block that still comes back is cut out of the answer, also in a stream.
+A-Vibe построена на Qwen3, модели с рассуждениями: с `no_think` запрос просит не рассуждать (`/no_think` и
+`chat_template_kwargs.enable_thinking=false`; vLLM это понимает, остальные игнорируют), а любой блок `<think>…</think>`,
+который всё же вернулся, вырезается из ответа, в том числе в потоке.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def strip_think(text: str) -> str:
 
 
 class ThinkFilter:
-    """Drops `<think>…</think>` from streamed chunks; a tag may be split between chunks."""
+    """Убирает `<think>…</think>` из кусков потока; тег может быть разорван между кусками."""
 
     def __init__(self) -> None:
         self.buf = ""
@@ -38,7 +38,7 @@ class ThinkFilter:
             if self.inside:
                 end = self.buf.find("</think>")
                 if end < 0:
-                    self.buf = self.buf[-len("</think>") :]  # keep a possible partial closing tag
+                    self.buf = self.buf[-len("</think>") :]  # сохранить возможный частичный закрывающий тег
                     return "".join(out)
                 self.buf = self.buf[end + len("</think>") :].lstrip()
                 self.inside = False
@@ -114,18 +114,19 @@ class OpenAICompatClient:
         if resp.status_code >= 400:
             retryable = resp.status_code in (408, 429) or resp.status_code >= 500
             try:
-                detail = resp.text[:200]  # e.g. Ollama «model "…" not found»
+                detail = resp.text[:200]  # например, Ollama «model "…" not found»
             except Exception:  # noqa: BLE001 - a streamed body may be unreadable
                 detail = ""
             raise LLMError(f"Модель вернула ошибку {resp.status_code}. {detail}".strip(), retryable=retryable)
 
     def model_listed(self) -> bool | None:
-        """Is the model served right now? True / False from `GET /models` (Ollama lists pulled models only, so a model
-        that is still downloading is False); None when the endpoint cannot tell (no such route, odd answer)."""
+        """Обслуживается ли модель прямо сейчас? True / False по `GET /models` (Ollama перечисляет только скачанные модели,
+        поэтому ещё скачивающаяся — False); None, если эндпоинт не может сказать (нет такого маршрута, странный ответ).
+        """
         try:
             resp = self.client.get(self.base_url + "/models", headers=self.headers, timeout=3.0)
         except httpx.HTTPError:
-            return False  # server not reachable: not ready
+            return False  # сервер недоступен: не готов
         except Exception:  # noqa: BLE001 - a custom transport that cannot answer GET: cannot tell
             return None
         if resp.status_code >= 400:
@@ -178,7 +179,9 @@ class OpenAICompatClient:
 
 
 class EmbeddingsClient:
-    """OpenAI-compatible /embeddings (e.g. Ollama `bge-m3`, `nomic-embed-text`) for optional hybrid retrieval."""
+    """OpenAI-совместимые /embeddings (например, Ollama `bge-m3`, `nomic-embed-text`) для необязательного гибридного
+    поиска.
+    """
 
     def __init__(
         self, base_url: str, api_key: str, model: str, timeout_s: float = 30.0, client: httpx.Client | None = None

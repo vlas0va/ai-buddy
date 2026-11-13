@@ -1,8 +1,8 @@
 import type { Step } from "../statusText";
 
 /**
- * Approval chain of a request, e.g. lead → HR admin → HR BP for a day off: three tiles in a card, or a progress bar with
- * one short line per step in the narrow «Мои заявки» panel.
+ * Цепочка согласования заявки, например руководитель → HR-администратор → HR BP для отгула: три плитки в карточке или
+ * полоса прогресса с одной короткой строкой на шаг в узкой панели «Мои заявки».
  */
 export function Steps({
   steps,

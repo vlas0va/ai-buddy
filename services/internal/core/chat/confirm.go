@@ -23,26 +23,26 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Proposal lifecycle (core.proposals.status):
+// Жизненный цикл черновика (core.proposals.status):
 //
-//	pending   → stored, never sent to the agent: can be confirmed, cancelled or expire.
-//	confirmed → a confirm attempt is in flight.
-//	failed    → an attempt reached the agent and did not complete. The write may have happened, so the proposal can
-//	            no longer be cancelled or expire: a later confirm retries with the same idempotency key and replays.
-//	executed  → saved (core.actions); a confirm replays the stored result (R79).
-//	cancelled, expired → final; only reachable from pending.
+//	pending   → сохранён, агенту не отправлялся: можно подтвердить, отменить, может истечь.
+//	confirmed → идёт попытка подтверждения.
+//	failed    → попытка дошла до агента и не завершилась. Запись могла произойти, поэтому черновик
+//	            больше нельзя отменить и он не истекает: следующее подтверждение повторяет с тем же ключом идемпотентности и воспроизводит.
+//	executed  → сохранён (core.actions); подтверждение воспроизводит сохранённый результат (R79).
+//	cancelled, expired → финальные; достижимы только из pending.
 //
-// A failure before the agent is called puts the proposal back to the status it had.
+// Сбой до вызова агента возвращает черновику прежний статус.
 
-// proposal is a row of core.proposals.
+// proposal — строка core.proposals.
 type proposal struct {
 	id, kind, status, draftHash string
 	draft                       json.RawMessage
 	createdAt, expiresAt        time.Time
 }
 
-// loadProposal returns the caller's proposal in the session; a malformed id is not_found, a missing or foreign
-// one forbidden.
+// loadProposal возвращает черновик вызывающего в сессии; некорректный id — not_found, отсутствующий или чужой —
+// forbidden.
 func (h *Handler) loadProposal(ctx context.Context, q pgx.Row, id string) (proposal, error) {
 	p := proposal{id: id}
 	var draftText string
@@ -60,7 +60,7 @@ func (h *Handler) loadProposal(ctx context.Context, q pgx.Row, id string) (propo
 const proposalSelect = `SELECT kind, status, draft_hash, draft::text, created_at, expires_at FROM core.proposals
 	WHERE id = $1 AND session_id = $2 AND user_id = $3`
 
-// target checks the session and proposal ids of a confirm or cancel request and loads the proposal.
+// target проверяет id сессии и черновика в запросе подтверждения или отмены и загружает черновик.
 func (h *Handler) target(r *http.Request, c authn.Claims) (proposal, error) {
 	sid, pid := r.PathValue("session_id"), r.PathValue("proposal_id")
 	if err := h.ownSession(r.Context(), c.Sub, sid); err != nil {
@@ -78,13 +78,13 @@ var (
 	errInFlight  = apierr.Conflict().WithMessage("Заявка уже отправлена")
 )
 
-// attempt is one confirmation of a proposal.
+// attempt — одно подтверждение черновика.
 type attempt struct {
 	c     authn.Claims
 	token string
 	p     proposal
 	d     draft
-	n     int // 1 for the first confirmation, 2 for a retry (analytics)
+	n     int // 1 для первого подтверждения, 2 для повтора (аналитика)
 }
 
 func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +110,8 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, errExpired)
 		return
 	case p.status == "pending" && !h.Now().Before(p.expiresAt):
-		// Only a proposal that never reached the agent expires; after an attempt the retry must stay possible (R66).
+		// Истекает только черновик, который ни разу не дошёл до агента; после попытки повтор должен оставаться
+		// возможным (R66).
 		if _, err := h.pool.Exec(ctx, `UPDATE core.proposals SET status = 'expired' WHERE id = $1 AND status = 'pending'`, p.id); err != nil {
 			h.log.Warn("mark proposal expired failed", "proposal", p.id, "err", err)
 		}
@@ -121,14 +122,14 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 	if p.status != "pending" {
 		at.n = 2
 	}
-	// A repeated confirm while one is in flight is allowed: the write is idempotent by proposal_id (R79).
+	// Повторное подтверждение, пока идёт предыдущее, разрешено: запись идемпотентна по proposal_id (R79).
 	tag, err := h.pool.Exec(ctx, `UPDATE core.proposals SET status = 'confirmed' WHERE id = $1 AND status IN ('pending', 'failed', 'confirmed')`, p.id)
 	if err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("claim proposal: %w", err))
 		return
 	}
 	if tag.RowsAffected() != 1 {
-		apierr.WriteJSON(w, errInFlight) // executed or cancelled in between
+		apierr.WriteJSON(w, errInFlight) // тем временем выполнен или отменён
 		return
 	}
 	if at.d, err = h.checkStored(c, p); err != nil {
@@ -161,7 +162,7 @@ func (h *Handler) confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer sse.Close()
-	// From here on the agent may have called the write tool: failures leave the proposal failed (retryable).
+	// Дальше агент мог уже вызвать инструмент записи: при сбоях черновик остаётся failed (можно повторить).
 	assistantID := newUUID()
 	stream, err := h.agent.Turn(ctx, token, agentclient.TurnRequest{SessionID: sid, MessageID: assistantID,
 		Turn:        agentclient.Turn{Kind: agentclient.KindConfirm, ProposalID: p.id, Draft: p.draft, ConfirmationToken: confirmation},
@@ -186,7 +187,7 @@ loop:
 		case err != nil:
 			h.log.Warn("agent confirm stream failed", "proposal", p.id, "err", err)
 			if saved {
-				break loop // the write is saved; a late agent failure only loses the follow-up text
+				break loop // запись сохранена; поздний сбой агента теряет только текст дополнения
 			}
 			h.fail(ctx, c, p, sse, agentError(err))
 			return
@@ -238,7 +239,7 @@ loop:
 			if saved {
 				break loop
 			}
-			// The proposal stays confirmable: a retry is safe because the write is idempotent by proposal_id (R79).
+			// Черновик можно подтверждать снова: повтор безопасен, потому что запись идемпотентна по proposal_id (R79).
 			var e streamError
 			_ = json.Unmarshal(ev.Data, &e)
 			h.markFailed(ctx, p.id)
@@ -249,7 +250,7 @@ loop:
 			break loop
 		case internalEvents[ev.Name] || ev.Name == agentclient.EventActionProposal:
 			h.log.Warn("agent event dropped", "event", ev.Name, "proposal", p.id)
-		default: // status, token, sources, next_step and events added later
+		default: // status, token, sources, next_step и события, добавленные позже
 			if sse.Send(ev.Name, ev.Data) != nil {
 				if !saved {
 					h.markFailed(ctx, p.id)
@@ -272,8 +273,8 @@ loop:
 	_ = sse.Send(agentclient.EventDone, st.doneEvent(assistantID))
 }
 
-// checkStored re-checks a stored proposal before it is signed: exact-key draft, the tool allowed for the stored kind
-// (approval decisions only for leads) and draft_hash equal to the hash of draft.args.
+// checkStored перепроверяет сохранённый черновик перед подписью: draft с точными ключами, инструмент разрешён для
+// сохранённого вида (решения по согласованию — только руководителям) и draft_hash равен хешу draft.args.
 func (h *Handler) checkStored(c authn.Claims, p proposal) (draft, error) {
 	d, err := decodeDraft(p.draft)
 	if err != nil {
@@ -288,7 +289,7 @@ func (h *Handler) checkStored(c authn.Claims, p proposal) (draft, error) {
 	return d, nil
 }
 
-// replay answers a confirm of an executed proposal with the stored action_result and done, calling nobody (R79).
+// replay отвечает на подтверждение выполненного черновика сохранёнными action_result и done, никого не вызывая (R79).
 func (h *Handler) replay(w http.ResponseWriter, r *http.Request, c authn.Claims, p proposal) {
 	var a *actions.Action
 	var messageID string
@@ -330,8 +331,8 @@ func (h *Handler) replay(w http.ResponseWriter, r *http.Request, c authn.Claims,
 	_ = sse.Send(agentclient.EventDone, map[string]string{"message_id": messageID})
 }
 
-// saveResult saves the action, the assistant message announcing it and marks the proposal executed in one
-// transaction. It survives a client disconnect: the write already happened and must be visible after reload (R66).
+// saveResult в одной транзакции сохраняет действие, объявляющее его сообщение ассистента и помечает черновик
+// выполненным. Переживает отключение клиента: запись уже произошла и должна быть видна после перезагрузки (R66).
 func (h *Handler) saveResult(ctx context.Context, at attempt, res toolResult, messageID string) (*actions.Action, string, error) {
 	var out *actions.Action
 	err := h.inProposalTx(ctx, at.p.id, func(ctx context.Context, tx pgx.Tx, sessionID string) (string, error) {
@@ -342,7 +343,7 @@ func (h *Handler) saveResult(ctx context.Context, at attempt, res toolResult, me
 			return "", err
 		}
 		if a.MessageID != "" {
-			messageID = a.MessageID // a concurrent confirm saved it first
+			messageID = a.MessageID // параллельное подтверждение сохранило его раньше
 		}
 		a.MessageID, out = messageID, &a
 		if err := insertMessage(ctx, tx, messageID, sessionID, "assistant", a.Summary, nil, nil); err != nil {
@@ -353,13 +354,13 @@ func (h *Handler) saveResult(ctx context.Context, at attempt, res toolResult, me
 	return out, messageID, err
 }
 
-// saveDecision records a lead's approval decision made in chat (approval_decision). The agent's tool_result was
-// already checked against the confirmed draft (approval id and decision); core then reads the decision back from the
-// approvals service itself (approvals.decide with the same idempotency key replays the stored result and writes
-// nothing new) and applies it only to the requester's action whose request names this lead as approver (R71):
-// action and plan task follow the decision, the requester is notified, the assistant message is saved and the
-// proposal is marked executed with a note of the action and message, which a later confirm replays. A decision on
-// a request made outside the chat has no action in core: then only the message is saved.
+// saveDecision записывает решение руководителя по согласованию, принятое в чате (approval_decision). tool_result агента
+// уже сверен с подтверждённым черновиком (id согласования и решение); затем ядро само перечитывает решение у сервиса
+// согласований (approvals.decide с тем же ключом идемпотентности воспроизводит сохранённый результат и ничего нового не
+// пишет) и применяет его только к действию заявителя, в заявке которого этот руководитель указан согласующим (R71):
+// действие и задача плана следуют решению, заявитель уведомляется, сообщение ассистента сохраняется, а черновик
+// помечается выполненным с отметкой о действии и сообщении, которую воспроизводит следующее подтверждение. У решения по
+// заявке, созданной вне чата, действия в ядре нет: тогда сохраняется только сообщение.
 func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, messageID string) (*actions.Action, string, error) {
 	var args map[string]any
 	if err := json.Unmarshal(at.d.Args, &args); err != nil {
@@ -413,9 +414,9 @@ func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, me
 	return out, messageID, err
 }
 
-// inProposalTx runs fn in a transaction holding the proposal row lock and then executes the statement fn returns
-// (with the proposal id). It survives a client disconnect: the write already happened and must be visible after
-// reload (R66).
+// inProposalTx выполняет fn в транзакции, удерживающей блокировку строки черновика, а затем выполняет запрос, который
+// вернула fn (с id черновика). Переживает отключение клиента: запись уже произошла и должна быть видна после
+// перезагрузки (R66).
 func (h *Handler) inProposalTx(ctx context.Context, id string, fn func(ctx context.Context, tx pgx.Tx, sessionID string) (string, error)) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -444,21 +445,21 @@ func (h *Handler) inProposalTx(ctx context.Context, id string, fn func(ctx conte
 	return nil
 }
 
-// fail marks the proposal failed (it can be confirmed again), records action.failed and emits the error event.
+// fail помечает черновик failed (его можно подтвердить снова), записывает action.failed и отправляет событие error.
 func (h *Handler) fail(ctx context.Context, c authn.Claims, p proposal, sse *httpx.SSEWriter, e streamError) {
 	h.markFailed(ctx, p.id)
 	h.emit(context.WithoutCancel(ctx), c, "action.failed", map[string]any{"kind": p.kind, "code": e.Code, "retryable": e.Retryable})
 	_ = sse.Send(agentclient.EventError, e)
 }
 
-// markFailed moves a confirmed proposal to failed after an attempt reached the agent, even when the client has
-// gone away.
+// markFailed переводит подтверждаемый черновик в failed после того, как попытка дошла до агента, даже если клиент уже
+// ушёл.
 func (h *Handler) markFailed(ctx context.Context, id string) {
 	h.setStatus(ctx, id, "failed")
 }
 
-// release undoes the claim of an attempt that failed before the agent was called: the proposal gets back the
-// status it had (pending stays cancellable and can expire; failed stays failed).
+// release отменяет захват попытки, которая сорвалась до вызова агента: черновик получает прежний статус (pending
+// остаётся отменяемым и может истечь; failed остаётся failed).
 func (h *Handler) release(ctx context.Context, p proposal) {
 	status := "failed"
 	if p.status == "pending" {
@@ -485,8 +486,9 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	// Nothing is sent anywhere: the proposal is only marked cancelled. Once an attempt reached the agent the write
-	// may have happened, so cancelling is refused and the user can confirm again to see the result (R66).
+	// Никуда ничего не отправляется: черновик только помечается отменённым. Если попытка уже дошла до агента, запись
+	// могла произойти, поэтому отмена отклоняется, и пользователь может подтвердить снова, чтобы увидеть результат
+	// (R66).
 	tag, err := h.pool.Exec(r.Context(), `UPDATE core.proposals SET status = 'cancelled' WHERE id = $1 AND status IN ('pending', 'expired', 'cancelled')`, p.id)
 	if err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("cancel proposal: %w", err))
@@ -503,16 +505,16 @@ func (h *Handler) cancel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// toolResult is what core takes from the agent's tool_result event.
+// toolResult — то, что ядро берёт из события tool_result агента.
 type toolResult struct {
-	Result          json.RawMessage // structured MCP result of draft.tool
-	Followup        string          // optional text the agent wants shown after the result card
-	ChecklistItemID string          // task_checklist_item_id: plan task to link (access only)
-	ApproverName    string          // optional approver_display_name
+	Result          json.RawMessage // структурированный результат MCP для draft.tool
+	Followup        string          // необязательный текст, который агент хочет показать после карточки результата
+	ChecklistItemID string          // task_checklist_item_id: задача плана для связи (только доступ)
+	ApproverName    string          // необязательный approver_display_name
 }
 
-// parseToolResult binds the agent's tool_result to the confirmed proposal (R71): proposal_id, kind and tool must be
-// those of the proposal and the stored draft, the MCP result ("result") must describe the confirmed draft.args.
+// parseToolResult привязывает tool_result агента к подтверждённому черновику (R71): proposal_id, kind и tool должны
+// совпадать с черновиком и сохранённым draft, а результат MCP ("result") должен описывать подтверждённые draft.args.
 func parseToolResult(data json.RawMessage, p proposal, d draft) (toolResult, error) {
 	obj, err := exactObject(data, "proposal_id", "kind", "tool", "result")
 	if err != nil {
@@ -544,11 +546,11 @@ func orRead(level string) string {
 	return level
 }
 
-// checkResult verifies that an MCP result is the result of the confirmed draft: the same dates or resource, the
-// approval and decision that were signed, and a status a new request can have.
+// checkResult проверяет, что результат MCP — результат подтверждённого черновика: те же даты или ресурс, подписанные
+// согласование и решение и статус, который может быть у новой заявки.
 func checkResult(d draft, result map[string]json.RawMessage) error {
 	var args map[string]json.RawMessage
-	_ = json.Unmarshal(d.Args, &args) // decodeDraft checked it is an object
+	_ = json.Unmarshal(d.Args, &args) // decodeDraft проверил, что это объект
 	same := func(keys ...string) error {
 		for _, k := range keys {
 			if str(result, k) != str(args, k) {
@@ -570,7 +572,7 @@ func checkResult(d draft, result map[string]json.RawMessage) error {
 		if err := same("resource_id"); err != nil {
 			return err
 		}
-		// the environment and the level that were signed (checkpoint 11.11); a draft without them means read, no environment
+		// подписанные окружение и уровень (чекпоинт 11.11); черновик без них означает чтение без окружения
 		if str(result, "environment") != str(args, "environment") || orRead(str(result, "level")) != orRead(str(args, "level")) {
 			return fmt.Errorf("access scope %q/%q differs from the confirmed %q/%q", str(result, "environment"), str(result, "level"),
 				str(args, "environment"), str(args, "level"))

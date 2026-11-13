@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-// Mirrors contracts/openapi.yaml. Every API response is parsed with one of these (R63).
+// Повторяет contracts/openapi.yaml. Каждый ответ API разбирается одной из этих схем (R63).
 
 export const errorCodeSchema = z.enum([
   'unauthorized',
@@ -74,7 +74,7 @@ export interface Task {
   due_at?: string | null
   human_only: boolean
   linked_action_id?: string | null
-  /** who confirms it is done (organizers 12.13): self, a mini-check in the chat, or the mentor */
+  /** кто подтверждает выполнение (организаторы 12.13): сам, мини-проверка в чате или наставник */
   confirm?: 'self' | 'quiz' | 'mentor'
   subtasks?: Task[]
 }
@@ -120,7 +120,8 @@ export const internProgressSchema = z.object({
 export const sourceSchema = z.object({
   doc_id: z.string(),
   title: z.string(),
-  // test = synthetic KB document (R69); external = public page from web search for a general technical question
+  // test — синтетический документ базы знаний (R69); external — публичная страница из веб-поиска по общему техническому
+  // вопросу
   source_type: z.enum(['test', 'external']),
   url: z.string().optional(),
 })
@@ -172,10 +173,10 @@ export const approvalSchema = z.object({
   summary: z.string(),
   status: z.enum(['pending', 'approved', 'rejected', 'cancelled']),
   comment: z.string().nullable().optional(),
-  /** lead first, then the HR admin for an absence request (checkpoint 11.11) */
+  /** сначала руководитель, затем HR-администратор для заявки на отсутствие (чекпоинт 11.11) */
   stage: z.enum(['lead', 'hr_admin']).optional(),
   created_at: z.string(),
-  /** feedback 12.13: teammates away on the same days */
+  /** отзыв 12.13: коллеги, отсутствующие в те же дни */
   team_absent: z.array(z.string()).optional(),
 })
 

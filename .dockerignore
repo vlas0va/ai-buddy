@@ -1,8 +1,8 @@
-# Build context of services/Dockerfile (Go: core, mcp-mocks) and services/agent/Dockerfile is the repo root; keep it small.
-# web/ has its own context and web/.dockerignore.
+# Контекст сборки services/Dockerfile (Go: core, mcp-mocks) и services/agent/Dockerfile — корень репозитория; держим его
+# маленьким.
+# У web/ свой контекст и свой web/.dockerignore.
 .git
 .github
-.claude
 .env
 .env.*
 !.env.example

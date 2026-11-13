@@ -1,7 +1,7 @@
-// Package access implements the mock "access" MCP server: required accesses, team channels and access requests (S4).
-// Data is synthetic (R68). Identity and team come only from the verified JWT (R71): a caller sees and requests only
-// resources of their own team or of every team. Elevated resources go to the caller's lead for approval; requests are
-// idempotent by key (R79).
+// Пакет access реализует мок-сервер MCP «access»: обязательные доступы, каналы команды и заявки на доступ (S4). Данные
+// синтетические (R68). Личность и команда берутся только из проверенного JWT (R71): вызывающий видит и запрашивает
+// только ресурсы своей команды или общие для всех. Ресурсы с повышенными правами уходят на согласование руководителю
+// вызывающего; заявки идемпотентны по ключу (R79).
 package access
 
 import (
@@ -20,7 +20,7 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the access contract to srv.
+// Register привязывает каждый инструмент контракта access к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	if srv == nil || pool == nil {
 		return errors.New("access: server and pool are required")
@@ -40,13 +40,13 @@ type service struct {
 	pool *pgxpool.Pool
 }
 
-// latestStatus is a LATERAL subquery: the caller's ($1) most recent request for resource r.
+// latestStatus — LATERAL-подзапрос: самая свежая заявка вызывающего ($1) на ресурс r.
 const latestStatus = `
 LATERAL (SELECT q.status, coalesce(q.environment, '') AS environment, q.level FROM access.requests q
          WHERE q.resource_id = r.id AND q.employee_id = $1
          ORDER BY q.created_at DESC, q.id DESC LIMIT 1) q`
 
-// resourceStatus is a resource with the caller's status for it.
+// resourceStatus — ресурс со статусом вызывающего по нему.
 type resourceStatus struct {
 	ResourceID      string   `json:"resource_id"`
 	Name            string   `json:"name"`
@@ -58,7 +58,7 @@ type resourceStatus struct {
 	Levels          []string `json:"levels"`
 	Optional        bool     `json:"optional"`
 	ApproverLabel   string   `json:"approver_label"`
-	Environment     string   `json:"environment,omitempty"` // of the latest request
+	Environment     string   `json:"environment,omitempty"` // последней заявки
 	Level           string   `json:"level,omitempty"`
 }
 
@@ -89,7 +89,7 @@ func (s *service) listResources(ctx context.Context, sql string, args ...any) (a
 	return listOut{Items: items}, nil
 }
 
-// listRequired returns the tools and spaces required for the caller's team with the caller's status.
+// listRequired возвращает инструменты и пространства, обязательные для команды вызывающего, со статусом вызывающего.
 func (s *service) listRequired(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	return s.listResources(ctx, `
 SELECT `+resourceCols+`
@@ -99,7 +99,7 @@ WHERE r.kind IN ('tool', 'space', 'project', 'repo', 'database') AND (r.team_id 
 ORDER BY array_position(ARRAY['tool','project','repo','space','database'], r.kind), r.team_id NULLS FIRST, r.id`, c.Sub, c.TeamID)
 }
 
-// listMyAccess returns every resource the caller has requested, with the latest status.
+// listMyAccess возвращает все ресурсы, которые запрашивал вызывающий, с последним статусом.
 func (s *service) listMyAccess(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	return s.listResources(ctx, `
 SELECT `+resourceCols+`
@@ -118,7 +118,8 @@ type channelsOut struct {
 	Items []channel `json:"items"`
 }
 
-// listTeamChannels returns the channels of the caller's team and of every team: name, purpose, closed only.
+// listTeamChannels возвращает каналы команды вызывающего и общие для всех: только название, назначение и признак
+// закрытости.
 func (s *service) listTeamChannels(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	rows, err := s.pool.Query(ctx, `
 SELECT name, coalesce(purpose, ''), elevated
@@ -170,12 +171,13 @@ type requestOut struct {
 	reason     string
 }
 
-// querier is satisfied by pgx.Tx and *pgxpool.Pool.
+// querier удовлетворяют pgx.Tx и *pgxpool.Pool.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// findRequest returns the access request matching where (a condition on alias q with parameters $1, $2), or ok=false.
+// findRequest возвращает заявку на доступ, подходящую под where (условие на псевдоним q с параметрами $1, $2), или
+// ok=false.
 func findRequest(ctx context.Context, db querier, where string, args ...any) (requestOut, bool, error) {
 	rows, err := db.Query(ctx, `
 SELECT q.id, q.resource_id, r.name, q.status, q.approver_id, r.checklist_item_id, q.environment, q.level, q.created_at,
@@ -205,9 +207,9 @@ ORDER BY q.created_at DESC, q.id DESC LIMIT 1`, args...)
 	return out, true, nil
 }
 
-// requestAccess creates an access request for the caller. A resource outside the caller's team is forbidden;
-// a plain resource is granted at once; an elevated one waits for the caller's lead (approvals item). A repeated
-// idempotency_key returns the stored request with replayed=true.
+// requestAccess создаёт заявку на доступ для вызывающего. Ресурс вне команды вызывающего запрещён; обычный ресурс
+// выдаётся сразу; ресурс с повышенными правами ждёт руководителя вызывающего (пункт согласования). Повтор
+// idempotency_key возвращает сохранённую заявку с replayed=true.
 func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in requestIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
@@ -218,7 +220,7 @@ func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.Ra
 		return nil, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	// Serialise the caller's writes so that the replay lookup and the duplicate check see each other's commits.
+	// Сериализуем записи вызывающего, чтобы поиск повтора и проверка дубликатов видели коммиты друг друга.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "access:"+c.Sub); err != nil {
 		return nil, fmt.Errorf("lock employee: %w", err)
 	}
@@ -248,7 +250,7 @@ func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.Ra
 SELECT name, elevated, environments, levels FROM access.resources WHERE id = $1 AND (team_id IS NULL OR team_id = $2)`,
 		in.ResourceID, c.TeamID).Scan(&name, &elevated, &environments, &levels)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Unknown resources and other teams' resources look the same (R71).
+		// Неизвестные ресурсы и ресурсы других команд выглядят одинаково (R71).
 		return nil, apierr.Forbidden().WithMessage("Ресурс недоступен для запроса из вашей команды")
 	}
 	if err != nil {
@@ -257,7 +259,7 @@ SELECT name, elevated, environments, levels FROM access.resources WHERE id = $1 
 	if err := checkScope(name, environments, levels, in); err != nil {
 		return nil, err
 	}
-	// checkpoint 11.11: write and admin rights and anything on prod are approved; reading dev/stage is granted at once
+	// чекпоинт 11.11: права на запись и администрирование и всё на prod согласуются; чтение dev/stage выдаётся сразу
 	elevated = elevated || in.Level != "read" || in.Environment == "prod"
 	last, found, err := findRequest(ctx, tx, "q.employee_id = $1 AND q.resource_id = $2 AND coalesce(q.environment, '') = $3",
 		c.Sub, in.ResourceID, in.Environment)
@@ -294,7 +296,7 @@ INSERT INTO access.requests (employee_id, resource_id, reason, status, approver_
 VALUES ($1, $2, nullif($3, ''), $4, $5, $6::uuid, CASE WHEN $4 = 'granted' THEN now() END, nullif($7, ''), $8)
 RETURNING id`, c.Sub, in.ResourceID, in.Reason, status, approver, in.IdempotencyKey, in.Environment, in.Level).Scan(&id)
 	if isUniqueViolation(err) {
-		return nil, keyConflict() // the key belongs to another employee's request
+		return nil, keyConflict() // ключ принадлежит заявке другого сотрудника
 	}
 	if err != nil {
 		return nil, fmt.Errorf("insert access request: %w", err)
@@ -316,8 +318,8 @@ VALUES ('access_request', $1, $2, $3, $4)`, id, c.Sub, *approver, "Доступ:
 	return created, nil
 }
 
-// checkScope validates the environment and the level against the resource: a database needs an environment, a tool
-// has none; the level must be one the resource offers.
+// checkScope проверяет окружение и уровень по ресурсу: базе данных нужно окружение, у инструмента его нет; уровень
+// должен быть из предлагаемых ресурсом.
 func checkScope(name string, environments, levels []string, in requestIn) error {
 	switch {
 	case len(environments) > 0 && in.Environment == "":
@@ -332,7 +334,7 @@ func checkScope(name string, environments, levels []string, in requestIn) error 
 	return nil
 }
 
-// scopeLabel is « (stage, редактирование)» for the approval summary; empty for plain read access to a tool.
+// scopeLabel — « (stage, редактирование)» для сводки согласования; пусто для обычного чтения инструмента.
 func scopeLabel(in requestIn) string {
 	switch {
 	case in.Environment != "":

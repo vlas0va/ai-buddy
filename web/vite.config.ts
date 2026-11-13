@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  // The MSW service worker lives in public-mock/ and is served only by `npm run dev:mock`, never copied into dist/.
+  // Service worker MSW лежит в public-mock/ и раздаётся только в `npm run dev:mock`, в dist/ никогда не копируется.
   publicDir: mode === 'mock' ? 'public-mock' : false,
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
@@ -13,7 +13,8 @@ export default defineConfig(({ mode }) => ({
   server: { port: 5173 },
   test: {
     environment: 'jsdom',
-    // jsdom per forked worker exhausted memory on dev machines (exit 134); threads with a small pool are stable
+    // jsdom на каждый форкнутый воркер исчерпывал память на машинах разработчиков (exit 134); потоки с небольшим пулом
+    // стабильны
     pool: 'threads',
     maxWorkers: 2,
     globals: true,

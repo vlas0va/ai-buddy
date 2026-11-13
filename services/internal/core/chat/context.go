@@ -14,9 +14,10 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// userContext builds user_context for the agent. Identity (user_id, role, team_id) comes only from the verified
-// claims (R71); the rest from core's DB: display name, current period, open top-level tasks of the caller's own
-// plans, mentees of a mentor or lead and the runtime flags of the team. Mentees and flags are best effort.
+// userContext собирает user_context для агента. Личность (user_id, role, team_id) берётся только из проверенных claims
+// (R71); остальное — из базы ядра: отображаемое имя, текущий этап, открытые задачи верхнего уровня из собственных
+// планов вызывающего, подопечные наставника или руководителя и runtime-флаги команды. Подопечные и флаги — по
+// возможности.
 func (h *Handler) userContext(ctx context.Context, c authn.Claims) (agentclient.UserContext, map[string]bool, error) {
 	now := h.Now().UTC()
 	uc := agentclient.UserContext{UserID: c.Sub, Role: c.Role, TeamID: c.TeamID, CurrentPeriod: string(period.Week1),
@@ -35,7 +36,7 @@ func (h *Handler) userContext(ctx context.Context, c authn.Claims) (agentclient.
 	if location != nil {
 		uc.Location = *location
 	}
-	// A mentor follows the periods of the intern of their (first) mentor plan.
+	// Наставник следует этапам стажёра из своего (первого) плана наставника.
 	for _, s := range []*string{&c.CohortStart, cohort, planCohort} {
 		if s == nil || *s == "" {
 			continue
@@ -68,15 +69,15 @@ func (h *Handler) userContext(ctx context.Context, c authn.Claims) (agentclient.
 	return uc, flags, nil
 }
 
-// Mentee is an item of user_context.mentees: the GET /api/team/interns progress of an intern plus their open
-// tasks and the accesses they requested through the chat (S4: the mentor sees what the intern requested).
+// Mentee — элемент user_context.mentees: прогресс стажёра из GET /api/team/interns плюс его открытые задачи и доступы,
+// которые он запросил через чат (S4: наставник видит, что запросил стажёр).
 type Mentee struct {
 	plan.InternProgress
 	OpenTasks []agentclient.OpenTask `json:"open_tasks"`
 	Accesses  []MenteeAccess         `json:"accesses"`
 }
 
-// MenteeAccess is an access request of a mentee.
+// MenteeAccess — заявка подопечного на доступ.
 type MenteeAccess struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
@@ -115,8 +116,8 @@ func (h *Handler) mentees(ctx context.Context, c authn.Claims, now time.Time) ([
 	return out, nil
 }
 
-// openTasks returns the open top-level tasks of the caller's own plans in plan order. Status is reported like
-// GET /api/plan: overdue when due_at is before today and the task is neither done nor waiting_approval.
+// openTasks возвращает открытые задачи верхнего уровня из собственных планов вызывающего в порядке плана. Статус — как
+// в GET /api/plan: overdue, если due_at раньше сегодняшнего дня и задача не done и не waiting_approval.
 func (h *Handler) openTasks(ctx context.Context, userID, today string) ([]agentclient.OpenTask, error) {
 	rows, err := h.pool.Query(ctx, `SELECT t.id::text, t.checklist_item_id, t.title,
 		CASE WHEN t.status NOT IN ('done', 'waiting_approval') AND t.due_at < $2::date THEN 'overdue' ELSE t.status END,
@@ -143,8 +144,8 @@ func (h *Handler) openTasks(ctx context.Context, userID, today string) ([]agentc
 	return out, nil
 }
 
-// history returns the last historyLimit non-empty messages of the session in chronological order, excluding
-// exceptID (the message of the current turn).
+// history возвращает последние historyLimit непустых сообщений сессии в хронологическом порядке, кроме exceptID
+// (сообщения текущего хода).
 func (h *Handler) history(ctx context.Context, sessionID, exceptID string) ([]agentclient.HistoryItem, error) {
 	rows, err := h.pool.Query(ctx, `SELECT author, text FROM (
 			SELECT author, text, created_at, id FROM core.chat_messages

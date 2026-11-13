@@ -5,8 +5,9 @@ import { MOCK_USERS, state } from './db'
 
 type Approval = z.infer<typeof approvalSchema>
 
-// Mock of GET /api/approvals and POST /api/approvals/{id}/decision. Approvals are the intern actions that wait for the
-// lead (pending_approval) or, for an absence the lead approved, for the HR admin (pending_hr; checkpoint 11.11).
+// Мок GET /api/approvals и POST /api/approvals/{id}/decision. Согласования — это действия стажёров, которые ждут
+// руководителя (pending_approval) или, для отсутствия, согласованного руководителем, — HR-администратора (pending_hr;
+// чекпоинт 11.11).
 
 function requesterOf(actionId: string): { user: User; action: Action } | null {
   for (const [userId, actions] of state.actions) {
@@ -64,7 +65,7 @@ export function decideApproval(
   if (replay) return replay.actionId === approvalId && replay.decision === decision ? toApproval(user, action, comment, stage) : 'conflict'
   if (action.status !== (hr ? 'pending_hr' : 'pending_approval')) return 'conflict'
 
-  // access: approved = granted; absence: the lead passes it to the HR admin, the HR admin approves it
+  // доступ: approved = выдан; отсутствие: руководитель передаёт HR-администратору, HR-администратор согласует
   const toHR = !hr && decision === 'approved' && action.kind === 'absence_request'
   action.status = decision === 'rejected' ? 'rejected' : action.kind === 'access_request' ? 'granted' : toHR ? 'pending_hr' : 'approved'
   if (!hr) action.approver_display_name = lead.display_name

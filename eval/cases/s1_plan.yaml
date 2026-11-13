@@ -1,4 +1,4 @@
-# S1 in chat: stage, statuses, next step; equator summary; roles.
+# S1 в чате: этап, статусы, следующий шаг; сводка для экватора; роли.
 - {id: s1-01, category: s1, user: intern.anna, turns: ["что мне делать дальше?"], expect: {intent: plan, events: [next_step], text_contains: ["Сейчас этап"]}}
 - {id: s1-02, category: s1, user: intern.anna, turns: ["что у меня просрочено?"], expect: {events: [next_step], text_contains: ["Просрочено"]}}
 - {id: s1-03, category: s1, user: intern.ivan, turns: ["покажи мой план адаптации"], expect: {events: [next_step], text_contains: ["1 неделя"]}}

@@ -1,4 +1,4 @@
-# S2 «Спроси buddy»: grounded answers with test-instruction sources, context, escalation.
+# S2 «Спроси buddy»: обоснованные ответы с источниками-тестовыми инструкциями, контекст, обращение к человеку.
 - {id: s2-01, category: s2, user: intern.anna, turns: ["Как у нас проходит код-ревью?"], expect: {intent: kb_question, sources_include: [delivery-code-review]}}
 - {id: s2-02, category: s2, user: intern.ivan, turns: ["Как у нас проходит код-ревью?"], expect: {sources_include: [search-code-review], sources_exclude: [delivery-code-review]}}
 - {id: s2-03, category: s2, user: intern.anna, turns: ["кто есть кто в команде?"], expect: {sources_include: [delivery-team-overview], text_contains: ["Олег Мартынов"]}}

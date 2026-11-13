@@ -21,14 +21,14 @@ export const safeStorage = {
     try {
       localStorage.setItem(name, value)
     } catch {
-      /* storage unavailable: session lives in memory only */
+      /* хранилище недоступно: сессия живёт только в памяти */
     }
   },
   removeItem: (name: string) => {
     try {
       localStorage.removeItem(name)
     } catch {
-      /* ignore */
+      /* игнорируем */
     }
   },
 }

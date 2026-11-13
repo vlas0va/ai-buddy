@@ -45,7 +45,7 @@ export async function readErrorBody(res: Response): Promise<ApiErrorBody> {
     const parsed = errorSchema.safeParse(await res.json())
     if (parsed.success) return parsed.data
   } catch {
-    /* body is not JSON */
+    /* тело не JSON */
   }
   return {
     code: res.status >= 500 ? 'internal' : 'validation_error',

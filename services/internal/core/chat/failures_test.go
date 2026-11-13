@@ -26,9 +26,9 @@ func (e *env) exec(sql string, args ...any) {
 	}
 }
 
-// Database failures answer internal (500) before streaming and never leave a proposal confirmed.
+// Сбои базы отвечают internal (500) до начала потока и никогда не оставляют черновик в статусе confirmed.
 func TestChat_DatabaseFailures_Internal(t *testing.T) {
-	e := newEnv(t, func(d *Deps, _ *Config) { d.Emitter = failingEmitter{} }) // analytics failures are only logged
+	e := newEnv(t, func(d *Deps, _ *Config) { d.Emitter = failingEmitter{} }) // сбои аналитики только логируются
 	anna := e.anna()
 	sid := e.session(anna)
 	executed, pending := e.propose(sid, anna), e.propose(sid, anna)
@@ -121,7 +121,7 @@ func TestConfirm_S3_CancelledWhileInFlight_Conflict(t *testing.T) {
 	sid := e.session(anna)
 	pid := e.propose(sid, anna)
 	e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
-		e.exec(`UPDATE core.proposals SET status = 'cancelled' WHERE id = $1`, pid) // the user cancelled in another tab
+		e.exec(`UPDATE core.proposals SET status = 'cancelled' WHERE id = $1`, pid) // пользователь отменил в другой вкладке
 		return e.agent.Confirm(context.Background(), req)
 	})
 	s := e.stream(e.confirmPath(sid, pid), anna, nil)

@@ -3,8 +3,9 @@ import { isRetryable } from '@/api/client'
 import { useSession } from '@/store/session'
 
 /**
- * QA 12.11: the cache is per user. Logging out and in as someone else in the same tab showed the previous user's
- * notifications and requests until a reload; any change of the signed-in user now drops every cached response.
+ * QA 12.11: кеш свой у каждого пользователя. Выход и вход под другим пользователем в той же вкладке показывал
+ * уведомления и заявки предыдущего пользователя до перезагрузки; теперь любая смена вошедшего пользователя сбрасывает
+ * все закешированные ответы.
  */
 export function clearOnUserChange(client: QueryClient): () => void {
   let current = useSession.getState().user?.id ?? null

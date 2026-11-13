@@ -1,5 +1,7 @@
-"""Scenarios for mentor and lead in the same chat (R57, R67): approvals (lead), mentee progress (mentor).
-Spec: openspec/specs/team-roles/spec.md (TR-01 … TR-07). Tool shapes: contracts/schemas/approvals.json."""
+"""Сценарии для наставника и руководителя в том же чате (R57, R67): согласования (руководитель), прогресс подопечных
+(наставник). Спецификация: openspec/specs/team-roles/spec.md (TR-01 … TR-07). Формы инструментов:
+contracts/schemas/approvals.json.
+"""
 
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ ACCESS_LABEL = {
 
 
 def _mentions(text: str) -> list[str]:
-    """Capitalised words that look like first names (not at the start of the message, not product names)."""
+    """Слова с заглавной буквы, похожие на имена (не в начале сообщения, не названия продуктов)."""
     words = re.findall(r"[А-ЯЁ][а-яё]+", text)
     first_word = (text.strip().split() or [""])[0]
     return [w for w in words if w not in NOT_NAMES and not (w == first_word and text.strip().startswith(w))]
@@ -79,7 +81,7 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
         return
 
     how = re.search(r"\bкак\b|порядок|правил", t) and not decision
-    if how:  # «как согласовывать заявки стажёров?»: the process, then the queue (QA 12.11)
+    if how:  # «как согласовывать заявки стажёров?»: порядок, затем очередь (QA 12.11)
         stage = (
             "Ты — второй этап: заявки на отсутствие приходят после согласования руководителя. Согласованная заявка "
             "оформлена, HR BP получает уведомление."
@@ -110,7 +112,9 @@ def handle_approvals(turn: Turn, text: str) -> Iterator[Event]:
 
 
 def handle_mentee(turn: Turn, text: str) -> Iterator[Event]:
-    """Mentor (and lead) see their interns' progress from user_context.mentees, filled by core (GET /api/team/interns)."""
+    """Наставник (и руководитель) видит прогресс своих стажёров из user_context.mentees, которые заполняет ядро (GET
+    /api/team/interns).
+    """
     mentees = turn.user.mentees
     if not mentees:
         yield from say(
@@ -143,7 +147,7 @@ def handle_mentee(turn: Turn, text: str) -> Iterator[Event]:
             or "  через buddy пока ничего не запрашивал(а)"
         )
         if not acc:
-            idle.append(m.get("display_name", ""))  # nothing requested yet is not «all requested» (QA 12.11)
+            idle.append(m.get("display_name", ""))  # «ничего ещё не запрошено» — это не «всё запрошено» (QA 12.11)
         tasks = m.get("open_tasks") or []
         task_line = f"\n  Открытых задач плана: {len(tasks)}" if tasks else ""
         blocks.append(f"{m.get('display_name', '')} — доступы:\n{acc_lines}{task_line}")
@@ -167,7 +171,7 @@ def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
     label = "Согласовано" if r["status"] == "approved" else "Отклонено"
     followup = "Стажёр увидит новый статус в AI-buddy."
     to_hr = r.get("kind") == "absence_request" and r.get("stage", "lead") == "lead" and r["status"] == "approved"
-    if to_hr:  # the lead's approval passes the absence request to the HR admin (checkpoint 11.11)
+    if to_hr:  # согласование руководителя передаёт заявку на отсутствие HR-администратору (чекпоинт 11.11)
         label = "Согласовано руководителем"
         followup = "Заявка передана HR-администратору на второй этап. Стажёр увидит новый статус в AI-buddy."
     elif r.get("stage") == "hr_admin" and r["status"] == "approved":
@@ -183,7 +187,9 @@ def result_card(r: dict[str, Any], contacts: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_one_on_one(turn: Turn, text: str) -> Iterator[Event]:
-    """Mentor or lead prepares a 1:1 with an intern: progress from user_context.mentees, an agenda, feedback tips (S1-16)."""
+    """Наставник или руководитель готовит 1:1 со стажёром: прогресс из user_context.mentees, повестка, советы по обратной
+    связи (S1-16).
+    """
     from .coach import _doc_hit, _source_event
 
     mentees = turn.user.mentees

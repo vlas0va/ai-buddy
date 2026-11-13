@@ -2,7 +2,10 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { sendFeedback } from '@/api/feedback'
 
-/** «Полезно / Не полезно» under a saved assistant answer (R24). One vote per message; a failed send can be repeated. */
+/**
+ * «Полезно / Не полезно» под сохранённым ответом ассистента (R24). Один голос на сообщение; неудачную отправку можно
+ * повторить.
+ */
 export function FeedbackBar({ messageId }: { messageId: string }) {
   const [vote, setVote] = useState<boolean | null>(null)
   const send = useMutation({

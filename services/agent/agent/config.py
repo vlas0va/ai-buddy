@@ -1,4 +1,4 @@
-"""Settings from the environment and the declarative agent.yaml (R53)."""
+"""Настройки из окружения и декларативного agent.yaml (R53)."""
 
 from __future__ import annotations
 
@@ -119,8 +119,10 @@ LLM_DEFAULTABLE = ("PROVIDER", "BASE_URL", "MODEL", "TIMEOUT_S")
 
 
 def with_llm_defaults(env: Mapping[str, str]) -> dict[str, str]:
-    """LLM_<X> from .env wins; when it is unset or empty, LLM_DEFAULT_<X> applies. Compose sets the defaults to A-Vibe in
-    the bundled Ollama, so the expert gets the model with no .env at all, and a .env line still overrides it."""
+    """LLM_<X> из .env побеждает; если он не задан или пуст, применяется LLM_DEFAULT_<X>. Compose ставит по умолчанию
+    A-Vibe во встроенной Ollama, поэтому эксперт получает модель вообще без .env, а строка в .env всё равно её
+    переопределяет.
+    """
     out = dict(env)
     for key in LLM_DEFAULTABLE:
         if not out.get(f"LLM_{key}") and out.get(f"LLM_DEFAULT_{key}"):

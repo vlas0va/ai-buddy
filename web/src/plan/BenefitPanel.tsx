@@ -82,7 +82,7 @@ function Body({ b }: { b: Benefit }) {
   )
 }
 
-/** «Польза buddy» (idea 13.11): the mentor and the lead see how much of their interns' questions buddy closed. */
+/** «Польза buddy» (идея 13.11): наставник и руководитель видят, какую долю вопросов их стажёров buddy закрыл сам. */
 export function BenefitPanel() {
   const q = useQuery({ queryKey: keys.benefit, queryFn: getBenefit, refetchOnWindowFocus: true })
   return (

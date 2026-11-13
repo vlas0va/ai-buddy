@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ask, lastTurn, login, newDialog, waitAnswer } from './helpers'
 
-// R71/R72 guards and the coaching behaviour from the organizers' Q&A.
+// Ограничения R71/R72 и поведение наставника-коуча по ответам организаторов.
 test('R72: salary questions are refused and redirected to HR BP', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)

@@ -1,6 +1,6 @@
-// Package approvals implements the mock "approvals" MCP server («Согласия»), shared by S3 (day off) and S4 (access).
-// Data is synthetic (R68). Only the approver named on an item sees and decides it (R71); a decision updates the item
-// and the underlying absence or access request in one transaction and is idempotent by key (R79).
+// Пакет approvals реализует мок-сервер MCP «approvals» («Согласия»), общий для S3 (отгул) и S4 (доступ). Данные
+// синтетические (R68). Пункт видит и решает только указанный в нём согласующий (R71); решение обновляет пункт и
+// исходную заявку на отсутствие или доступ в одной транзакции и идемпотентно по ключу (R79).
 package approvals
 
 import (
@@ -18,7 +18,7 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the approvals contract to srv.
+// Register привязывает каждый инструмент контракта approvals к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	if srv == nil || pool == nil {
 		return errors.New("approvals: server and pool are required")
@@ -36,7 +36,7 @@ type service struct {
 	pool *pgxpool.Pool
 }
 
-// item is one approval item as returned by the tools.
+// item — один пункт согласования в том виде, как его возвращают инструменты.
 type item struct {
 	ID                   string `json:"id"`
 	Kind                 string `json:"kind"`
@@ -49,7 +49,7 @@ type item struct {
 	Stage                string `json:"stage"`
 	CreatedAt            string `json:"created_at"`
 	Replayed             *bool  `json:"replayed,omitempty"`
-	// TeamAbsent: who else of the requester's team is away on those days (feedback 12.13), absence items only
+	// TeamAbsent: кто ещё из команды заявителя отсутствует в эти дни (отзыв 12.13), только для пунктов об отсутствии
 	TeamAbsent []string `json:"team_absent,omitempty"`
 
 	approverID     string
@@ -77,7 +77,7 @@ type listOut struct {
 	Items []item `json:"items"`
 }
 
-// listPending returns the pending items whose approver is the caller, oldest first.
+// listPending возвращает ожидающие пункты, где согласующий — вызывающий, самые старые сначала.
 func (s *service) listPending(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	rows, err := s.pool.Query(ctx, selectItem+`
 WHERE i.approver_id = $1 AND i.status = 'pending'
@@ -106,8 +106,8 @@ LIMIT 200`, c.Sub)
 	return listOut{Items: items}, nil
 }
 
-// teamAbsent lists the requester's teammates with a pending or approved absence that overlaps the request: the lead
-// sees at once that half of the team would be away (feedback 12.13).
+// teamAbsent перечисляет коллег заявителя с несогласованным или согласованным отсутствием, пересекающимся с заявкой:
+// руководитель сразу видит, что половины команды не будет (отзыв 12.13).
 func (s *service) teamAbsent(ctx context.Context, requestID string) ([]string, error) {
 	rows, err := s.pool.Query(ctx, `
 SELECT e.display_name, o.type, o.start_date, o.end_date
@@ -142,7 +142,7 @@ type decideIn struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// underlying maps an item kind and decision to the request table and its new status.
+// underlying сопоставляет виду пункта и решению таблицу заявок и её новый статус.
 var underlying = map[string]struct {
 	table    string
 	statuses map[string]string
@@ -152,7 +152,7 @@ var underlying = map[string]struct {
 	"trip_request":    {"trips.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
 }
 
-// decide approves or rejects one of the caller's pending items and propagates the decision to the request.
+// decide согласует или отклоняет один из ожидающих пунктов вызывающего и распространяет решение на заявку.
 func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in decideIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
@@ -170,7 +170,7 @@ func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessag
 	}
 	it, err := pgx.CollectOneRow(rows, scanItem)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && it.approverID != c.Sub) {
-		// Other teams' items and unknown ids look the same (R71).
+		// Пункты других команд и неизвестные id выглядят одинаково (R71).
 		return nil, apierr.Forbidden().WithMessage("Запрос недоступен: решение принимает только назначенный согласующий")
 	}
 	if err != nil {
@@ -192,7 +192,7 @@ func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessag
 UPDATE approvals.items SET status = $2, comment = nullif($3, ''), idempotency_key = $4::uuid, decided_at = now()
 WHERE id = $1`, it.ID, in.Decision, in.Comment, in.IdempotencyKey)
 	if isUniqueViolation(err) {
-		return nil, keyConflict() // the key was already used for another decision
+		return nil, keyConflict() // ключ уже использован для другого решения
 	}
 	if err != nil {
 		return nil, fmt.Errorf("update approval item: %w", err)
@@ -202,7 +202,7 @@ WHERE id = $1`, it.ID, in.Decision, in.Comment, in.IdempotencyKey)
 			return nil, err
 		}
 	} else {
-		// kind is limited by a CHECK constraint to the keys of underlying; the table name never comes from input.
+		// kind ограничен CHECK-ограничением ключами underlying; имя таблицы никогда не берётся из ввода.
 		target := underlying[it.Kind]
 		tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
 WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Decision])
@@ -220,10 +220,10 @@ WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Dec
 	return it, nil
 }
 
-// decideAbsence applies a decision to an absence request in two stages (checkpoint 11.11): the lead approves → the
-// request waits for the HR admin (pending_hr) and the HR admin gets an approval item; the HR admin approves → the
-// request is approved, registered in the HR system and the HR BP of the employee is notified. A rejection at either
-// stage rejects the request.
+// decideAbsence применяет решение к заявке на отсутствие в два этапа (чекпоинт 11.11): руководитель согласует → заявка
+// ждёт HR-администратора (pending_hr), и HR-администратор получает пункт согласования; HR-администратор согласует →
+// заявка согласована, оформлена в HR-системе, а HR BP сотрудника получает уведомление. Отказ на любом этапе отклоняет
+// заявку.
 func decideAbsence(ctx context.Context, tx pgx.Tx, it item, decision, approver string) error {
 	var (
 		sql  string

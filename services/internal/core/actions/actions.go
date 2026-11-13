@@ -1,5 +1,5 @@
-// Package actions stores the results of confirmed writes (core.actions), links each one to a plan task and keeps
-// action and task in step with the approver's decision (R66, S3, S4). GET /api/actions lists the caller's actions.
+// Пакет actions хранит результаты подтверждённых записей (core.actions), связывает каждую с задачей плана и держит
+// действие и задачу в согласии с решением согласующего (R66, S3, S4). GET /api/actions отдаёт действия вызывающего.
 package actions
 
 import (
@@ -22,36 +22,38 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// DBTX is the subset of *pgxpool.Pool and pgx.Tx used here.
+// DBTX — подмножество *pgxpool.Pool и pgx.Tx, которое здесь используется.
 type DBTX interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// Emitter records analytics events in the caller's transaction; *analytics.Emitter implements it.
+// Emitter пишет аналитические события в транзакции вызывающего; реализован в *analytics.Emitter.
 type Emitter interface {
 	Emit(ctx context.Context, q analytics.DBTX, ev analytics.Event) error
 }
 
-// Notifier creates in-app notifications in the caller's transaction; notify.Store implements it.
+// Notifier создаёт уведомления в приложении в транзакции вызывающего; реализован в notify.Store.
 type Notifier interface {
 	Create(ctx context.Context, q notify.DBTX, n notify.Notification) error
 }
 
-// Action kinds (openapi Action.kind).
+// Виды действий (openapi Action.kind).
 const (
 	KindAbsence = "absence_request"
 	KindAccess  = "access_request"
 	KindTrip    = "trip_request"
 	KindConsent = "consent"
-	// KindReschedule moves an absence request to other dates: it updates the existing absence action, never adds one.
+	// KindReschedule переносит заявку на отсутствие на другие даты: обновляет существующее действие, нового не
+	// добавляет.
 	KindReschedule = "absence_reschedule"
-	// KindCancel withdraws an absence request (feedback 12.13): the existing action becomes cancelled, its task goes away.
+	// KindCancel отзывает заявку на отсутствие (отзыв 12.13): существующее действие становится cancelled, его задача
+	// удаляется.
 	KindCancel = "absence_cancel"
 )
 
-// Action statuses (openapi Action.status).
+// Статусы действий (openapi Action.status).
 const (
 	StatusPendingApproval = "pending_approval"
 	StatusApproved        = "approved"
@@ -60,13 +62,13 @@ const (
 	StatusCreated         = "created"
 	StatusFailed          = "failed"
 	StatusSigned          = "signed"
-	StatusPendingHR       = "pending_hr" // absence: the lead approved, the HR admin decides next
+	StatusPendingHR       = "pending_hr" // отсутствие: руководитель согласовал, дальше решает HR-администратор
 )
 
-// ErrNotFound is returned when no action matches (ApplyDecision for a request made outside the chat, ByProposal).
+// ErrNotFound возвращается, когда подходящего действия нет (ApplyDecision для заявки, созданной вне чата, ByProposal).
 var ErrNotFound = errors.New("actions: action not found")
 
-// Action is the openapi Action plus fields core keeps for itself.
+// Action — это openapi Action плюс поля, которые ядро хранит для себя.
 type Action struct {
 	ID                  string  `json:"id"`
 	Kind                string  `json:"kind"`
@@ -80,10 +82,10 @@ type Action struct {
 
 	UserID     string `json:"-"`
 	ProposalID string `json:"-"`
-	MessageID  string `json:"-"` // assistant message saved with the action (chat replays it in done)
+	MessageID  string `json:"-"` // сообщение ассистента, сохранённое вместе с действием (чат повторяет его в done)
 }
 
-// Result is the action_result event of contracts/agent-stream.md.
+// Result — событие action_result из contracts/agent-stream.md.
 type Result struct {
 	ActionID            string  `json:"action_id"`
 	Kind                string  `json:"kind"`
@@ -92,43 +94,44 @@ type Result struct {
 	Summary             string  `json:"summary"`
 	ApproverDisplayName *string `json:"approver_display_name"`
 	TaskID              *string `json:"task_id"`
-	// ProposalID ties the result to its draft (a list of accesses shows the results inside its own card)
+	// ProposalID связывает результат с его черновиком (список доступов показывает результаты внутри своей карточки)
 	ProposalID string `json:"proposal_id,omitempty"`
 }
 
-// Result returns the action_result event of a.
+// Result возвращает событие action_result для a.
 func (a Action) Result() Result {
 	return Result{ActionID: a.ID, Kind: a.Kind, ExternalID: a.ExternalID, Status: a.Status, Summary: a.Summary,
 		ApproverDisplayName: a.ApproverDisplayName, TaskID: a.TaskID, ProposalID: a.ProposalID}
 }
 
-// SaveInput is a successful MCP write to record.
+// SaveInput — успешная запись через MCP, которую нужно сохранить.
 type SaveInput struct {
-	Claims     authn.Claims    // owner (verified JWT claims)
-	ProposalID string          // idempotency key of the write (= proposal id)
+	Claims     authn.Claims    // владелец (проверенные claims JWT)
+	ProposalID string          // ключ идемпотентности записи (= id черновика)
 	Kind       string          // KindAbsence or KindAccess
 	Tool       string          // draft.tool
 	Args       json.RawMessage // draft.args
-	Result     json.RawMessage // structured result of the tool
-	MessageID  string          // optional: assistant message that announces the result
-	ProposedAt time.Time       // optional: for duration_ms_since_proposal
-	Attempt    int             // optional: 1 for the first confirmation, 2+ after a failure
-	// Optional hints from the agent's tool_result, used when the MCP result lacks them: the checklist item of the
-	// plan task to link (task_checklist_item_id) and the approver's display name.
+	Result     json.RawMessage // структурированный результат инструмента
+	MessageID  string          // необязательно: сообщение ассистента, которое объявляет результат
+	ProposedAt time.Time       // необязательно: для duration_ms_since_proposal
+	Attempt    int             // необязательно: 1 для первого подтверждения, 2+ после сбоя
+	// Необязательные подсказки из tool_result агента, если их нет в результате MCP: пункт чек-листа задачи плана для
+	// связи (task_checklist_item_id) и отображаемое имя согласующего.
 	ChecklistItemID string
 	ApproverName    string
 }
 
-// Service implements the action use cases. Emitter and Notifier may be nil (events/notifications dropped).
+// Service реализует сценарии работы с действиями. Emitter и Notifier могут быть nil (события и уведомления
+// отбрасываются).
 type Service struct {
 	emitter  Emitter
 	notifier Notifier
 	log      *slog.Logger
-	// Now is the clock used for the current period of new tasks; tests may replace it.
+	// Now — часы для текущего этапа новых задач; тесты могут их подменить.
 	Now func() time.Time
 }
 
-// NewService returns a Service.
+// NewService возвращает Service.
 func NewService(emitter Emitter, notifier Notifier, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
@@ -155,22 +158,22 @@ func scanAction(row pgx.Row) (Action, error) {
 	return a, nil
 }
 
-// description is what Save derives from a tool result.
+// description — то, что Save извлекает из результата инструмента.
 type description struct {
 	externalID    string
 	status        string
 	summary       string
 	approverName  string
 	taskTitle     string
-	checklistItem string  // access: link the checklist task with this item
-	dueAt         *string // absence, trip: the first day
-	noTask        bool    // consent: a signature is not a step of the onboarding plan
+	checklistItem string  // доступ: связать задачу чек-листа с этим пунктом
+	dueAt         *string // отсутствие, командировка: первый день
+	noTask        bool    // согласие: подпись — не шаг плана адаптации
 }
 
-// Save records a successful write in q (run it in the transaction that marks the proposal executed): inserts
-// core.actions with idempotency_key = ProposalID, links a plan task (access → the intern-plan task of the resource's
-// checklist item, otherwise a new task with source = action in the current period), sets linked_action_id and emits
-// action.created. Saving the same ProposalID again returns the stored action unchanged.
+// Save записывает успешную запись в q (вызывать в транзакции, которая помечает черновик выполненным): вставляет
+// core.actions с idempotency_key = ProposalID, связывает задачу плана (доступ → задача плана стажёра по пункту
+// чек-листа ресурса, иначе новая задача с source = action в текущем этапе), выставляет linked_action_id и отправляет
+// action.created. Повторное сохранение того же ProposalID возвращает сохранённое действие без изменений.
 func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error) {
 	if in.Kind == KindReschedule {
 		return s.reschedule(ctx, q, in)
@@ -220,7 +223,7 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
 		}
 	}
 	if in.Kind == KindAbsence {
-		// a vacation that covers a pending day off replaced it (absence.create_request with replaces, feedback 12.13)
+		// отпуск, накрывший несогласованный отгул, заменил его (absence.create_request с replaces, отзыв 12.13)
 		var r struct {
 			ReplacedID string `json:"replaced_id"`
 		}
@@ -265,7 +268,8 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 		if r.StartDate != "" {
 			d.dueAt = &r.StartDate
 		}
-		// S3: never a checklist task (the agent's task_checklist_item_id hint is ignored); a source = action task is created.
+		// S3: никогда не задача чек-листа (подсказка агента task_checklist_item_id игнорируется); создаётся задача с
+		// source = action.
 		if name != "" {
 			d.summary += ", согласующий — " + name
 		}
@@ -335,7 +339,7 @@ func (s *Service) describe(ctx context.Context, q DBTX, in SaveInput) (descripti
 	}
 }
 
-// displayName returns given, or the display name of the user id (empty when unknown).
+// displayName возвращает given или отображаемое имя пользователя по id (пусто, если неизвестен).
 func (s *Service) displayName(ctx context.Context, q DBTX, given string, id *string) (string, error) {
 	if given != "" || id == nil || *id == "" {
 		return given, nil
@@ -348,7 +352,7 @@ func (s *Service) displayName(ctx context.Context, q DBTX, given string, id *str
 	return name, nil
 }
 
-// linkTask links action id to a plan task of userID and returns the task id (nil when the user has no plan).
+// linkTask связывает действие id с задачей плана userID и возвращает id задачи (nil, если у пользователя нет плана).
 func (s *Service) linkTask(ctx context.Context, q DBTX, userID, actionID string, d description) (*string, error) {
 	status := taskStatus(d.status)
 	if d.checklistItem != "" {
@@ -359,8 +363,8 @@ func (s *Service) linkTask(ctx context.Context, q DBTX, userID, actionID string,
 			ORDER BY t.position, t.id LIMIT 1`, userID, d.checklistItem).Scan(&taskID)
 		switch {
 		case err == nil:
-			// A done task stays done and keeps its link: a later request for another resource of the same item
-			// must not reopen it.
+			// Выполненная задача остаётся выполненной и сохраняет связь: следующая заявка на другой ресурс того же
+			// пункта не должна её переоткрыть.
 			_, err = q.Exec(ctx, `UPDATE core.plan_tasks SET
 				linked_action_id = CASE WHEN status = 'done' THEN linked_action_id ELSE $2::uuid END,
 				status = CASE WHEN status = 'done' THEN status ELSE $3 END,
@@ -403,16 +407,16 @@ func (s *Service) linkTask(ctx context.Context, q DBTX, userID, actionID string,
 	return &taskID, nil
 }
 
-// ByProposal returns the action of userID saved for proposalID, or ErrNotFound.
+// ByProposal возвращает действие userID, сохранённое для proposalID, или ErrNotFound.
 func (s *Service) ByProposal(ctx context.Context, q DBTX, userID, proposalID string) (Action, error) {
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
 		WHERE a.idempotency_key = $2::uuid AND a.user_id = $1`, userID, proposalID))
 }
 
-// listLimit bounds GET /api/actions.
+// listLimit ограничивает GET /api/actions.
 const listLimit = 100
 
-// List returns userID's actions, newest first.
+// List возвращает действия userID, новые сначала.
 func (s *Service) List(ctx context.Context, q DBTX, userID string) ([]Action, error) {
 	rows, err := q.Query(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.user_id = $1
 		ORDER BY a.created_at DESC, a.id DESC LIMIT $2`, userID, listLimit)
@@ -434,21 +438,22 @@ func (s *Service) List(ctx context.Context, q DBTX, userID string) ([]Action, er
 	return out, nil
 }
 
-// Scope restricts ApplyDecision to the action of one requester whose request names one approver (R71). Both come
-// from the approvals service's decide result and the deciding lead's verified claims, never from the agent.
+// Scope ограничивает ApplyDecision действием одного заявителя, в заявке которого указан один согласующий (R71). Оба
+// поля берутся из результата decide сервиса согласований и проверенных claims решающего руководителя, никогда не от
+// агента.
 type Scope struct {
-	RequesterID string // owner of the action (approvals requester_id)
-	ApproverID  string // approver_id in the saved MCP result of the request (the deciding lead)
-	// Stage is the approval stage of an absence request: "" or "lead", then "hr_admin". At the HR admin stage the
-	// deciding person is not the request's approver: the approvals service already checked the item is theirs.
+	RequesterID string // владелец действия (requester_id в согласованиях)
+	ApproverID  string // approver_id в сохранённом результате MCP заявки (решающий руководитель)
+	// Stage — этап согласования заявки на отсутствие: "" или "lead", затем "hr_admin". На этапе HR-администратора
+	// решает не согласующий из заявки: сервис согласований уже проверил, что пункт его.
 	Stage string
 }
 
-// ApplyDecision applies the approver's decision ("approved" or "rejected", as returned by approvals.decide) to the
-// action of kind with externalID (ABS-…/ACC-…) owned by scope.RequesterID whose request names scope.ApproverID as
-// approver: action status approved/granted/rejected, the linked task done or not_started (never a human_only task),
-// and a status_change notification for the owner, all through q. It reports whether anything changed (a repeated
-// decision is a no-op) and returns ErrNotFound when core has no such action; both scope fields are required.
+// ApplyDecision применяет решение согласующего ("approved" или "rejected", как вернул approvals.decide) к действию вида
+// kind с externalID (ABS-…/ACC-…), владелец которого scope.RequesterID, а согласующий в заявке — scope.ApproverID:
+// статус действия approved/granted/rejected, связанная задача done или not_started (никогда не задача human_only) и
+// уведомление status_change владельцу, всё через q. Сообщает, изменилось ли что-то (повторное решение ничего не
+// делает), и возвращает ErrNotFound, если в ядре нет такого действия; оба поля scope обязательны.
 func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, decision string, scope Scope) (Action, bool, error) {
 	status, err := decisionStatus(kind, decision)
 	if err != nil {
@@ -456,14 +461,14 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	}
 	hrStage := kind == KindAbsence && scope.Stage == "hr_admin"
 	if kind == KindAbsence && !hrStage && status == StatusApproved {
-		status = StatusPendingHR // the lead's approval passes the request to the HR admin
+		status = StatusPendingHR // согласование руководителя передаёт заявку HR-администратору
 	}
 	if scope.RequesterID == "" || scope.ApproverID == "" {
 		return Action{}, false, ErrNotFound
 	}
 	approver := scope.ApproverID
 	if hrStage {
-		approver = "" // matched below by requester and request only
+		approver = "" // ниже сопоставляется только по заявителю и заявке
 	}
 	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
 		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 AND ($4 = '' OR a.payload->'result'->>'approver_id' = $4)
@@ -472,7 +477,7 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 		return Action{}, false, err
 	}
 	if a.Status == status || (status == StatusPendingHR && a.Status == StatusApproved) {
-		return a, false, nil // a replayed lead decision never undoes the HR admin's approval
+		return a, false, nil // повторённое решение руководителя никогда не отменяет согласование HR-администратора
 	}
 	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = $2, updated_at = now() WHERE id = $1`, a.ID, status); err != nil {
 		return Action{}, false, fmt.Errorf("update action status: %w", err)
@@ -499,8 +504,8 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	return a, err == nil, err
 }
 
-// notifyHRBP tells the HR BPs that an approved day off was registered by the HR admin (organizers' Q&A 10.11: a day off
-// involves the lead, the HR admin and the HR BP). The HR BP gets the summary only: no comment, no reason.
+// notifyHRBP сообщает HR BP, что HR-администратор оформил согласованный отгул (ответы организаторов 10.11: в отгуле
+// участвуют руководитель, HR-администратор и HR BP). HR BP получает только сводку: без комментария и причины.
 func (s *Service) notifyHRBP(ctx context.Context, q DBTX, a Action) error {
 	rows, err := q.Query(ctx, `SELECT u.id, owner.display_name FROM core.users u, core.users owner
 		WHERE u.role = 'hrbp' AND owner.id = $1 ORDER BY u.id`, a.UserID)
@@ -540,7 +545,7 @@ func isAbsenceLabel(l string) bool {
 	return false
 }
 
-// labelType returns the absence type whose label starts summary (day_off when none does).
+// labelType возвращает вид отсутствия, с подписи которого начинается summary (day_off, если ни с какой).
 func labelType(summary string) string {
 	first := strings.SplitN(summary, " ", 2)[0]
 	for k, v := range absenceLabels {
@@ -551,9 +556,9 @@ func labelType(summary string) string {
 	return "day_off"
 }
 
-// reschedule applies a moved absence request (absence.reschedule_request) to the existing action of the caller: new
-// dates in the summary and the linked task, back to pending_approval, the new MCP result in the payload. A repeated
-// confirmation applies the same update again and returns the same action.
+// reschedule применяет перенос заявки на отсутствие (absence.reschedule_request) к существующему действию вызывающего:
+// новые даты в summary и связанной задаче, возврат в pending_approval, новый результат MCP в payload. Повторное
+// подтверждение применяет то же изменение и возвращает то же действие.
 func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action, error) {
 	var r mcpclient.AbsenceRequest
 	if err := json.Unmarshal(in.Result, &r); err != nil || r.ID == "" {
@@ -587,8 +592,8 @@ func (s *Service) reschedule(ctx context.Context, q DBTX, in SaveInput) (Action,
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
 }
 
-// cancelAbsence marks the caller's absence action cancelled and removes its plan task (the request no longer exists in
-// the plan). A repeated call returns the same action.
+// cancelAbsence помечает действие отсутствия вызывающего как cancelled и удаляет его задачу плана (заявки в плане
+// больше нет). Повторный вызов возвращает то же действие.
 func (s *Service) cancelAbsence(ctx context.Context, q DBTX, c authn.Claims, externalID, proposalID string) (Action, error) {
 	a, err := scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a
 		WHERE a.kind = $1 AND a.external_id = $2 AND a.user_id = $3 ORDER BY a.created_at LIMIT 1 FOR UPDATE`,
@@ -615,7 +620,7 @@ func (s *Service) cancelAbsence(ctx context.Context, q DBTX, c authn.Claims, ext
 
 var accessLevels = map[string]string{"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 
-// accessScope is « (stage, чтение)» or « (редактирование)»; empty for plain read access without an environment.
+// accessScope — « (stage, чтение)» или « (редактирование)»; пусто для обычного чтения без окружения.
 func accessScope(env *string, level string) string {
 	switch {
 	case env != nil && *env != "":
@@ -626,7 +631,7 @@ func accessScope(env *string, level string) string {
 	return ""
 }
 
-// withoutApprover drops the «, согласующий — …» tail of a summary.
+// withoutApprover убирает хвост «, согласующий — …» из summary.
 func withoutApprover(s string) string {
 	if i := strings.Index(s, ", согласующий"); i >= 0 {
 		return s[:i]
@@ -684,7 +689,7 @@ func decisionTitle(kind, status, summary string) string {
 	}
 }
 
-// absenceLabels name the absence types (checkpoint 11.11: vacation, day off, absence, parental leave).
+// absenceLabels называют виды отсутствия (чекпоинт 11.11: отпуск, отгул, отсутствие, декрет).
 var absenceLabels = map[string]string{"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 
 func absenceLabel(kind string) string {
@@ -710,7 +715,7 @@ func accessStatus(s string) string {
 	return StatusCreated
 }
 
-// taskStatus maps an action status onto the status of its plan task.
+// taskStatus переводит статус действия в статус его задачи плана.
 func taskStatus(actionStatus string) string {
 	switch actionStatus {
 	case StatusApproved, StatusGranted:
@@ -723,7 +728,7 @@ func taskStatus(actionStatus string) string {
 	return "in_progress"
 }
 
-// ruDate formats YYYY-MM-DD as DD.MM.YYYY (input returned as is when it is not a date).
+// ruDate форматирует YYYY-MM-DD как DD.MM.YYYY (если это не дата, возвращает вход как есть).
 func ruDate(d string) string {
 	t, err := time.Parse(time.DateOnly, d)
 	if err != nil {
@@ -732,7 +737,7 @@ func ruDate(d string) string {
 	return t.Format("02.01.2006")
 }
 
-// RuDate is ruDate for other packages (chat summaries).
+// RuDate — это ruDate для других пакетов (сводки чата).
 func RuDate(d string) string { return ruDate(d) }
 
 func firstNonEmpty(a, b string) string {
@@ -742,7 +747,7 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// ByID returns the action with id, or ErrNotFound.
+// ByID возвращает действие с id или ErrNotFound.
 func (s *Service) ByID(ctx context.Context, q DBTX, id string) (Action, error) {
 	return scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1::uuid`, id))
 }

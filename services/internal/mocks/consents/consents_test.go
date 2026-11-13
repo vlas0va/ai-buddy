@@ -128,7 +128,7 @@ func TestSign_Consents_VoluntaryOnly_Idempotent_R71_R79(t *testing.T) {
 		t.Fatalf("message %q", terr.Message)
 	}
 	e.wantCode(anna, "sign", confirmed(t, anna, newKey(t), map[string]any{"consent_id": "nope"}), apierr.CodeNotFound)
-	e.wantCode(anna, "sign", map[string]any{"consent_id": "surveys"}, apierr.CodeInvalidConfirmation) // no confirmation
+	e.wantCode(anna, "sign", map[string]any{"consent_id": "surveys"}, apierr.CodeInvalidConfirmation) // без подтверждения
 }
 
 func TestRegister_Consents_Errors(t *testing.T) {

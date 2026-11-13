@@ -1,8 +1,8 @@
-"""Augment the intent dataset with paraphrases from any OpenAI-compatible model (e.g. a local Ollama on the laptop).
+"""Дополнить набор намерений перефразировками от любой OpenAI-совместимой модели (например, локальной Ollama на ноутбуке).
 
-python training/augment_with_llm.py --per-intent 15        # needs LLM_BASE_URL and LLM_MODEL
-Writes eval/intents/augmented.yaml for review; after a human check merge it into train.yaml and run `make train`.
-Phrases that collide with the held-out test set are dropped so the reported accuracy stays honest.
+python training/augment_with_llm.py --per-intent 15        # нужны LLM_BASE_URL и LLM_MODEL
+Пишет eval/intents/augmented.yaml на просмотр; после проверки человеком слейте его в train.yaml и запустите `make
+train`. Фразы, совпадающие с отложенным тестовым набором, отбрасываются, чтобы заявленная точность оставалась честной.
 """
 
 from __future__ import annotations

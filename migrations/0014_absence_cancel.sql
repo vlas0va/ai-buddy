@@ -1,5 +1,5 @@
--- Feedback 12.13: an absence request can be withdrawn while the HR admin has not approved it (and a longer absence that
--- covers a pending day off replaces it in one step).
+-- Отзыв 12.13: заявку на отсутствие можно отозвать, пока HR-администратор её не согласовал (а более длинное отсутствие,
+-- накрывающее несогласованный отгул, заменяет его за один шаг).
 ALTER TABLE absence.requests ADD COLUMN IF NOT EXISTS cancel_key uuid UNIQUE;
 ALTER TABLE core.proposals DROP CONSTRAINT IF EXISTS proposals_kind_check;
 ALTER TABLE core.proposals ADD CONSTRAINT proposals_kind_check

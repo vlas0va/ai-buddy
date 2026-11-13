@@ -18,8 +18,8 @@ const parse = (s: string) => {
 }
 
 /**
- * Feedback 12.13: a small pop-up calendar — click the first day, then the last one (as when booking a flight). Days
- * before min and after max are disabled, weekends are dimmed, days of the user's other requests are marked.
+ * Отзыв 12.13: маленький всплывающий календарь — нажмите первый день, затем последний (как при покупке авиабилетов).
+ * Дни до min и после max недоступны, выходные приглушены, дни других заявок пользователя отмечены.
  */
 export function RangeCalendar({
   min,
@@ -41,7 +41,7 @@ export function RangeCalendar({
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
   const first = new Date(month.getFullYear(), month.getMonth(), 1)
-  const offset = (first.getDay() + 6) % 7 // Monday first
+  const offset = (first.getDay() + 6) % 7 // неделя с понедельника
   const daysIn = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
   const cells: (Date | null)[] = [...Array<null>(offset).fill(null)]
   for (let d = 1; d <= daysIn; d++) cells.push(new Date(month.getFullYear(), month.getMonth(), d))

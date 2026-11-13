@@ -152,7 +152,8 @@ func find(evs []httpx.Event, name string) map[string]any {
 	return nil
 }
 
-// The main scenario through the real wiring: login → chat → proposal → confirm → action saved → visible after reload.
+// Основной сценарий через настоящую сборку: вход → чат → черновик → подтверждение → действие сохранено → видно после
+// перезагрузки.
 func TestApp_S3_DayOffThroughRealWiring_R66(t *testing.T) {
 	s := newStack(t, func(a *agenttest.Agent) string { return a.URL })
 	if status, _, body := s.do(http.MethodGet, "/healthz", "", ""); status != http.StatusOK || !strings.Contains(string(body), `"ok"`) {

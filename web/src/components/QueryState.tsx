@@ -13,7 +13,7 @@ interface Props {
   children: ReactNode
 }
 
-// The four states every view must design: loading, empty, error (with retry), success.
+// Четыре состояния, которые должен продумать каждый экран: загрузка, пусто, ошибка (с повтором), успех.
 export function QueryState({ isLoading, error, isEmpty, emptyText, onRetry, children }: Props) {
   if (isLoading) return <Skeleton />
   if (error) {

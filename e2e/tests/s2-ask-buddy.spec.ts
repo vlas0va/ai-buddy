@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ask, lastTurn, login, newDialog, waitAnswer } from './helpers'
 
-// S2: answers with team context and a test source; unknown → escalation draft → mentor answers.
+// S2: ответы с контекстом команды и тестовым источником; неизвестное → черновик для наставника → наставник отвечает.
 test('S2: team-specific answer with a source and the test badge', async ({ page }) => {
   await login(page, 'intern.anna')
   await newDialog(page)
@@ -34,7 +34,7 @@ test('S2: unknown question → text to write the mentor directly, the question w
   const draft = intern.getByLabel('Черновик сообщения').last()
   await expect(draft).toBeVisible()
   await expect(draft.getByRole('button', { name: 'Скопировать' })).toBeVisible()
-  await expect(draft.getByRole('button', { name: /Отправить/ })).toHaveCount(0) // buddy does not deliver messages
+  await expect(draft.getByRole('button', { name: /Отправить/ })).toHaveCount(0) // buddy не передаёт сообщения
   await expect(draft).toContainText('#delivery-team')
   await expect(draft).toContainText('Вопрос уже в списке наставника')
   await intern.getByRole('link', { name: 'Мои вопросы' }).click()
@@ -74,7 +74,7 @@ test('S2: a question the KB does not know → Oleg answers for all → another i
   await card.getByRole('button', { name: 'Ответить' }).click()
   await expect(oleg.locator('.esc-card').filter({ hasText: nonce }).first()).toContainText('Ответ добавлен в базу знаний')
 
-  const ivan = await (await browser.newContext()).newPage() // another team: the answer was added for all
+  const ivan = await (await browser.newContext()).newPage() // другая команда: ответ добавлен для всех
   await login(ivan, 'intern.ivan')
   await newDialog(ivan)
   await ask(ivan, question)

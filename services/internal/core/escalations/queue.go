@@ -16,16 +16,17 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Organizers 13.11: buddy does not deliver messages to the mentor — the intern writes the mentor directly — but every
-// question buddy could not answer goes to the addressee's stack. The mentor answers it in a batch when convenient:
-// similar questions are grouped, one answer closes the group, notifies every asker and can be added to the knowledge base.
+// Организаторы 13.11: buddy не передаёт сообщения наставнику — стажёр пишет наставнику сам, — но каждый вопрос, на
+// который buddy не ответил, попадает в список адресата. Наставник отвечает пачкой, когда удобно: похожие вопросы
+// собраны в группу, один ответ закрывает группу, уведомляет каждого, кто спрашивал, и может быть добавлен в базу
+// знаний.
 
-// QueueRoles are the addressees whose stack collects interns' questions.
+// QueueRoles — адресаты, у которых есть список вопросов стажёров.
 var QueueRoles = map[string]bool{"mentor": true, "lead": true, "hrbp": true}
 
-// Enqueue puts an intern's question into the addressee's stack without a notification (the addressee gets a daily
-// digest from AI-cron). messageID is the assistant message that showed the draft: the same message is queued once.
-// It reports whether a new question was stored.
+// Enqueue кладёт вопрос стажёра в список адресата без уведомления (адресат получает ежедневную сводку от AI-cron).
+// messageID — сообщение ассистента, в котором показан черновик: одно и то же сообщение попадает в список один раз.
+// Сообщает, сохранён ли новый вопрос.
 func Enqueue(ctx context.Context, pool *pgxpool.Pool, c authn.Claims, toRole, question, sessionID, messageID string) (bool, error) {
 	if c.Role != "intern" || !QueueRoles[toRole] {
 		return false, nil
@@ -48,18 +49,18 @@ func Enqueue(ctx context.Context, pool *pgxpool.Pool, c authn.Claims, toRole, qu
 	return tag.RowsAffected() == 1, nil
 }
 
-// QueueGroup is one entry of the stack: similar open questions to the caller.
+// QueueGroup — один пункт списка: похожие открытые вопросы к вызывающему.
 type QueueGroup struct {
-	IDs        []string `json:"ids"`      // oldest first; the first id is answered, the others follow it
-	Question   string   `json:"question"` // the question without greetings and names
+	IDs        []string `json:"ids"`      // сначала самый старый; отвечают на первый id, остальные следуют за ним
+	Question   string   `json:"question"` // вопрос без приветствий и имён
 	Count      int      `json:"count"`
 	Askers     []string `json:"askers"`
 	FirstAsked string   `json:"first_asked_at"`
 	LastAsked  string   `json:"last_asked_at"`
 }
 
-// queue: GET /api/escalations/queue — the open questions addressed to the caller, similar ones grouped, the most asked
-// first. Only the addressee sees them (R71): the query is scoped by to_user_id from the JWT.
+// queue: GET /api/escalations/queue — открытые вопросы к вызывающему, похожие сгруппированы, чаще задаваемые сначала.
+// Видит их только адресат (R71): запрос ограничен to_user_id из JWT.
 func (h *Handler) queue(w http.ResponseWriter, r *http.Request) {
 	c, ok := claims(w, r)
 	if !ok {
@@ -144,7 +145,7 @@ var stopTerms = map[string]bool{
 	"подскажи": true, "пожалуйста": true, "привет": true, "спасибо": true, "буду": true, "будет": true, "the": true,
 }
 
-// terms are the 5-letter stems of the meaningful words of a question.
+// terms — основы из 5 букв значимых слов вопроса.
 func terms(q string) map[string]bool {
 	out := map[string]bool{}
 	for _, w := range strings.FieldsFunc(strings.ToLower(q), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
@@ -160,8 +161,8 @@ func terms(q string) map[string]bool {
 	return out
 }
 
-// similar: two questions share at least 60% of the smaller set of stems (and at least two of them, or all of a
-// one-word question).
+// similar: у двух вопросов совпадает не меньше 60% меньшего набора основ (и не меньше двух основ, или все — у вопроса
+// из одного слова).
 func similar(a, b map[string]bool) bool {
 	if len(a) == 0 || len(b) == 0 {
 		return false

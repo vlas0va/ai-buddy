@@ -1,7 +1,7 @@
-// Package pgtest gives tests a fresh PostgreSQL database built from the real migrations (schema + demo seed).
+// Пакет pgtest даёт тестам свежую базу PostgreSQL, собранную из настоящих миграций (схема + демо-данные).
 //
-// Set TEST_DATABASE_URL to a superuser connection (scripts/test-db.sh prints one). Each New call creates
-// database t_<random>, applies migrations.FS in lexical order and drops the database when the test ends.
+// Задайте TEST_DATABASE_URL — подключение суперпользователя (его печатает scripts/test-db.sh). Каждый вызов New создаёт
+// базу t_<random>, применяет migrations.FS в лексикографическом порядке и удаляет базу после теста.
 package pgtest
 
 import (
@@ -22,10 +22,10 @@ import (
 	"aibuddy/migrations"
 )
 
-// EnvVar is the variable holding the admin connection string.
+// EnvVar — переменная со строкой подключения администратора.
 const EnvVar = "TEST_DATABASE_URL"
 
-// New returns a pool connected to a fresh migrated database, or skips the test when TEST_DATABASE_URL is unset.
+// New возвращает пул, подключённый к свежей базе с миграциями, или пропускает тест, если TEST_DATABASE_URL не задан.
 func New(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	admin := os.Getenv(EnvVar)
@@ -63,7 +63,7 @@ func New(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-// URL returns the connection string of the database behind pool (useful for services that open their own pool).
+// URL возвращает строку подключения к базе за pool (полезно для сервисов, открывающих свой пул).
 func URL(t testing.TB, pool *pgxpool.Pool) string {
 	t.Helper()
 	return pool.Config().ConnString()
@@ -85,7 +85,7 @@ func applyMigrations(ctx context.Context, dbURL string) error {
 		if err != nil {
 			return fmt.Errorf("read %s: %w", n, err)
 		}
-		// Simple protocol: a migration file is many statements in one string.
+		// Простой протокол: файл миграции — много запросов в одной строке.
 		if _, err := conn.Exec(ctx, string(sql), pgx.QueryExecModeSimpleProtocol); err != nil {
 			return fmt.Errorf("apply %s: %w", n, err)
 		}
@@ -121,5 +121,5 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-// newName returns the name of a fresh test database; a variable so tests can follow one database exactly.
+// newName возвращает имя новой тестовой базы; это переменная, чтобы тесты могли следить ровно за одной базой.
 var newName = func() string { return "t_" + randomHex(8) }

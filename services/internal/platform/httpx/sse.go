@@ -15,16 +15,16 @@ import (
 	"time"
 )
 
-// DefaultKeepAlive is the interval of `: ping` comments on an SSE stream (contracts/agent-stream.md).
+// DefaultKeepAlive — интервал комментариев `: ping` в потоке SSE (contracts/agent-stream.md).
 const DefaultKeepAlive = 15 * time.Second
 
-// ErrSSEClosed is returned by SSEWriter.Send after Close.
+// ErrSSEClosed возвращает SSEWriter.Send после Close.
 var ErrSSEClosed = errors.New("httpx: sse stream closed")
 
-// SSEWriter writes Server-Sent Events (R78): every event gets an incrementing `id:` (from 1), an `event:` line and
-// one `data:` line of compact JSON, and is flushed immediately. A goroutine writes `: ping` comments every
-// keep-alive interval until Close or until the context is done. All methods are safe for concurrent use.
-// Always `defer sse.Close()` in the handler: the ping goroutine must stop before the handler returns.
+// SSEWriter пишет Server-Sent Events (R78): каждое событие получает возрастающий `id:` (с 1), строку `event:` и одну
+// строку `data:` с компактным JSON и сразу сбрасывается. Горутина пишет комментарии `: ping` раз в интервал keep-alive
+// до Close или завершения контекста. Все методы безопасны для конкурентного использования. Всегда пишите `defer
+// sse.Close()` в обработчике: горутина пингов должна остановиться до возврата из обработчика.
 type SSEWriter struct {
 	ctx    context.Context
 	w      http.ResponseWriter
@@ -37,9 +37,9 @@ type SSEWriter struct {
 	wg     sync.WaitGroup
 }
 
-// NewSSEWriter sets the SSE headers, sends the 200 status, flushes and starts the keep-alive goroutine
-// (keepAlive <= 0 means DefaultKeepAlive). ctx is normally r.Context(). It fails, without writing anything,
-// when w cannot flush. The server's write deadline is cleared for the stream when the writer supports it.
+// NewSSEWriter ставит заголовки SSE, отправляет статус 200, сбрасывает и запускает горутину keep-alive (keepAlive <= 0
+// — DefaultKeepAlive). ctx обычно r.Context(). Падает, ничего не записав, если w не умеет сбрасывать. Дедлайн записи
+// сервера для потока снимается, если writer это поддерживает.
 func NewSSEWriter(ctx context.Context, w http.ResponseWriter, keepAlive time.Duration) (*SSEWriter, error) {
 	if keepAlive <= 0 {
 		keepAlive = DefaultKeepAlive
@@ -52,7 +52,7 @@ func NewSSEWriter(ctx context.Context, w http.ResponseWriter, keepAlive time.Dur
 	if err := rc.Flush(); err != nil {
 		return nil, fmt.Errorf("httpx: sse: response writer cannot flush: %w", err)
 	}
-	_ = rc.SetWriteDeadline(time.Time{}) // long-lived stream; ErrNotSupported is fine
+	_ = rc.SetWriteDeadline(time.Time{}) // долгоживущий поток; ErrNotSupported допустим
 	s := &SSEWriter{ctx: ctx, w: w, rc: rc, stop: make(chan struct{})}
 	s.wg.Add(1)
 	go s.keepAlive(keepAlive)
@@ -77,9 +77,9 @@ func (s *SSEWriter) keepAlive(every time.Duration) {
 	}
 }
 
-// Send writes one event with the given name and data encoded as single-line JSON (HTML characters are not
-// escaped; json.RawMessage is compacted, so relayed agent events keep their meaning). It returns the first
-// write error of the stream, ctx.Err() once the context is done, or ErrSSEClosed after Close.
+// Send пишет одно событие с указанным именем и данными в виде однострочного JSON (HTML-символы не экранируются;
+// json.RawMessage уплотняется, поэтому пересылаемые события агента сохраняют смысл). Возвращает первую ошибку записи
+// потока, ctx.Err() после завершения контекста или ErrSSEClosed после Close.
 func (s *SSEWriter) Send(event string, data any) error {
 	if event == "" || strings.ContainsAny(event, "\r\n") {
 		return fmt.Errorf("httpx: sse: invalid event name %q", event)
@@ -103,7 +103,7 @@ func (s *SSEWriter) Send(event string, data any) error {
 	})
 }
 
-// write builds a frame under the lock (so ids are assigned in write order), writes and flushes it.
+// write собирает кадр под блокировкой (чтобы id назначались в порядке записи), пишет и сбрасывает его.
 func (s *SSEWriter) write(frame func(*bytes.Buffer)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -128,15 +128,15 @@ func (s *SSEWriter) write(frame func(*bytes.Buffer)) error {
 	return nil
 }
 
-// LastID returns the id of the last event sent (0 before the first one).
+// LastID возвращает id последнего отправленного события (0 до первого).
 func (s *SSEWriter) LastID() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.id
 }
 
-// Close stops the keep-alive goroutine and waits for it; later Sends return ErrSSEClosed. It is idempotent and
-// does not close the underlying connection (the handler returning does).
+// Close останавливает горутину keep-alive и ждёт её; последующие Send возвращают ErrSSEClosed. Идемпотентен и не
+// закрывает нижележащее соединение (это делает возврат из обработчика).
 func (s *SSEWriter) Close() error {
 	s.mu.Lock()
 	if s.closed {
@@ -150,46 +150,46 @@ func (s *SSEWriter) Close() error {
 	return nil
 }
 
-// MaxSSELine is the longest line SSEReader accepts (1 MiB).
+// MaxSSELine — самая длинная строка, которую принимает SSEReader (1 МиБ).
 const MaxSSELine = 1 << 20
 
-// ErrSSEData marks an event whose data is not valid JSON; the reader can continue with the next event.
+// ErrSSEData отмечает событие, у которого data — некорректный JSON; читатель может продолжить со следующего события.
 var ErrSSEData = errors.New("httpx: sse: event data is not valid JSON")
 
-// ErrSSETooLarge marks a line longer than MaxSSELine or an event over the reader's limit (NewSSEReaderLimit).
-// The stream cannot be read further.
+// ErrSSETooLarge отмечает строку длиннее MaxSSELine или событие сверх лимита читателя (NewSSEReaderLimit). Дальше поток
+// читать нельзя.
 var ErrSSETooLarge = errors.New("httpx: sse: event too large")
 
-// Event is one Server-Sent Event. Name defaults to "message"; ID is the last id seen on the stream (the SSE
-// "last event ID"), so it persists across events that carry no id line.
+// Event — одно Server-Sent Event. Name по умолчанию "message"; ID — последний id, встреченный в потоке (SSE «last event
+// ID»), поэтому он сохраняется и для событий без строки id.
 type Event struct {
 	ID   string
 	Name string
 	Data json.RawMessage
 }
 
-// SSEReader parses a text/event-stream (WHATWG rules): LF, CR and CRLF line ends, a leading BOM, comment lines,
-// `field:value` with one optional space, several data lines joined with "\n", unknown fields and retry ignored.
-// Unlike the browser, a final event that is not followed by a blank line is still delivered.
+// SSEReader разбирает text/event-stream (правила WHATWG): концы строк LF, CR и CRLF, BOM в начале, строки-комментарии,
+// `field:value` с одним необязательным пробелом, несколько строк data склеиваются через "\n", неизвестные поля и retry
+// игнорируются. В отличие от браузера, последнее событие без следующей пустой строки всё равно доставляется.
 type SSEReader struct {
 	sc       *bufio.Scanner
 	lastID   string
 	started  bool
-	maxEvent int // bytes of data per event; 0 = no limit beyond MaxSSELine per line
+	maxEvent int // байт data на событие; 0 — без лимита, кроме MaxSSELine на строку
 	failed   error
 }
 
-// NewSSEReader returns a reader over r (typically an HTTP response body).
+// NewSSEReader возвращает читатель поверх r (обычно тела HTTP-ответа).
 func NewSSEReader(r io.Reader) *SSEReader {
 	return NewSSEReaderLimit(r, 0)
 }
 
-// sseLineSlack is room for the field name ("data: ") on a line of a limited reader.
+// sseLineSlack — запас под имя поля ("data: ") в строке ограниченного читателя.
 const sseLineSlack = 64
 
-// NewSSEReaderLimit is NewSSEReader with a limit of maxEvent bytes on the data of one event (all its data lines
-// together) and on one line (plus room for the field name), for streams from less trusted peers; maxEvent <= 0
-// means no event limit. A larger event makes Next return ErrSSETooLarge and stop.
+// NewSSEReaderLimit — это NewSSEReader с лимитом maxEvent байт на data одного события (все его строки data вместе) и на
+// одну строку (плюс запас под имя поля), для потоков от менее доверенных сторон; maxEvent <= 0 — без лимита на событие.
+// Большее событие заставляет Next вернуть ErrSSETooLarge и остановиться.
 func NewSSEReaderLimit(r io.Reader, maxEvent int) *SSEReader {
 	maxLine := MaxSSELine
 	if maxEvent > 0 && maxEvent+sseLineSlack < maxLine {
@@ -203,8 +203,8 @@ func NewSSEReaderLimit(r io.Reader, maxEvent int) *SSEReader {
 	return &SSEReader{sc: sc, maxEvent: maxEvent}
 }
 
-// Next returns the next event, io.EOF at the end of the stream, a read error, or the event together with an
-// error wrapping ErrSSEData when its data is not valid JSON (Next may be called again after that).
+// Next возвращает следующее событие, io.EOF в конце потока, ошибку чтения или событие вместе с ошибкой, оборачивающей
+// ErrSSEData, если его data — некорректный JSON (после этого Next можно вызывать снова).
 func (r *SSEReader) Next() (Event, error) {
 	if r.failed != nil {
 		return Event{}, r.failed
@@ -275,7 +275,7 @@ func (r *SSEReader) dispatch(name string, data []byte) (Event, error) {
 	return ev, nil
 }
 
-// splitLines is a bufio.SplitFunc for SSE line ends: "\r\n", "\n" or "\r".
+// splitLines — bufio.SplitFunc для концов строк SSE: "\r\n", "\n" или "\r".
 func splitLines(data []byte, atEOF bool) (int, []byte, error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
@@ -291,7 +291,7 @@ func splitLines(data []byte, atEOF bool) (int, []byte, error) {
 			return i + 1, data[:i], nil
 		}
 		if !atEOF {
-			return 0, nil, nil // a "\n" may follow in the next read
+			return 0, nil, nil // "\n" может прийти в следующем чтении
 		}
 		return i + 1, data[:i], nil
 	}

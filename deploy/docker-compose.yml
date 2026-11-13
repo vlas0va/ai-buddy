@@ -1,7 +1,7 @@
-# AI-buddy stack. Run from the repo root:
+# Стек AI-buddy. Запуск из корня репозитория:
 #   docker compose -f deploy/docker-compose.yml --profile core up -d --build        (make up)
 #   KAFKA_BROKERS=kafka:9092 docker compose -f deploy/docker-compose.yml --profile full up -d --build   (make up-full)
-# Web: http://localhost:5173, core API: http://localhost:8080. Details: docs/backend/README.md
+# Веб: http://localhost:5173, API ядра: http://localhost:8080. Подробности: docs/backend/README.md
 name: aibuddy
 
 x-core-secrets: &secrets
@@ -20,8 +20,8 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ../migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      # TCP check on purpose: during first init the temporary server listens only on the socket,
-      # so the service turns healthy only after migrations and seed are applied.
+      # Проверка по TCP намеренно: во время первой инициализации временный сервер слушает только сокет, поэтому сервис
+      # становится здоровым только после применения миграций и демо-данных.
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U buddy -d buddy"]
       interval: 5s
       timeout: 3s
@@ -64,7 +64,7 @@ services:
       retries: 20
       start_period: 5s
     ports:
-      - "127.0.0.1:8100:8100"   # debug and local agent development; the agent reaches it inside the compose network
+      - "127.0.0.1:8100:8100"   # отладка и локальная разработка агента; агент обращается к нему внутри сети compose
 
   core:
     build:
@@ -78,14 +78,14 @@ services:
         required: false
     environment:
       <<: *secrets
-      CORE_PORT: "8080"   # in-container port is fixed; change the host side with CORE_HOST_PORT
+      CORE_PORT: "8080"   # порт внутри контейнера фиксирован; сторону хоста меняет CORE_HOST_PORT
       POSTGRES_URL: postgres://buddy:buddy@postgres:5432/buddy?sslmode=disable
       REDIS_URL: redis://redis:6379/0
       AGENT_URL: ${AGENT_URL:-http://agent:8090}
       MCP_BASE_URL: ${MCP_BASE_URL:-http://mcp-mocks:8100/mcp}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
-      # Empty = Kafka off (events only go to core.analytics_events). Profile full: run with
-      # KAFKA_BROKERS=kafka:9092 (shell variable, see docs/backend/README.md).
+      # Пусто — Kafka выключена (события идут только в core.analytics_events). Профиль full: запускайте с
+      # KAFKA_BROKERS=kafka:9092 (переменная оболочки, см. docs/backend/README.md).
       KAFKA_BROKERS: ${KAFKA_BROKERS:-}
     depends_on:
       postgres:
@@ -104,7 +104,8 @@ services:
       - "${CORE_HOST_PORT:-8080}:8080"
 
   agent:
-    # Owner A. AI agent: Flask + SSE, stub LLM by default (works without any key), MCP tools by role (ADR-001..008).
+    # Владелец A. ИИ-агент: Flask + SSE, по умолчанию stub-LLM (работает без ключа), инструменты MCP по ролям
+    # (ADR-001..008).
     build:
       context: ..
       dockerfile: services/agent/Dockerfile
@@ -114,27 +115,29 @@ services:
         required: false
     environment:
       AGENT_PORT: "8090"
-      # the image has the KB and the checklist at /data (Dockerfile); a KB_DIR from ../.env (mcp-mocks' /app/data/kb)
-      # must not leave the agent with an empty local KB copy (no source documents, weaker ranking)
+      # в образе база знаний и чек-лист лежат в /data (Dockerfile); KB_DIR из ../.env (путь mcp-mocks /app/data/kb) не
+      # должен оставлять агента с пустой локальной копией базы знаний (без исходных документов, ранжирование хуже)
       KB_DIR: /data/kb
       CHECKLIST_PATH: /data/checklist/checklist.yaml
       JWT_SECRET: ${JWT_SECRET:-local-dev-only-jwt-secret}
       CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:-local-dev-only-hmac-secret}
       REDIS_URL: redis://redis:6379/1
       AGENT_USE_REDIS: "true"
-      # B's eight MCP servers (one binary mcp-mocks). The agent's in-process mocks stay for `make agent-dev` and its tests.
+      # Восемь MCP-серверов B (один бинарник mcp-mocks). Моки агента в процессе остаются для `make agent-dev` и его
+      # тестов.
       MCP_BASE_URL: ${MCP_BASE_URL:-http://mcp-mocks:8100/mcp}
-      # Web search for general technical questions: curated (default, offline) | searxng (profile websearch) | off.
+      # Веб-поиск по общим техническим вопросам: curated (по умолчанию, без сети) | searxng (профиль websearch) | off.
       WEB_SEARCH_PROVIDER: ${WEB_SEARCH_PROVIDER:-curated}
       WEB_SEARCH_URL: ${WEB_SEARCH_URL:-}
-      # A-Vibe by default (Rita 12.11): the bundled Ollama serves it; a LLM_* line in ../.env overrides these defaults.
-      # Until Ollama has downloaded the model, and whenever it fails or is too slow, the agent answers with the stub.
+      # A-Vibe по умолчанию (Рита 12.11): её обслуживает встроенная Ollama; строка LLM_* в ../.env переопределяет эти
+      # значения. Пока Ollama не скачала модель, а также когда она сбоит или слишком медленная, агент отвечает через
+      # stub.
       LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-openai_compat}
       LLM_DEFAULT_BASE_URL: ${LLM_DEFAULT_BASE_URL:-http://ollama:11434/v1}
       LLM_DEFAULT_MODEL: ${AVIBE_MODEL:-hf.co/NightForger/avibe-GGUF:Q4_K_M}
       LLM_DEFAULT_TIMEOUT_S: ${LLM_DEFAULT_TIMEOUT_S:-120}
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Ollama running on the laptop itself (A-Vibe on the laptop GPU)
+      - "host.docker.internal:host-gateway"   # Ollama, запущенная на самом ноутбуке (A-Vibe на GPU ноутбука)
     depends_on:
       redis:
         condition: service_healthy
@@ -146,11 +149,12 @@ services:
       timeout: 3s
       retries: 10
     ports:
-      - "127.0.0.1:${AGENT_HOST_PORT:-8090}:8090"   # debug only; core reaches it at http://agent:8090
+      - "127.0.0.1:${AGENT_HOST_PORT:-8090}:8090"   # только для отладки; ядро обращается к нему по http://agent:8090
 
   searxng:
-    # Optional live web search: docker compose -f deploy/docker-compose.yml --profile core --profile websearch up -d
-    # and in .env: WEB_SEARCH_PROVIDER=searxng WEB_SEARCH_URL=http://searxng:8080
+    # Необязательный живой веб-поиск:
+    #   docker compose -f deploy/docker-compose.yml --profile core --profile websearch up -d
+    # и в .env: WEB_SEARCH_PROVIDER=searxng WEB_SEARCH_URL=http://searxng:8080
     image: searxng/searxng:latest
     profiles: [websearch]
     environment:
@@ -159,9 +163,9 @@ services:
       - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
 
   ollama:
-    # A-Vibe (AvitoTech/avibe, GGUF Q4_K_M, ~5 GB) for the agent by default, no key. On the first start the model is
-    # downloaded in the background (the stack is ready at once, the agent uses the stub until the model is there).
-    # CPU by default; NVIDIA GPU: add -f deploy/docker-compose.gpu.yml. No download: AVIBE_PULL=false.
+    # A-Vibe (AvitoTech/avibe, GGUF Q4_K_M, ~5 ГБ) для агента по умолчанию, без ключа. При первом запуске модель
+    # скачивается в фоне (стек готов сразу, агент использует stub, пока модели нет). По умолчанию CPU; NVIDIA GPU:
+    # добавьте -f deploy/docker-compose.gpu.yml. Без скачивания: AVIBE_PULL=false.
     image: ollama/ollama:0.9.6
     profiles: [core, full, ollama]
     entrypoint: ["/bin/sh", "-c"]
@@ -175,15 +179,17 @@ services:
       AVIBE_MODEL: ${AVIBE_MODEL:-hf.co/NightForger/avibe-GGUF:Q4_K_M}
       AVIBE_PULL: ${AVIBE_PULL:-true}
       OLLAMA_KEEP_ALIVE: 24h
-      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}   # the prompt carries whole KB documents
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_CONTEXT_LENGTH:-8192}   # в промпт попадают документы базы знаний целиком
     volumes:
       - ollama:/root/.ollama
 
   avibe:
-    # Optional own-compute LLM: A-Vibe (AvitoTech/avibe, 8B, Apache-2.0) served by vLLM, OpenAI-compatible, with tool calling.
+    # Необязательная LLM на своих мощностях: A-Vibe (AvitoTech/avibe, 8B, Apache-2.0) через vLLM, OpenAI-совместимый, с
+    # вызовом инструментов.
     #   docker compose -f deploy/docker-compose.yml --profile core --profile avibe up -d
     #   .env: LLM_PROVIDER=openai_compat LLM_BASE_URL=http://avibe:8000/v1 LLM_MODEL=AvitoTech/avibe LLM_TIMEOUT_S=60
-    # Needs an NVIDIA GPU (~23 GB VRAM in 16-bit; AVIBE_QUANTIZATION=fp8 halves it on Ada/Hopper) and the NVIDIA runtime.
+    # Нужны NVIDIA GPU (~23 ГБ видеопамяти в 16 бит; AVIBE_QUANTIZATION=fp8 уменьшает вдвое на Ada/Hopper) и среда
+    # NVIDIA.
     image: vllm/vllm-openai:v0.10.1.1
     profiles: [avibe]
     command:
@@ -210,8 +216,9 @@ services:
       - "127.0.0.1:8000:8000"
 
   web:
-    # Owner C. SPA served by nginx. VITE_API_BASE_URL is a BUILD-time value: the browser calls core directly, so it must
-    # match the host port of core, and the web origin must be in core's CORS_ORIGINS (default http://localhost:5173).
+    # Владелец C. SPA, которую раздаёт nginx. VITE_API_BASE_URL задаётся при СБОРКЕ: браузер обращается к ядру напрямую,
+    # поэтому значение должно совпадать с портом ядра на хосте, а origin веба должен быть в CORS_ORIGINS ядра (по
+    # умолчанию http://localhost:5173).
     build:
       context: ../web
       args:

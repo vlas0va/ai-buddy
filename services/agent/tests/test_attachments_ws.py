@@ -1,5 +1,6 @@
-"""Attachments in chat (AT-xx) and web search for general technical questions (WS-xx) —
-openspec/specs/attachments-websearch/spec.md."""
+"""Вложения в чате (AT-xx) и веб-поиск по общим техническим вопросам (WS-xx) —
+openspec/specs/attachments-websearch/spec.md.
+"""
 
 from __future__ import annotations
 
@@ -109,7 +110,7 @@ def test_WS_02_company_questions_never_go_to_the_web(anna):
 
 def test_WS_03_off_and_searxng_providers(tmp_path: Path):
     assert WebSearch({"provider": "off"}, tmp_path).search("git rebase") == []
-    assert not WebSearch({"provider": "searxng"}, tmp_path).enabled  # no URL → off
+    assert not WebSearch({"provider": "searxng"}, tmp_path).enabled  # нет URL → off
     seen = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

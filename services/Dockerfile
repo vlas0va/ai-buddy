@@ -1,7 +1,7 @@
-# One image recipe for every Go binary. Build context = repository root.
+# Один рецепт образа для каждого бинарника Go. Контекст сборки — корень репозитория.
 #   docker build -f services/Dockerfile --build-arg CMD=core -t aibuddy-core .
 #   docker build -f services/Dockerfile --build-arg CMD=mcp-mocks -t aibuddy-mcp-mocks .
-# BUILD_TAGS=demo enables demo-only endpoints (cron run, flag changes); use BUILD_TAGS="" for a hardened build.
+# BUILD_TAGS=demo включает эндпоинты только для демо (запуск cron, смена флагов); BUILD_TAGS="" — для защищённой сборки.
 FROM golang:1.24-alpine AS builder
 ARG CMD=core
 ARG BUILD_TAGS=demo

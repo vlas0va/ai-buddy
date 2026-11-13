@@ -49,7 +49,8 @@ type stubFlags struct {
 
 func (f stubFlags) ForTeam(context.Context, string) (map[string]bool, error) { return f.flags, f.err }
 
-// env is a core API (chat + actions + approvals behind authn) over a fresh database, fake MCP servers and a fake agent.
+// env — API ядра (чат + действия + согласования за authn) поверх чистой базы, поддельных MCP-серверов и поддельного
+// агента.
 type env struct {
 	t       *testing.T
 	pool    *pgxpool.Pool
@@ -90,7 +91,7 @@ func newEnv(t *testing.T, opts ...envOpt) *env {
 	return &env{t: t, pool: pool, mcp: fake, agent: ag, chat: h, limiter: lim, url: srv.URL}
 }
 
-// Demo users (migrations/0003_seed_demo.sql). Anna's cohort started 10 days ago (week_2).
+// Демо-пользователи (migrations/0003_seed_demo.sql). Когорта Анны началась 10 дней назад (week_2).
 func (e *env) anna() string {
 	return agenttest.Token(e.t, jwtSecret, "intern.anna", "intern", "delivery", time.Now().AddDate(0, 0, -10).Format(time.DateOnly))
 }
@@ -152,7 +153,7 @@ func (e *env) do(method, path, token string, body any, headers ...string) respon
 	return response{status: resp.StatusCode, header: resp.Header, body: b}
 }
 
-// sse is a parsed event stream.
+// sse — разобранный поток событий.
 type sse struct {
 	events []httpx.Event
 }
@@ -231,7 +232,7 @@ func (e *env) message(sid, token, text string) sse {
 	return e.stream("/api/chat/sessions/"+sid+"/messages", token, map[string]string{"text": text})
 }
 
-// propose sends a day-off message and returns the stored proposal id.
+// propose отправляет сообщение про отгул и возвращает id сохранённого черновика.
 func (e *env) propose(sid, token string) string {
 	e.t.Helper()
 	s := e.message(sid, token, "Хочу отгул в пятницу")

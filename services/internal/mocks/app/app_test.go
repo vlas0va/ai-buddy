@@ -98,14 +98,15 @@ func TestNewHandler_HealthAndAllServers_R23(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := mcpx.Client{BaseURL: ts.URL + "/mcp"}
-	// one read tool per server: every server is mounted at /mcp/<server> and answers with the user's identity
+	// по одному инструменту чтения на сервер: каждый сервер смонтирован по /mcp/<server> и отвечает с личностью
+	// пользователя
 	for _, c := range []struct {
 		server, tool string
 		args         map[string]any
-		wantCode     string // tool error code; "" = success
+		wantCode     string // код ошибки инструмента; "" — успех
 	}{
 		{"absence", "list_my_requests", map[string]any{}, ""},
-		{"approvals", "list_pending", map[string]any{}, "forbidden"}, // lead only (R71)
+		{"approvals", "list_pending", map[string]any{}, "forbidden"}, // только руководитель (R71)
 		{"access", "list_required", map[string]any{}, ""},
 		{"directory", "whoami", map[string]any{}, ""},
 		{"checklist", "get_plan_template", map[string]any{"role": "intern"}, ""},
@@ -206,7 +207,7 @@ func TestRun_Errors(t *testing.T) {
 	if err := Run(context.Background(), cfg, quiet()); err == nil || !strings.Contains(err.Error(), "knowledge base") {
 		t.Fatalf("invalid KB must stop the start: %v", err)
 	}
-	// port already taken: serve fails instead of hanging
+	// порт уже занят: serve падает, а не зависает
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

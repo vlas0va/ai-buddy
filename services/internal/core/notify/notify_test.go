@@ -46,14 +46,14 @@ func TestStore_Create_DedupeAndValidation_R54(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM core.notifications WHERE user_id='intern.anna' AND dedupe_key='k1'`).Scan(&cnt); err != nil || cnt != 1 {
 		t.Fatalf("dedupe: count=%d err=%v", cnt, err)
 	}
-	// same key for another user is a different notification
+	// тот же ключ у другого пользователя — другое уведомление
 	n2 := n
 	n2.UserID = "intern.ivan"
 	created, err := s.CreateIfNew(ctx, pool, n2)
 	if err != nil || !created {
 		t.Fatalf("other user: created=%v err=%v", created, err)
 	}
-	// no dedupe key: always inserted
+	// без ключа дедупликации: вставляется всегда
 	for i := 0; i < 2; i++ {
 		if err := s.Create(ctx, pool, notify.Notification{UserID: "intern.anna", Kind: notify.KindStatusChange, Title: "x"}); err != nil {
 			t.Fatal(err)
@@ -71,11 +71,11 @@ func TestStore_Create_DedupeAndValidation_R54(t *testing.T) {
 			t.Errorf("%+v: err=%v, want ErrInvalid", bad, err)
 		}
 	}
-	// unknown user violates the FK
+	// неизвестный пользователь нарушает внешний ключ
 	if err := s.Create(ctx, pool, notify.Notification{UserID: "nobody", Kind: notify.KindReminder, Title: "t"}); err == nil {
 		t.Error("expected FK error")
 	}
-	// works inside a transaction that is rolled back
+	// работает внутри транзакции, которая откатывается
 	tx, _ := pool.Begin(ctx)
 	_ = s.Create(ctx, tx, notify.Notification{UserID: "intern.ivan", Kind: notify.KindOverdue, Title: "rolled back"})
 	_ = tx.Rollback(ctx)
@@ -117,7 +117,7 @@ func TestNotifications_ListAndRead_R54_R71(t *testing.T) {
 	}
 	id := list[0]["id"].(string)
 
-	// foreign user cannot mark it read and cannot learn whether it exists
+	// чужой пользователь не может пометить его прочитанным и не может узнать, существует ли оно
 	resp, _ = do(t, "POST", srv.URL+"/api/notifications/"+id+"/read", tok("intern.ivan", "intern"))
 	if resp.StatusCode != 403 {
 		t.Fatalf("foreign: %d", resp.StatusCode)
@@ -130,7 +130,7 @@ func TestNotifications_ListAndRead_R54_R71(t *testing.T) {
 	if resp.StatusCode != 404 {
 		t.Fatalf("malformed: %d", resp.StatusCode)
 	}
-	for i := 0; i < 2; i++ { // idempotent
+	for i := 0; i < 2; i++ { // идемпотентно
 		resp, _ = do(t, "POST", srv.URL+"/api/notifications/"+id+"/read", tok("intern.anna", "intern"))
 		if resp.StatusCode != 204 {
 			t.Fatalf("read: %d", resp.StatusCode)
@@ -141,7 +141,7 @@ func TestNotifications_ListAndRead_R54_R71(t *testing.T) {
 	if list[0]["read"] != true || list[1]["read"] != false {
 		t.Fatalf("read flags: %v", list)
 	}
-	// empty list is [] not null
+	// пустой список — [], а не null
 	_, body = do(t, "GET", srv.URL+"/api/notifications", tok("lead.maria", "lead"))
 	if string(body) != "[]" {
 		t.Fatalf("empty: %s", body)
@@ -154,7 +154,7 @@ func TestNotifications_ListAndRead_R54_R71(t *testing.T) {
 
 func TestHandler_NoClaims(t *testing.T) {
 	mux := http.NewServeMux()
-	notify.New(nil, nil).Register(mux) // no authn middleware: handlers must refuse by themselves
+	notify.New(nil, nil).Register(mux) // без middleware authn: обработчики должны отказывать сами
 	for _, r := range []*http.Request{
 		httptest.NewRequest("GET", "/api/notifications", nil),
 		httptest.NewRequest("POST", "/api/notifications/00000000-0000-4000-8000-000000000000/read", nil),

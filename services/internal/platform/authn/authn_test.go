@@ -16,7 +16,7 @@ var secret = []byte("test-jwt-secret")
 
 var anna = Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery", CohortStart: "2026-11-02"}
 
-// craft signs arbitrary header and payload JSON, to build tokens Issue would never produce.
+// craft подписывает произвольные JSON заголовка и payload, чтобы собрать токены, которые Issue никогда бы не выдал.
 func craft(key []byte, headerJSON, payloadJSON string) string {
 	si := b64.EncodeToString([]byte(headerJSON)) + "." + b64.EncodeToString([]byte(payloadJSON))
 	return si + "." + b64.EncodeToString(mac(key, si))
@@ -42,7 +42,7 @@ func TestIssueVerify_RoundTrip_R71(t *testing.T) {
 	}
 }
 
-// Token built by Python (hmac + json.dumps), so the agent's test tokens verify in Go.
+// Токен собран Python (hmac + json.dumps), чтобы тестовые токены агента проходили проверку в Go.
 func TestVerify_PythonVector_R71(t *testing.T) {
 	const tok = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
 		"eyJjb2hvcnRfc3RhcnQiOiIyMDI2LTExLTAyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NjI2NDY0MDAsInJvbGUiOiJpbnRlcm4iLCJzdWIiOiJpbnRlcm4uYW5uYSIsInRlYW1faWQiOiJkZWxpdmVyeSJ9." +

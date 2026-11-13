@@ -18,7 +18,7 @@ func decisionProposal(approvalID, decision string) agenttest.Event {
 			"args": map[string]any{"approval_id": approvalID, "decision": decision, "comment": ""}}}}
 }
 
-// proposeWith makes the agent answer the next message with ev and returns the stored proposal id.
+// proposeWith заставляет агента ответить на следующее сообщение событием ev и возвращает id сохранённого черновика.
 func (e *env) proposeWith(sid, token string, ev agenttest.Event) string {
 	e.t.Helper()
 	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event { return []agenttest.Event{ev, agenttest.Done()} })
@@ -35,8 +35,8 @@ func (e *env) actionStatus(id any) string {
 	return e.str(`SELECT status FROM core.actions WHERE id = $1`, id)
 }
 
-// Finding 1: a lead's decision in chat is checked against the confirmed draft and read back from the approvals
-// service; the agent's claims about which request it decided are never applied.
+// Находка 1: решение руководителя в чате сверяется с подтверждённым черновиком и перечитывается у сервиса согласований;
+// утверждения агента о том, по какой заявке он решил, никогда не применяются.
 func TestConfirm_S3_LeadDecisionReadBackFromMCP_R71(t *testing.T) {
 	e := newEnv(t)
 	anna, maria := e.anna(), e.maria()
@@ -50,9 +50,9 @@ func TestConfirm_S3_LeadDecisionReadBackFromMCP_R71(t *testing.T) {
 
 	t.Run("agent result differs from the confirmed decision", func(t *testing.T) {
 		for _, result := range []map[string]any{
-			{"id": x2, "status": "rejected"},           // decision reversed
-			{"id": x1, "status": "approved"},           // another approval
-			{"id": x2, "status": "approved", "ID": x1}, // case variant
+			{"id": x2, "status": "rejected"},           // решение изменено на обратное
+			{"id": x1, "status": "approved"},           // другое согласование
+			{"id": x2, "status": "approved", "ID": x1}, // вариант регистра
 		} {
 			pid := e.proposeWith(sid, maria, decisionProposal(x2, "approved"))
 			e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
@@ -71,7 +71,7 @@ func TestConfirm_S3_LeadDecisionReadBackFromMCP_R71(t *testing.T) {
 
 	t.Run("agent names another request", func(t *testing.T) {
 		pid := e.proposeWith(sid, maria, decisionProposal(x1, "approved"))
-		// The agent never calls MCP and claims the decision was about the second request.
+		// Агент вообще не вызывает MCP и утверждает, что решение было по второй заявке.
 		e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
 			return []agenttest.Event{{Name: "tool_result", Data: map[string]any{"proposal_id": req.Turn.ProposalID, "kind": "approval_decision",
 				"tool": "approvals.decide", "result": map[string]any{"id": x1, "status": "approved", "kind": "absence_request",
@@ -104,7 +104,7 @@ func TestConfirm_S3_LeadDecisionReadBackFromMCP_R71(t *testing.T) {
 	})
 }
 
-// Finding 2: the tool_result must describe the confirmed proposal; the retry with an honest result saves it.
+// Находка 2: tool_result должен описывать подтверждённый черновик; повтор с честным результатом его сохраняет.
 func TestConfirm_S3_ToolResultMustMatchProposal_R71(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -118,7 +118,7 @@ func TestConfirm_S3_ToolResultMustMatchProposal_R71(t *testing.T) {
 		"other tool":           func(w, _ map[string]any) { w["tool"] = "access.request_access" },
 	} {
 		e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
-			ev := e.agent.Confirm(context.Background(), req)[2] // the real write, then a lie about it
+			ev := e.agent.Confirm(context.Background(), req)[2] // настоящая запись, а потом ложь о ней
 			wrapper := ev.Data.(map[string]any)
 			var result map[string]any
 			if err := json.Unmarshal(wrapper["result"].(json.RawMessage), &result); err != nil {
@@ -133,7 +133,7 @@ func TestConfirm_S3_ToolResultMustMatchProposal_R71(t *testing.T) {
 			t.Fatalf("%s: %s %v", name, s.names(), s.last())
 		}
 	}
-	// An honest agent replays the same write; the absence ignores the agent's checklist hint (S3 task, not CL-05).
+	// Честный агент повторяет ту же запись; отсутствие игнорирует подсказку агента о чек-листе (задача S3, не CL-05).
 	e.agent.OnConfirm(func(req agenttest.Request) []agenttest.Event {
 		evs := e.agent.Confirm(context.Background(), req)
 		evs[2].Data.(map[string]any)["task_checklist_item_id"] = "CL-05"
@@ -148,7 +148,7 @@ func TestConfirm_S3_ToolResultMustMatchProposal_R71(t *testing.T) {
 	}
 }
 
-// Finding 2: drafts and proposals are read with exact keys, and the stored kind and tool are re-checked at confirm.
+// Находка 2: черновики читаются с точными ключами, а сохранённые вид и инструмент перепроверяются при подтверждении.
 func TestChat_DraftKeysAndStoredKind_R71(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -187,8 +187,8 @@ func TestChat_DraftKeysAndStoredKind_R71(t *testing.T) {
 	}
 }
 
-// Finding 3: once an attempt reached the agent the write may have happened: cancel is refused and expiry no longer
-// blocks the retry, which replays the write and saves it.
+// Находка 3: как только попытка дошла до агента, запись могла произойти: отмена отклоняется, а истечение срока больше
+// не мешает повтору, который воспроизводит запись и сохраняет её.
 func TestConfirm_S3_NoCancelOrExpiryAfterAgentReached_R66(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -219,9 +219,9 @@ func TestConfirm_S3_NoCancelOrExpiryAfterAgentReached_R66(t *testing.T) {
 	}
 }
 
-// Finding 4: one turn may not make core relay or store unbounded content.
+// Находка 4: один ход не может заставить ядро пересылать или хранить неограниченный объём.
 func TestChat_TurnSizeBounds_R76(t *testing.T) {
-	big := strings.Repeat("я", 500) // 1000 bytes
+	big := strings.Repeat("я", 500) // 1000 байт
 	tokens := func(n int) []agenttest.Event {
 		evs := make([]agenttest.Event, n)
 		for i := range evs {
@@ -273,8 +273,9 @@ func TestChat_TurnSizeBounds_R76(t *testing.T) {
 	})
 }
 
-// Checkpoint 11.11: the intern moves a request until the HR admin approves; core signs absence.reschedule_request,
-// checks the result is the same request with the confirmed dates and updates the existing action.
+// Чекпоинт 11.11: стажёр переносит заявку, пока HR-администратор не согласовал; ядро подписывает
+// absence.reschedule_request, проверяет, что результат — та же заявка с подтверждёнными датами, и обновляет
+// существующее действие.
 func TestConfirm_Checkpoint_RescheduleAbsence_R71(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -312,8 +313,8 @@ func TestConfirm_Checkpoint_RescheduleAbsence_R71(t *testing.T) {
 	})
 }
 
-// Checkpoint 11.11: an access request names the environment and the rights; core checks the result has the signed scope
-// and the saved action says it («БД … (stage, чтение)»).
+// Чекпоинт 11.11: заявка на доступ называет окружение и права; ядро проверяет, что в результате подписанный объём, а
+// сохранённое действие его указывает («БД … (stage, чтение)»).
 func TestConfirm_Checkpoint_AccessScope_R71(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()

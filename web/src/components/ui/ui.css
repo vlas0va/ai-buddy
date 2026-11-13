@@ -1,4 +1,4 @@
-/* Button */
+/* Кнопка */
 .ui-btn {
   display: inline-flex;
   align-items: center;
@@ -40,7 +40,7 @@
 .ui-spinner { color: var(--color-accent); width: 24px; height: 24px; }
 @keyframes ui-spin { to { transform: rotate(360deg); } }
 
-/* Field */
+/* Поле */
 .ui-field { display: grid; gap: var(--space-1); }
 .ui-label { font-size: var(--text-sm); font-weight: 600; }
 .ui-input {
@@ -67,7 +67,7 @@
 .ui-input[aria-invalid='true'] { border-color: var(--color-danger); }
 .ui-field-error { color: var(--color-danger); font-size: var(--text-sm); }
 
-/* Card */
+/* Карточка */
 .ui-card {
   background: var(--color-surface);
   border: 1px solid transparent;
@@ -76,7 +76,7 @@
   padding: 20px;
 }
 
-/* Badge */
+/* Бейдж */
 .ui-badge {
   display: inline-block;
   padding: 3px 10px;
@@ -98,7 +98,7 @@
 .ui-badge-kind-trip_request { background: #efe8ff; color: #4b23b8; }
 .ui-badge-kind-access_request { background: var(--color-warning-soft); color: var(--color-warning); }
 
-/* Avatar */
+/* Аватар */
 .ui-avatar {
   display: inline-flex;
   align-items: center;
@@ -116,7 +116,7 @@
 .ui-avatar-t3 { background: #dcecff; color: #004a99; }
 .ui-avatar-t4 { background: #ffdedd; color: #a51a18; }
 
-/* States */
+/* Состояния */
 .ui-state {
   display: grid;
   justify-items: start;
@@ -129,7 +129,7 @@
 }
 .ui-state-error { border: 1px solid var(--color-danger); background: var(--color-danger-soft); color: var(--color-danger); }
 
-/* Skeleton */
+/* Скелетон */
 .skeleton { display: grid; gap: var(--space-3); }
 .skeleton-line {
   height: 16px;
@@ -139,7 +139,7 @@
 }
 @keyframes ui-pulse { 50% { opacity: 0.5; } }
 
-/* Page header */
+/* Заголовок страницы */
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-6); }
 .page-header-text { display: grid; gap: var(--space-1); }
 .page-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }

@@ -20,7 +20,7 @@ func TestReadJSON(t *testing.T) {
 		name    string
 		body    string
 		limit   int64
-		wantErr string // substring of the Russian message; "" = success
+		wantErr string // подстрока русского сообщения; "" — успех
 	}{
 		{"valid", `{"text":"хочу отгул","count":2}`, 0, ""},
 		{"trailing whitespace ok", `{"text":"a"}` + "\n\t ", 0, ""},

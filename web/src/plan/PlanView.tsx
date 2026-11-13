@@ -15,9 +15,9 @@ import { GoalsSection } from './GoalsSection'
 import './plan.css'
 
 interface Props {
-  /** intern whose plan a mentor or lead is viewing; omitted for the caller's own plan */
+  /** стажёр, план которого смотрит наставник или руководитель; не передаётся для собственного плана вызывающего */
   userId?: string
-  /** mentor and lead may edit goals of the intern (CL-01 step 4, CL-06) */
+  /** наставник и руководитель могут редактировать цели стажёра (CL-01 шаг 4, CL-06) */
   canEditGoals?: boolean
 }
 
@@ -29,8 +29,9 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
   const plan = useQuery({ queryKey: key, queryFn: () => getPlan(userId) })
   const readOnly = Boolean(userId)
 
-  // optimistic: the checkbox flips at once (R76 < 1 s), the server answer or a rollback follows
-  // a mentor-confirmed task asked as done shows «waiting» at once (organizers 12.13); the server decides the same
+  // оптимистично: галочка переключается сразу (R76 < 1 с), затем приходит ответ сервера или откат. Задача с
+  // подтверждением наставника, отмеченная выполненной, сразу показывает «ждёт» (организаторы 12.13); сервер решает так
+  // же
   const toggle = useMutation({
     mutationFn: ({ id, status }: { id: string; status: EditableStatus | 'waiting_approval' }) =>
       updateTaskStatus(id, status === 'waiting_approval' ? 'done' : status),
@@ -45,7 +46,7 @@ export function PlanView({ userId, canEditGoals = false }: Props) {
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: key }),
   })
-  // the mentor or the lead confirms a task the intern marked (or returns it to work)
+  // наставник или руководитель подтверждает задачу, которую отметил стажёр (или возвращает её в работу)
   const review = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'done' | 'in_progress' }) => updateTaskStatus(id, status),
     onSettled: () => {

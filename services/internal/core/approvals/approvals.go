@@ -1,7 +1,7 @@
-// Package approvals serves the lead's approval queue (S3 step 8, S4): GET /api/approvals lists the requests waiting
-// for the caller (approvals.list_pending) and POST /api/approvals/{approval_id}/decision decides one
-// (approvals.decide). The button press is the confirmation, so core signs the write itself (key = Idempotency-Key)
-// and then updates the requester's action, linked plan task and notifications (R66).
+// Пакет approvals обслуживает очередь согласований руководителя (S3 шаг 8, S4): GET /api/approvals отдаёт заявки,
+// ожидающие вызывающего (approvals.list_pending), а POST /api/approvals/{approval_id}/decision решает одну
+// (approvals.decide). Нажатие кнопки и есть подтверждение, поэтому ядро само подписывает запись (key =
+// Idempotency-Key), а затем обновляет действие заявителя, связанную задачу плана и уведомления (R66).
 package approvals
 
 import (
@@ -25,18 +25,18 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// MCP is the part of *mcpclient.Client used here.
+// MCP — часть *mcpclient.Client, которая здесь используется.
 type MCP interface {
 	ListPendingApprovals(ctx context.Context, userToken string) ([]mcpclient.Approval, error)
 	DecideApproval(ctx context.Context, userToken, approvalID, decision, comment, key string) (mcpclient.Approval, error)
 }
 
-// Emitter records analytics events; *analytics.Emitter implements it.
+// Emitter пишет аналитические события; реализован в *analytics.Emitter.
 type Emitter interface {
 	Emit(ctx context.Context, q analytics.DBTX, ev analytics.Event) error
 }
 
-// Approval is the openapi Approval.
+// Approval — это openapi Approval.
 type Approval struct {
 	ID                   string  `json:"id"`
 	Kind                 string  `json:"kind"`
@@ -44,13 +44,13 @@ type Approval struct {
 	Summary              string  `json:"summary"`
 	Status               string  `json:"status"`
 	Comment              *string `json:"comment"`
-	Stage                string  `json:"stage"` // lead | hr_admin (absence: the HR admin decides after the lead)
+	Stage                string  `json:"stage"` // lead | hr_admin (отсутствие: HR-администратор решает после руководителя)
 	CreatedAt            string  `json:"created_at"`
-	// TeamAbsent: teammates away on the same days (feedback 12.13)
+	// TeamAbsent: коллеги, отсутствующие в те же дни (отзыв 12.13)
 	TeamAbsent []string `json:"team_absent,omitempty"`
 }
 
-// Handler serves the approval endpoints.
+// Handler обслуживает эндпоинты согласований.
 type Handler struct {
 	pool    *pgxpool.Pool
 	mcp     MCP
@@ -59,7 +59,7 @@ type Handler struct {
 	log     *slog.Logger
 }
 
-// New returns the approvals HTTP handler; emitter and log may be nil.
+// New возвращает HTTP-обработчик согласований; emitter и log могут быть nil.
 func New(pool *pgxpool.Pool, mcp MCP, acts *actions.Service, emitter Emitter, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -67,7 +67,7 @@ func New(pool *pgxpool.Pool, mcp MCP, acts *actions.Service, emitter Emitter, lo
 	return &Handler{pool: pool, mcp: mcp, actions: acts, emitter: emitter, log: log}
 }
 
-// Register adds GET /api/approvals and POST /api/approvals/{approval_id}/decision (behind authn.Middleware).
+// Register добавляет GET /api/approvals и POST /api/approvals/{approval_id}/decision (за authn.Middleware).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/approvals", h.list)
 	mux.HandleFunc("POST /api/approvals/{approval_id}/decision", h.decide)
@@ -78,8 +78,8 @@ var (
 	approvalIDRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 )
 
-// lead returns the caller when it is a lead or the HR admin (second stage of an absence) with a token; other roles get
-// forbidden (R71). Which items a caller may decide is checked by the approvals service (approver_id).
+// lead возвращает вызывающего, если это руководитель или HR-администратор (второй этап отсутствия) с токеном; остальным
+// ролям — forbidden (R71). Какие пункты вызывающий может решать, проверяет сервис согласований (approver_id).
 func lead(w http.ResponseWriter, r *http.Request) (authn.Claims, string, bool) {
 	c, ok := authn.FromContext(r.Context())
 	token, tok := authn.TokenFromContext(r.Context())
@@ -152,7 +152,7 @@ func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteJSON(w, err)
 		return
 	}
-	// The decision is recorded by the approvals service; mirror it in core even if the client has gone away.
+	// Решение записано сервисом согласований; отражаем его в ядре, даже если клиент уже ушёл.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
 	defer cancel()
 	if err := h.apply(ctx, c, res); err != nil {
@@ -167,15 +167,15 @@ func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// apply updates the requester's action and plan task and notifies them, in one transaction. Requests that were
-// not made through the chat have no action in core and are skipped.
+// apply обновляет действие и задачу плана заявителя и уведомляет его в одной транзакции. Заявки, созданные не через
+// чат, не имеют действия в ядре и пропускаются.
 func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Approval) error {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	// Only the requester's action whose request names the deciding lead as approver (R71).
+	// Только действие заявителя, в заявке которого согласующим указан решающий руководитель (R71).
 	a, changed, err := h.actions.ApplyDecision(ctx, tx, res.Kind, res.RefID, res.Status,
 		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub, Stage: res.Stage})
 	switch {
@@ -200,7 +200,7 @@ func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Appro
 	return nil
 }
 
-// toAPI maps an MCP approval onto the openapi shape, filling the requester's name from core when MCP omits it.
+// toAPI переводит согласование из MCP в форму openapi и подставляет имя заявителя из ядра, если MCP его не прислал.
 func (h *Handler) toAPI(ctx context.Context, it mcpclient.Approval) (Approval, error) {
 	stage := it.Stage
 	if stage == "" {

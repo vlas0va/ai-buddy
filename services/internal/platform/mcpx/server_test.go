@@ -37,7 +37,7 @@ func TestCall_SuccessCarriesCallerFromJWT_R71(t *testing.T) {
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatal(err)
 	}
-	// Claims arrive in the handler via req.Extra.TokenInfo (Caller) and via the request context.
+	// Claims приходят в обработчик через req.Extra.TokenInfo (Caller) и через контекст запроса.
 	if got["text"] != "intern.anna|intern|delivery|2026-11-02|token=true|ctx=intern.anna" || got["doc_id"] != "absence-policy-delivery" {
 		t.Fatalf("got %v", got)
 	}
@@ -53,7 +53,7 @@ func TestCall_RoleAllowList_R71(t *testing.T) {
 	if err != nil || terr == nil || terr.Code != apierr.CodeForbidden {
 		t.Fatalf("intern decide: err %v tool err %v", err, terr)
 	}
-	// Not listed for the intern, listed for the lead.
+	// Для стажёра не показывается, для руководителя показывается.
 	list, err := session(t, ts.URL+"/mcp/approvals", intern).ListTools(context.Background(), nil)
 	if err != nil || len(list.Tools) != 0 {
 		t.Fatalf("intern tools/list: %v %v", list, err)
@@ -78,7 +78,7 @@ func TestCall_InputValidation_R71(t *testing.T) {
 		name string
 		tool string
 		args any
-		want string // substring of the message
+		want string // подстрока сообщения
 	}{
 		{"unknown field employee_id", "create_request", confirmed(t, "intern.anna", foreign), "employee_id"},
 		{"enum", "validate_request", map[string]any{"type": "sick_leave", "start_date": "2026-11-14", "end_date": "2026-11-14"}, "Некорректные аргументы"},
@@ -155,7 +155,7 @@ func TestCall_WriteConfirmation_R71_R79(t *testing.T) {
 	if writes.n() != 0 {
 		t.Fatalf("handler ran %d times for rejected writes", writes.n())
 	}
-	// A valid token passes, and a retry with the same key and token passes too: the mock replays (R79).
+	// Корректный токен проходит, и повтор с тем же ключом и токеном тоже проходит: мок воспроизводит результат (R79).
 	for i := 0; i < 2; i++ {
 		out, terr, err := client.Call(context.Background(), anna, "absence", "create_request", with(valid, proposalID, createArgs()))
 		if err != nil || terr != nil || !strings.Contains(string(out), `"id":"ABS-000001"`) {

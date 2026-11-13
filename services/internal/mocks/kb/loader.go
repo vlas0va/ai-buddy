@@ -33,7 +33,7 @@ type frontmatter struct {
 	} `yaml:"acl"`
 	ChecklistItemID string    `yaml:"checklist_item_id"`
 	URL             string    `yaml:"url"`
-	Updated         yaml.Node `yaml:"updated"` // any scalar; only a YYYY-MM-DD date is used
+	Updated         yaml.Node `yaml:"updated"` // любой скаляр; используется только дата YYYY-MM-DD
 }
 
 type document struct {
@@ -42,11 +42,12 @@ type document struct {
 	updated *time.Time
 }
 
-// LoadDir upserts every *.md file of dir (except README.md) into kb.documents (kind doc, no owner) and returns how
-// many were loaded. Files need YAML frontmatter with doc_id, title, source_type: test (R69) and acl {roles, teams};
-// checklist_item_id is optional; other frontmatter fields (checklist, tags, updated, origin, ...) are ignored, except
-// that a valid YYYY-MM-DD `updated` becomes the document date. Any invalid file fails the whole load with an error
-// naming it, and nothing is written. Other files are ignored. A missing dir returns 0 and no error.
+// LoadDir вставляет или обновляет каждый файл *.md из dir (кроме README.md) в kb.documents (kind doc, без владельца) и
+// возвращает, сколько загружено. Файлам нужен YAML-frontmatter с doc_id, title, source_type: test (R69) и acl {roles,
+// teams}; checklist_item_id необязателен; другие поля frontmatter (checklist, tags, updated, origin, ...) игнорируются,
+// только корректный `updated` в формате YYYY-MM-DD становится датой документа. Любой некорректный файл валит всю
+// загрузку с ошибкой, в которой он назван, и ничего не записывается. Другие файлы игнорируются. Отсутствующий dir
+// возвращает 0 без ошибки.
 func LoadDir(ctx context.Context, pool *pgxpool.Pool, dir string) (int, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {

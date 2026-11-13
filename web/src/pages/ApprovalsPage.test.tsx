@@ -37,14 +37,14 @@ describe('S3 step 8: manager approvals page', () => {
     const card = await screen.findByLabelText('Заявка: Анна Соколова')
     expect(within(card).getByText('Отсутствие')).toBeInTheDocument()
     expect(within(card).getByText(/^Отгул \d{2}\.\d{2}\.\d{4}$/)).toBeInTheDocument()
-    expect(decisionCalls).toHaveLength(0) // nothing is decided without a click
+    expect(decisionCalls).toHaveLength(0) // без клика ничего не решается
 
     await userEvent.type(within(card).getByLabelText('Комментарий для Анна Соколова'), 'Хорошего отдыха')
     await userEvent.click(within(card).getByRole('button', { name: 'Согласовать' }))
 
     expect(await screen.findByText('Заявок на согласование нет.')).toBeInTheDocument()
     expect(decisionCalls[0]).toMatchObject({ id: action.id, body: { decision: 'approved', comment: 'Хорошего отдыха' } })
-    // checkpoint 11.11: the lead's approval passes the request to the HR admin
+    // чекпоинт 11.11: согласование руководителя передаёт заявку HR-администратору
     expect(state.actions.get('intern.anna')![0]!.status).toBe('pending_hr')
     expect(state.extraTasks.get('intern.anna')![0]!.status).toBe('waiting_approval')
     leadView.unmount()
@@ -134,7 +134,7 @@ describe('S3 step 8: manager approvals page', () => {
     signInAs('lead.maria')
     mountWithClient(<ApprovalsPage />)
     const approve = await screen.findByRole('button', { name: 'Согласовать' })
-    action.status = 'rejected' // decided elsewhere while the page was open
+    action.status = 'rejected' // решено в другом месте, пока страница была открыта
     await userEvent.click(approve)
     expect(await screen.findByText('По этой заявке уже принято решение.')).toBeInTheDocument()
   })

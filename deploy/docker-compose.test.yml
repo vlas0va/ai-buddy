@@ -1,4 +1,4 @@
-# Disposable Postgres for Go tests (scripts/test-db.sh). Data lives in tmpfs and disappears on `down`.
+# Одноразовый Postgres для Go-тестов (scripts/test-db.sh). Данные живут в tmpfs и исчезают при `down`.
 name: aibuddy-test
 
 services:

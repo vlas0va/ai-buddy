@@ -1,10 +1,10 @@
-"""Train the intent classifier: python -m training.train_intents
+"""Обучить классификатор намерений: python -m training.train_intents
 
-Writes agent/models/intent_nb.json and eval/reports/intents.md with:
-  * 5-fold cross-validation on eval/intents/train.yaml (logistic regression vs naive Bayes baseline),
-  * accuracy on the held-out eval/intents/test.yaml for the classifier alone and for the full router
-    (guardrails + rules + classifier), which is what runs in production.
-Runs in seconds on any laptop. Extend the dataset (or augment it with training/augment_with_llm.py) and retrain.
+Пишет agent/models/intent_nb.json и eval/reports/intents.md с:
+  * 5-кратной кросс-валидацией на eval/intents/train.yaml (логистическая регрессия против наивного Байеса),
+  * точностью на отложенном eval/intents/test.yaml для одного классификатора и для полного маршрутизатора
+    (ограничения + правила + классификатор) — именно он работает в продакшене.
+Работает за секунды на любом ноутбуке. Расширьте набор (или дополните через training/augment_with_llm.py) и переобучите.
 """
 
 from __future__ import annotations

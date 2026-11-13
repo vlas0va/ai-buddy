@@ -1,5 +1,7 @@
-"""Answer writers for S2. StubWriter is extractive and deterministic; LLMWriter streams a grounded answer from any
-OpenAI-compatible model and may call READ tools of the user's role. Both receive the same ACL-filtered documents."""
+"""Авторы ответов для S2. StubWriter извлекает текст и детерминирован; LLMWriter потоком выдаёт обоснованный ответ от любой
+OpenAI-совместимой модели и может вызывать инструменты ЧТЕНИЯ роли пользователя. Оба получают одни и те же документы,
+отфильтрованные по ACL.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +20,7 @@ from .openai_compat import OpenAICompatClient
 
 log = logging.getLogger("agent.llm")
 
-# «В базе знаний я этого не нашёл» while a document covers the question: a small local model sometimes gives up
+# «В базе знаний я этого не нашёл», хотя документ отвечает на вопрос: маленькая локальная модель иногда сдаётся
 NOT_FOUND = re.compile(r"не\s+нашёл|не\s+нашел|нет\s+(информации|конкретн|данных)|не\s+содерж|не\s+указан", re.I)
 STRONG_COVERAGE = 0.75
 
@@ -56,7 +58,7 @@ class StubWriter:
         meta: dict[str, Any] | None = None,
     ) -> Iterator[str]:
         top = hits[0]
-        if str(top.get("doc_id", "")).startswith("faq-"):  # a mentor's answer added to the KB (feedback 12.13)
+        if str(top.get("doc_id", "")).startswith("faq-"):  # ответ наставника, добавленный в базу знаний (отзыв 12.13)
             yield f"Наставник уже отвечал на такой вопрос:\n\n{top['snippet'].strip()}"
             if task_hint:
                 yield f"\n\n{task_hint}"
@@ -69,12 +71,15 @@ class StubWriter:
 
 
 class LLMWriter:
-    """The model writes the answer; the stub takes over whenever the model is not ready or fails (A-Vibe by default for
-    the expert: Ollama downloads it in the background on the first start, so the first answers come from the stub)."""
+    """Ответ пишет модель; stub подхватывает, когда модель не готова или сбоит (для эксперта по умолчанию A-Vibe: Ollama
+    скачивает её в фоне при первом запуске, поэтому первые ответы приходят от stub).
+    """
 
-    PROBE_EVERY_S = 15.0  # how often to ask the server whether the model is there while it is not
-    COOLDOWN_S = 30.0  # after the server failed: answer with the stub at once for a while
-    SLOW_COOLDOWN_S = 300.0  # after a timeout (e.g. no GPU): the model is too slow for a chat, retry in 5 minutes
+    PROBE_EVERY_S = 15.0  # как часто спрашивать сервер, появилась ли модель, пока её нет
+    COOLDOWN_S = 30.0  # после сбоя сервера: какое-то время сразу отвечать stub
+    SLOW_COOLDOWN_S = (
+        300.0  # после таймаута (например, нет GPU): модель слишком медленная для чата, повтор через 5 минут
+    )
 
     def __init__(
         self,
@@ -91,7 +96,7 @@ class LLMWriter:
         self._ready = False
         self._checked_at = -1e9
         self._down_until = -1e9
-        self.state = "unknown"  # unknown | ready | loading | down | slow — shown in /readyz
+        self.state = "unknown"  # unknown | ready | loading | down | slow — показывается в /readyz
         llm = config.llm
         self.tool_calling = str(llm.get("tool_calling", "false")).lower() in ("1", "true", "yes", "on")
         self.max_iter = int(llm.get("max_tool_iterations", 3))
@@ -106,8 +111,8 @@ class LLMWriter:
     ) -> list[dict[str, Any]]:
         open_tasks = [t.title for t in user.tasks if t.status != "done"]
         system = self.config.prompt_text("system").replace("{user_block}", user_block(user, open_tasks))
-        # the paragraph that answers (picked by the question and the user's office) first, then the whole document;
-        # no doc ids: the chat shows the sources as chips, the model must not print ids
+        # сначала абзац, который отвечает (выбран по вопросу и офису пользователя), затем весь документ; без id
+        # документов: чат показывает источники чипами, модель не должна печатать id
         docs = "\n\n".join(
             f'<doc title="{h["title"]}">\nГлавное по вопросу:\n{h["snippet"]}\n\nВесь документ:\n{h.get("body") or h["snippet"]}\n</doc>'
             for h in hits
@@ -136,7 +141,7 @@ class LLMWriter:
                 },
             }
             for t in self.config.tools_for_role(user.role)
-        ]  # READ tools of the role only, never write tools
+        ]  # только инструменты ЧТЕНИЯ роли, никогда инструменты записи
 
     def answer(
         self,
@@ -165,7 +170,7 @@ class LLMWriter:
             strong = bool(hits) and float(hits[0].get("coverage", 0) or 0) >= STRONG_COVERAGE
             stream = self.client.stream(msgs)
             head = ""
-            for chunk in stream:  # hold the first sentence: a «not found» over a strong document is replaced
+            for chunk in stream:  # придержать первое предложение: «не нашёл» при сильном документе заменяется
                 head += chunk
                 if len(head) >= 120 or any(p in head for p in ".!?\n"):
                     break
@@ -178,7 +183,7 @@ class LLMWriter:
             yield head
             yield from stream
         except LLMError as exc:
-            # the reason goes to the log, so «упрощённый режим» can be diagnosed (model name, address, timeout)
+            # причина уходит в лог, чтобы «упрощённый режим» можно было разобрать (имя модели, адрес, таймаут)
             log.warning(
                 "LLM failed, answering with the stub: %s (url=%s model=%s)", exc, self.client.url, self.client.model
             )
@@ -225,7 +230,9 @@ class LLMWriter:
                 name = str(fn.get("name", "")).replace("__", ".")
                 try:
                     args = json.loads(fn.get("arguments") or "{}")
-                    result: Any = gateway.read(name, **args)  # gateway enforces role allowlist and read-only
+                    result: Any = gateway.read(
+                        name, **args
+                    )  # gateway проверяет белый список ролей и режим только чтения
                 except (ToolError, json.JSONDecodeError, TypeError) as exc:
                     result = {"error": str(exc)}
                 msgs.append(

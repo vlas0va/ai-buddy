@@ -14,7 +14,7 @@ interface Props {
   goals: Goal[]
   editable: boolean
   planKey: readonly unknown[]
-  /** the intern may write down the goals agreed with the lead (they wait for approval) */
+  /** стажёр может записать цели, согласованные с руководителем (они ждут утверждения) */
   canPropose?: boolean
 }
 
@@ -32,9 +32,9 @@ const clean = (list: GoalInput[]) =>
     .map((g) => ({ title: g.title.trim(), ...(g.criteria?.trim() ? { criteria: g.criteria.trim() } : {}), ...(g.status ? { status: g.status } : {}) }))
 
 /**
- * Adaptation goals (CL-01 step 4, CL-06; organizers 12.11): in the first week the intern and the lead agree on the goals
- * and the criteria of success; the intern can write them down, the mentor or the lead approves them and follows them
- * (in work → achieved / missed).
+ * Цели адаптации (CL-01 шаг 4, CL-06; организаторы 12.11): в первую неделю стажёр и руководитель договариваются о целях
+ * и критериях успеха; стажёр может их записать, наставник или руководитель утверждает их и отслеживает (в работе →
+ * достигнута / не достигнута).
  */
 export function GoalsSection({ internId, goals, editable, planKey, canPropose = false }: Props) {
   const qc = useQueryClient()

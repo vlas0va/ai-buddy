@@ -11,17 +11,17 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-// Producer sends one message to Kafka and returns when it is acknowledged. Tests use a fake.
+// Producer отправляет одно сообщение в Kafka и возвращается после подтверждения. В тестах используется подделка.
 type Producer interface {
 	Produce(ctx context.Context, topic, key string, value []byte) error
 }
 
-// DefaultInterval is how often Publisher.Run drains the outbox.
+// DefaultInterval — как часто Publisher.Run выгружает outbox.
 const DefaultInterval = 2 * time.Second
 
 const drainBatch = 200
 
-// Publisher moves core.outbox rows to Kafka in id order and stamps published_at.
+// Publisher переносит строки core.outbox в Kafka в порядке id и проставляет published_at.
 type Publisher struct {
 	pool     *pgxpool.Pool
 	prod     Producer
@@ -29,7 +29,7 @@ type Publisher struct {
 	Interval time.Duration
 }
 
-// NewPublisher returns a Publisher draining every DefaultInterval.
+// NewPublisher возвращает Publisher, выгружающий раз в DefaultInterval.
 func NewPublisher(pool *pgxpool.Pool, prod Producer, log *slog.Logger) *Publisher {
 	if log == nil {
 		log = slog.Default()
@@ -37,7 +37,7 @@ func NewPublisher(pool *pgxpool.Pool, prod Producer, log *slog.Logger) *Publishe
 	return &Publisher{pool: pool, prod: prod, log: log, Interval: DefaultInterval}
 }
 
-// Run drains the outbox every Interval until ctx is cancelled. Errors are logged and retried on the next tick.
+// Run выгружает outbox раз в Interval, пока ctx не отменён. Ошибки логируются и повторяются на следующем тике.
 func (p *Publisher) Run(ctx context.Context) {
 	interval := p.Interval
 	if interval <= 0 {
@@ -57,8 +57,8 @@ func (p *Publisher) Run(ctx context.Context) {
 	}
 }
 
-// DrainOnce publishes up to one batch of unpublished rows in id order. It stops at the first producer error (order
-// is kept) after stamping the rows already sent, and returns the number published.
+// DrainOnce публикует до одной пачки неопубликованных строк в порядке id. Останавливается на первой ошибке продюсера
+// (порядок сохраняется), предварительно отметив уже отправленные строки, и возвращает число опубликованных.
 func (p *Publisher) DrainOnce(ctx context.Context) (int, error) {
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
@@ -112,13 +112,13 @@ func (p *Publisher) DrainOnce(ctx context.Context) (int, error) {
 	return len(sent), nil
 }
 
-// KafkaProducer is the franz-go implementation of Producer.
+// KafkaProducer — реализация Producer на franz-go.
 type KafkaProducer struct {
 	cl      *kgo.Client
 	timeout time.Duration
 }
 
-// NewKafkaProducer connects lazily to the seed brokers (host:port).
+// NewKafkaProducer лениво подключается к seed-брокерам (host:port).
 func NewKafkaProducer(brokers []string) (*KafkaProducer, error) {
 	if len(brokers) == 0 {
 		return nil, errors.New("analytics: no kafka brokers")
@@ -130,7 +130,7 @@ func NewKafkaProducer(brokers []string) (*KafkaProducer, error) {
 	return &KafkaProducer{cl: cl, timeout: 10 * time.Second}, nil
 }
 
-// Produce sends the message synchronously.
+// Produce отправляет сообщение синхронно.
 func (k *KafkaProducer) Produce(ctx context.Context, topic, key string, value []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, k.timeout)
 	defer cancel()
@@ -138,5 +138,5 @@ func (k *KafkaProducer) Produce(ctx context.Context, topic, key string, value []
 	return res.FirstErr()
 }
 
-// Close releases the client.
+// Close освобождает клиента.
 func (k *KafkaProducer) Close() { k.cl.Close() }

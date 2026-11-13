@@ -8,7 +8,7 @@
 .plan-timeline li { padding: 6px 12px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 700; background: var(--color-neutral-soft); color: var(--color-text-muted); }
 .plan-timeline li.is-past { background: var(--color-success-soft); color: var(--color-success); }
 .plan-timeline li.is-current { background: var(--color-accent); color: #fff; }
-/* .plan-next shares the filled next-step card style in chat.css */
+/* .plan-next использует тот же стиль заполненной карточки следующего шага, что в chat.css */
 .plan-period-title { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-lg); margin: 0; }
 .plan-task { display: grid; gap: var(--space-2); }
 .plan-task-main { display: flex; align-items: flex-start; gap: var(--space-3); }
@@ -30,19 +30,19 @@
 .plan-goal-edit { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-2); align-items: center; }
 @media (max-width: 767px) { .plan-goal-edit { grid-template-columns: 1fr; } }
 
-/* team */
+/* команда */
 .team-row { display: grid; grid-template-columns: 1fr auto; gap: var(--space-3); align-items: center; text-decoration: none; color: inherit; }
 .team-row:hover { border-color: var(--color-accent); }
 .team-meta { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-text-muted); }
 
-/* escalations */
+/* обращения */
 .esc-card { display: grid; gap: var(--space-2); }
 .esc-head { display: flex; justify-content: space-between; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .esc-text { white-space: pre-wrap; margin: 0; }
 .esc-answer { white-space: pre-wrap; margin: 0; padding: var(--space-3) 14px; border-radius: 14px; background: var(--color-success-soft); }
 .esc-kb { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 
-/* notifications */
+/* уведомления */
 .notif { position: relative; }
 .notif-btn { position: relative; width: 100%; display: flex; align-items: center; gap: var(--space-3); padding: 12px 14px; border: 0; border-radius: 14px; background: none; font: inherit; font-weight: 600; font-size: 15px; color: #3d3d3d; cursor: pointer; text-align: left; }
 .notif-btn svg { flex: none; }
@@ -55,7 +55,7 @@
 .notif-item button { justify-self: start; border: 0; background: none; padding: 0; color: var(--color-accent); font-size: var(--text-xs); cursor: pointer; }
 .team-hint { margin-top: var(--space-4); }
 
-/* Internship report (idea 12.11) */
+/* Отчёт за стажировку (идея 12.11) */
 .page-links { display: flex; gap: 16px; flex-wrap: wrap; }
 .report { display: grid; gap: 16px; max-width: 920px; }
 .report-card h3 { margin: 0 0 12px; }
@@ -74,14 +74,14 @@
 .report-saved-main { margin: 0 0 6px; font-size: 16px; }
 .report-saved-main strong { font-size: 22px; color: var(--color-accent-ink, #004a99); }
 
-/* goals with status (organizers 12.11) */
+/* цели со статусом (организаторы 12.11) */
 .plan-goal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .plan-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 
 .esc-scope { display: grid; gap: 4px; margin: 4px 0 0 26px; font-size: 14px; }
 .esc-scope label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 
-/* «Польза buddy» panel (idea 13.11) */
+/* панель «Польза buddy» (идея 13.11) */
 .ui-card.buddy-benefit { margin-bottom: 16px; background: var(--color-accent-soft, #e8f2ff); box-shadow: inset 4px 0 0 var(--avito-blue), var(--shadow-sm); }
 .buddy-benefit h3 { margin: 0 0 12px; }
 .buddy-benefit-head { display: flex; flex-wrap: wrap; gap: 12px 32px; margin-bottom: 10px; }

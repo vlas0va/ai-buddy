@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
 
-// jsdom does not implement scrollTo; the router calls it on navigation
+// jsdom не реализует scrollTo; роутер вызывает его при навигации
 window.scrollTo = () => {}
 
 afterEach(() => {
@@ -12,6 +12,6 @@ afterEach(() => {
   try {
     localStorage.clear()
   } catch {
-    /* storage unavailable */
+    /* хранилище недоступно */
   }
 })

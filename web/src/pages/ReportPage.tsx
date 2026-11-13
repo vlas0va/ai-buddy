@@ -5,7 +5,7 @@ import { listInterns } from '@/api/plan'
 import { PageHeader } from '@/components/PageHeader'
 import { ReportView } from '@/plan/ReportView'
 
-/** Internship report of an intern for the mentor and the lead of the team (idea 12.11; not shown to the intern). */
+/** Отчёт за стажировку для наставника и руководителя команды (идея 12.11; стажёру не показывается). */
 export function ReportPage({ internId }: { internId: string }) {
   const interns = useQuery({ queryKey: keys.interns, queryFn: listInterns })
   const name = interns.data?.find((i) => i.user_id === internId)?.display_name ?? 'стажёра'

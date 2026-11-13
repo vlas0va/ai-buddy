@@ -1,4 +1,4 @@
-"""Intent model training and routing quality (ADR-008)."""
+"""Обучение модели намерений и качество маршрутизации (ADR-008)."""
 
 from __future__ import annotations
 
@@ -72,5 +72,5 @@ def test_NLU_05_augmentation_with_llm_drops_test_collisions(tmp_path):
     out = tmp_path / "aug.yaml"
     assert augment_with_llm.main(["--per-intent", "2", "--out", str(out)], client=client) == 0
     text = out.read_text(encoding="utf-8")
-    assert "мне бы отгул в среду" in text and "что по плану" not in text  # held-out phrase dropped
+    assert "мне бы отгул в среду" in text and "что по плану" not in text  # отложенная фраза отброшена
     assert "новая фраза" in text

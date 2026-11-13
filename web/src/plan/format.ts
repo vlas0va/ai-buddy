@@ -2,7 +2,7 @@ import type { Plan, Task } from '@/api/schemas'
 
 export const PERIOD_ORDER = ['week_1', 'week_2', 'month_1', 'month_2', 'after_3_months'] as const
 
-/** 2026-11-13 → «13.11» (dates are calendar dates, no time zone shift). */
+/** 2026-11-13 → «13.11» (даты календарные, без сдвига часового пояса). */
 export function shortDate(iso?: string | null): string {
   if (!iso) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
@@ -22,7 +22,10 @@ export function progress(plan: Plan): { done: number; total: number; overdue: nu
   }
 }
 
-/** Applies a status to a task or subtask in a plan copy (optimistic update). Parent follows its subtasks like core does. */
+/**
+ * Применяет статус к задаче или подзадаче в копии плана (оптимистичное обновление). Родитель следует за подзадачами,
+ * как в ядре.
+ */
 export function withTaskStatus(plan: Plan, taskId: string, status: Task['status']): Plan {
   const apply = (t: Task): Task => {
     if (t.id === taskId) {
@@ -40,11 +43,13 @@ export function withTaskStatus(plan: Plan, taskId: string, status: Task['status'
 
 export function canToggle(t: Task): boolean {
   if (t.source !== 'checklist') return false
-  if (t.confirm === 'quiz') return t.status === 'done' // done by the mini-check; can be reopened
-  return t.status !== 'waiting_approval' || t.confirm === 'mentor' // the intern may take the request back
+  if (t.confirm === 'quiz') return t.status === 'done' // выполнено мини-проверкой; можно переоткрыть
+  return t.status !== 'waiting_approval' || t.confirm === 'mentor' // стажёр может забрать запрос
 }
 
-/** The status the intern's click asks for: a mentor-confirmed task waits for the mentor (organizers 12.13). */
+/**
+ * Статус, который запрашивает клик стажёра: задача с подтверждением наставника ждёт наставника (организаторы 12.13).
+ */
 export function nextStatus(t: Task): 'in_progress' | 'done' | 'waiting_approval' {
   if (t.status === 'done' || t.status === 'waiting_approval') return 'in_progress'
   return t.confirm === 'mentor' ? 'waiting_approval' : 'done'
@@ -55,8 +60,8 @@ export const CONFIRM_HINT: Record<string, string> = {
   mentor: 'выполнение подтверждает наставник',
 }
 
-/** QA 12.11: a task made by a request (an absence, an access) asks for its status, not «how to do it» again */
-/** Access tasks of the checklist: organizers 12.11 — the checklist has direct links to the request forms. */
+/** QA 12.11: задача, созданная заявкой (отсутствие, доступ), спрашивает о статусе, а не снова «как это сделать» */
+/** Задачи чек-листа про доступы: организаторы 12.11 — в чек-листе прямые ссылки на формы заявок. */
 const ACCESS_ITEMS = new Set(['CL-05'])
 
 export function askText(t: Pick<Task, 'source' | 'title'> & { checklist_item_id?: string | null; confirm?: Task['confirm'] }): string {

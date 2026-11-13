@@ -1,8 +1,8 @@
-"""Files attached to a chat message: logs, configs and code (text read in the browser), screenshots and documents
-(metadata only). Spec: openspec/specs/attachments-websearch/spec.md (AT-xx).
+"""Файлы, приложенные к сообщению чата: логи, конфиги и код (текст, прочитанный в браузере), скриншоты и документы (только
+метаданные). Спецификация: openspec/specs/attachments-websearch/spec.md (AT-xx).
 
-Secrets in attached text are masked before anything else sees it. Screenshots are not recognised in the prototype —
-buddy asks for the error text instead of guessing. Documents are never read: buddy says where to upload them.
+Секреты в приложенном тексте маскируются раньше, чем его увидит что-либо ещё. Скриншоты в прототипе не распознаются —
+buddy просит текст ошибки, а не гадает. Документы никогда не читаются: buddy говорит, куда их загрузить.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from .common import Turn, say
 LOG_EXT = re.compile(r"\.(log|out|err|trace)$", re.IGNORECASE)
 CONFIG_EXT = re.compile(r"(\.(env|ya?ml|json|toml|ini|properties|conf|cfg)$|^\.env|^dockerfile$)", re.IGNORECASE)
 CODE_EXT = re.compile(r"\.(py|go|ts|tsx|js|jsx|java|kt|sql|sh|rb|cs|cpp|c|h|swift|php)$", re.IGNORECASE)
-MAX_TEXT = 16000  # characters of attached text taken into one turn
+MAX_TEXT = 16000  # символов приложенного текста, которые берутся в один ход
 
 
 def classify(att: dict[str, Any]) -> str:
@@ -46,7 +46,7 @@ def describe(atts: list[dict[str, Any]]) -> str:
 def handle(
     turn: Turn, text: str, atts: list[dict[str, Any]], route_text: Callable[[str], Iterator[Event]]
 ) -> Iterator[Event]:
-    """Answer a message with attachments; `route_text` runs the usual routing for a (masked) text."""
+    """Ответить на сообщение с вложениями; `route_text` выполняет обычную маршрутизацию для (замаскированного) текста."""
     yield status("thinking", "Смотрю вложения")
     kinds = {i: classify(a) for i, a in enumerate(atts)}
     texts = {
@@ -70,7 +70,7 @@ def handle(
         yield from handle_code_review(turn, text or "проверь мой код")
         return
     docs = by("document")
-    if docs:  # metadata only: an absence request carries them (checkpoint 11.11), nothing reads the file
+    if docs:  # только метаданные: их несёт заявка на отсутствие (чекпоинт 11.11), файл никто не читает
         turn.meta["documents"] = [
             {"name": atts[i].get("name"), "mime": atts[i].get("mime"), "size": atts[i].get("size")} for i in docs
         ]

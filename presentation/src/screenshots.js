@@ -7,7 +7,7 @@ const W = 'http://127.0.0.1:5173';
   const login = async (p, u) => { await p.goto(W + '/login'); await p.getByLabel('Логин').fill(u); await p.getByLabel('Пароль', { exact: true }).fill('demo'); await p.getByRole('button', { name: 'Войти' }).click(); await p.waitForURL('**/chat'); };
   const ask = async (p, t) => { const i = p.getByLabel('Сообщение'); await i.fill(t); await i.press('Enter'); await p.waitForTimeout(300); await p.getByLabel('Сообщение').waitFor(); await p.waitForFunction(() => !document.querySelector('textarea[aria-label="Сообщение"]')?.disabled, null, { timeout: 30000 }); await p.waitForTimeout(400); };
   const fresh = async (p) => { await p.getByRole('button', { name: 'Новый диалог' }).click(); await p.waitForTimeout(300); };
-  // pick a Thursday 2-3 weeks ahead for the demo
+  // для демо берём четверг через 2-3 недели
   const d = new Date(); d.setDate(d.getDate() + 15); while (d.getDay() !== 4) d.setDate(d.getDate() + 1);
   const day = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
 

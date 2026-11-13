@@ -14,7 +14,7 @@ type vector struct {
 	SHA256    string `json:"sha256"`
 }
 
-// Golden vectors are produced by Python (testdata/gen_vectors.py) so the agent and Go agree byte for byte.
+// Эталонные векторы собраны на Python (testdata/gen_vectors.py), чтобы агент и Go совпадали байт в байт.
 func TestMarshal_PythonGoldenVectors_R71(t *testing.T) {
 	raw, err := os.ReadFile("testdata/vectors.json")
 	if err != nil {
@@ -90,8 +90,8 @@ func TestMarshal_GoValues(t *testing.T) {
 	}
 }
 
-// Canonical form of a value equals the canonical form of its encoding/json text, so a struct hashed in core
-// and the raw arguments hashed by an MCP server agree (R79 idempotency relies on stable hashes).
+// Каноническая форма значения равна канонической форме его текста из encoding/json, поэтому структура, захешированная в
+// ядре, и «сырые» аргументы, захешированные MCP-сервером, совпадают (идемпотентность R79 опирается на стабильные хеши).
 func TestMarshal_ValueAndTextAgree_R79(t *testing.T) {
 	values := []any{
 		draftArgs{"day_off", "2026-11-14", "2026-11-15", "Семейные дела"},

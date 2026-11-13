@@ -1,8 +1,8 @@
-// Package notify stores per-user notifications (AI-cron reminders, status changes, escalation answers; R54) and serves
-// GET /api/notifications and POST /api/notifications/{id}/read.
+// Пакет notify хранит уведомления пользователей (напоминания AI-cron, смена статусов, ответы на обращения; R54) и
+// обслуживает GET /api/notifications и POST /api/notifications/{id}/read.
 //
-// Other packages create notifications with Store.Create, passing either a pool or a pgx.Tx (anything with
-// Exec/Query/QueryRow), so a notification can be written in the same transaction as the change that caused it.
+// Другие пакеты создают уведомления через Store.Create, передавая пул или pgx.Tx (всё, у чего есть
+// Exec/Query/QueryRow), поэтому уведомление можно записать в той же транзакции, что и вызвавшее его изменение.
 package notify
 
 import (
@@ -22,14 +22,14 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// DBTX is the subset of pgxpool.Pool and pgx.Tx used here.
+// DBTX — подмножество pgxpool.Pool и pgx.Tx, которое здесь используется.
 type DBTX interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// Notification kinds (openapi Notification.kind).
+// Виды уведомлений (openapi Notification.kind).
 const (
 	KindReminder         = "reminder"
 	KindOverdue          = "overdue"
@@ -37,30 +37,31 @@ const (
 	KindEscalationAnswer = "escalation_answer"
 )
 
-// ErrInvalid is returned by Create for a notification that cannot be stored (empty user or title, unknown kind).
+// ErrInvalid возвращает Create для уведомления, которое нельзя сохранить (пустой пользователь или заголовок,
+// неизвестный вид).
 var ErrInvalid = errors.New("notify: invalid notification")
 
-// Notification is the input of Store.Create. Empty Body, ChecklistItemID and DedupeKey are stored as NULL.
+// Notification — вход Store.Create. Пустые Body, ChecklistItemID и DedupeKey сохраняются как NULL.
 type Notification struct {
 	UserID          string
 	Kind            string
 	Title           string
 	Body            string
 	ChecklistItemID string
-	// DedupeKey makes the notification unique per (UserID, DedupeKey): a second Create with the same pair is a no-op.
+	// DedupeKey делает уведомление уникальным по (UserID, DedupeKey): второй Create с той же парой ничего не делает.
 	DedupeKey string
 }
 
-// Store writes notifications. The zero value is ready to use.
+// Store пишет уведомления. Нулевое значение готово к использованию.
 type Store struct{}
 
-// Create inserts n through q. A repeated (UserID, DedupeKey) is silently ignored (ON CONFLICT DO NOTHING).
+// Create вставляет n через q. Повтор (UserID, DedupeKey) молча игнорируется (ON CONFLICT DO NOTHING).
 func (s Store) Create(ctx context.Context, q DBTX, n Notification) error {
 	_, err := s.CreateIfNew(ctx, q, n)
 	return err
 }
 
-// CreateIfNew is Create that also reports whether a row was inserted (false = dedupe hit).
+// CreateIfNew — это Create, который ещё и сообщает, вставлена ли строка (false — сработала дедупликация).
 func (Store) CreateIfNew(ctx context.Context, q DBTX, n Notification) (bool, error) {
 	switch n.Kind {
 	case KindReminder, KindOverdue, KindStatusChange, KindEscalationAnswer:
@@ -79,13 +80,13 @@ func (Store) CreateIfNew(ctx context.Context, q DBTX, n Notification) (bool, err
 	return tag.RowsAffected() == 1, nil
 }
 
-// Handler serves the notification endpoints.
+// Handler обслуживает эндпоинты уведомлений.
 type Handler struct {
 	pool *pgxpool.Pool
 	log  *slog.Logger
 }
 
-// New returns the notification HTTP handler.
+// New возвращает HTTP-обработчик уведомлений.
 func New(pool *pgxpool.Pool, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -93,7 +94,7 @@ func New(pool *pgxpool.Pool, log *slog.Logger) *Handler {
 	return &Handler{pool: pool, log: log}
 }
 
-// Register adds GET /api/notifications and POST /api/notifications/{notification_id}/read (auth required).
+// Register добавляет GET /api/notifications и POST /api/notifications/{notification_id}/read (нужна авторизация).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/notifications", h.list)
 	mux.HandleFunc("POST /api/notifications/{notification_id}/read", h.markRead)
@@ -143,7 +144,8 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 
 var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// markRead marks an own notification as read (idempotent). Foreign or unknown ids answer 403 so existence is not revealed.
+// markRead помечает своё уведомление прочитанным (идемпотентно). Чужие или неизвестные id отвечают 403, чтобы не
+// раскрывать существование.
 func (h *Handler) markRead(w http.ResponseWriter, r *http.Request) {
 	c, ok := authn.FromContext(r.Context())
 	if !ok {

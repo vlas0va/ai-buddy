@@ -18,7 +18,7 @@ func TestGoals_InternProposesLeadApprovesAndTracks_Organizers1211(t *testing.T) 
 	if len(got) != 1 || got[0]["status"] != "proposed" || got[0]["created_by"] != "intern.anna" {
 		t.Fatalf("proposed: %v", got)
 	}
-	// the mentor and the lead of the team are told; the other team is not
+	// наставнику и руководителю команды сообщается; другой команде нет
 	if n := e.count(`SELECT count(*) FROM core.notifications WHERE user_id IN ('mentor.oleg','lead.maria') AND title LIKE 'Цели на стажировку ждут согласования: Анна Котова'`); n != 2 {
 		t.Fatalf("notifications: %d", n)
 	}
@@ -34,7 +34,7 @@ func TestGoals_InternProposesLeadApprovesAndTracks_Organizers1211(t *testing.T) 
 		t.Fatalf("report: %v", rep)
 	}
 
-	// the lead approves it, later marks it achieved
+	// руководитель утверждает, позже отмечает как достигнутую
 	code, b = e.do(maria, "PUT", "/api/plan/goals", `{"user_id":"intern.anna","goals":[{"title":"Выкатить первую задачу в прод","criteria":"PR влит, фича за флагом","status":"active"}]}`)
 	if code != 200 {
 		t.Fatalf("approve: %d %s", code, b)
@@ -48,7 +48,7 @@ func TestGoals_InternProposesLeadApprovesAndTracks_Organizers1211(t *testing.T) 
 		t.Fatalf("report after: %v", rep)
 	}
 
-	// rights and validation
+	// права и проверка ввода
 	for _, c := range []struct {
 		u    user
 		body string
@@ -84,11 +84,11 @@ func TestTasks_ConfirmModes_Organizers1213(t *testing.T) {
 		t.Fatalf("modes: %v", modes)
 	}
 
-	// a quiz task is not ticked by hand
+	// задачу с проверкой нельзя отметить вручную
 	if code, m := patch(anna, e.taskID("intern.anna", "intern", "CL-07"), "done"); code != 409 {
 		t.Fatalf("quiz task: %d %v", code, m)
 	}
-	// a mentor task: the intern asks, the mentor and the lead are told, the mentor confirms
+	// задача с подтверждением наставника: стажёр просит, наставнику и руководителю сообщается, наставник подтверждает
 	ivanTask := e.taskID("intern.ivan", "intern", "CL-03")
 	code, m := patch(ivan, ivanTask, "done")
 	if code != 200 || m["status"] != "waiting_approval" {
@@ -103,11 +103,11 @@ func TestTasks_ConfirmModes_Organizers1213(t *testing.T) {
 	if code, m := patch(sergey, ivanTask, "done"); code != 200 || m["status"] != "done" {
 		t.Fatalf("mentor confirms: %d %v", code, m)
 	}
-	// the mentor touches only tasks waiting for him
+	// наставник трогает только задачи, которые ждут его
 	if code, _ := patch(sergey, e.taskID("intern.ivan", "intern", "CL-05"), "done"); code != 403 {
 		t.Fatalf("self task by mentor: %d", code)
 	}
-	// the intern may take a request back while it waits; the lead may return it
+	// стажёр может забрать запрос, пока он ждёт; руководитель может вернуть его
 	annaTask := e.taskID("intern.anna", "intern", "CL-03")
 	e.exec(`UPDATE core.plan_tasks SET status = 'in_progress' WHERE id = $1`, annaTask)
 	if _, m := patch(anna, annaTask, "done"); m["status"] != "waiting_approval" {

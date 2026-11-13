@@ -11,7 +11,7 @@ describe('Organizers 12.13: who confirms a task', () => {
   it('a quiz task is not ticked by hand: «Проверить себя» starts the mini-check in the chat', () => {
     const t = task({ confirm: 'quiz' })
     expect(canToggle(t)).toBe(false)
-    expect(canToggle({ ...t, status: 'done' })).toBe(true) // can be reopened
+    expect(canToggle({ ...t, status: 'done' })).toBe(true) // можно переоткрыть
     expect(askLabel(t)).toBe('Проверить себя')
     expect(askText(t)).toBe('Проверь меня по задаче «Изучи документы команды»')
   })

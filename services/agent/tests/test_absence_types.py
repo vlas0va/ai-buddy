@@ -1,5 +1,6 @@
-"""Absence request as at Avito (checkpoint 11.11): types, documents, lead → HR admin, reschedule —
-openspec/specs/absence-request/spec.md (S3-13, S3-23 … S3-29)."""
+"""Заявка на отсутствие как в Авито (чекпоинт 11.11): виды, документы, руководитель → HR-администратор, перенос —
+openspec/specs/absence-request/spec.md (S3-13, S3-23 … S3-29).
+"""
 
 from __future__ import annotations
 
@@ -83,7 +84,7 @@ def test_S3_29_reschedule_until_hr_admin_approves(client, anna):
     moved = first(anna.confirm(p), "tool_result")
     assert moved["status"] == "pending_approval" and "перенос" in moved["summary"]
     assert r["external_id"] in text_of(lead.say("что ждёт моего согласования?"))
-    # the lead and the HR admin approve: the request can no longer be moved
+    # руководитель и HR-администратор согласовали: заявку больше нельзя перенести
     lead.confirm(first(lead.say(f"согласуй {r['external_id']}"), "action_proposal"))
     admin = client.login("hradmin.olga")
     admin.confirm(first(admin.say(f"согласуй {r['external_id']}"), "action_proposal"))
@@ -104,8 +105,9 @@ def test_S3_13_sick_leave_is_not_created(anna):
 
 
 def test_S3_30_calendar_bare_day_and_change_after_the_lead(client, anna):
-    """Feedback 12.11: a calendar under the explanation, «13» is a date, «хочу изменить отгул» moves the request even
-    after the lead approved it (until the HR admin approves)."""
+    """Отзыв 12.11: календарь под объяснением, «13» — это дата, «хочу изменить отгул» переносит заявку даже после
+    согласования руководителем (пока не согласовал HR-администратор).
+    """
     ev = anna.say("Как оформить отгул?")
     picker = first(ev, "date_picker")
     assert picker["purpose"] == "absence" and picker["min"] == "2026-11-10" and "не позже чем за 3" in text_of(ev)
@@ -122,33 +124,35 @@ def test_S3_30_calendar_bare_day_and_change_after_the_lead(client, anna):
 
 
 def test_S3_31_withdraw_absorb_and_plan_clash(client, anna):
-    """Feedback 12.13: a pending request can be withdrawn; a vacation over a pending day off replaces it in one step;
-    the calendar marks busy days; a plan task due in the absence is mentioned; problems read as sentences."""
+    """Отзыв 12.13: несогласованную заявку можно отозвать; отпуск поверх несогласованного отгула заменяет его за один шаг;
+    календарь отмечает занятые дни; упоминается задача плана со сроком в дни отсутствия; проблемы читаются как
+    предложения.
+    """
     day = first(anna.confirm(first(anna.say("отгул 24 ноября"), "action_proposal")), "tool_result")["external_id"]
-    # the calendar shows the request as busy
+    # календарь показывает заявку как занятые дни
     picker = first(anna.say("Как оформить отпуск?"), "date_picker")
     assert any(b["start"] == "2026-11-24" and day in b["label"] for b in picker["busy"])
-    # a vacation that covers the day off replaces it
+    # отпуск, накрывающий отгул, заменяет его
     ev = anna.say("отпуск с 23 ноября по 27 ноября")
     p = first(ev, "action_proposal")
     assert p["draft"]["args"]["replaces"] == day and "отменится сама" in text_of(ev)
     res = first(anna.confirm(p), "tool_result")
     assert res["result"]["replaced_id"] == day
-    # withdraw the vacation; a typo «оотгул» still means a day off
+    # отозвать отпуск; опечатка «оотгул» всё равно означает отгул
     ev = anna.say("отмени заявку на отпуск")
     c = first(ev, "action_proposal")
     assert c["kind"] == "absence_cancel" and c["draft"]["args"]["id"] == res["external_id"]
     done = first(anna.confirm(c), "tool_result")
     assert done["status"] == "cancelled" and "(отменена)" in done["summary"]
     assert "Не нашёл заявку" in text_of(anna.say("отменить заявку на оотгул"))
-    # two open day offs: buddy asks which one
+    # два открытых отгула: buddy спрашивает, какой
     for d in ("1 декабря", "3 декабря"):
         anna.confirm(first(anna.say(f"отгул {d}"), "action_proposal"))
     assert "Какую заявку отменить?" in text_of(anna.say("отмени отгул"))
 
 
 def test_S3_32_partial_overlap_moves_the_right_request(anna):
-    """Feedback 12.13: a partial overlap offers to move THAT request, with its own kind in the calendar title."""
+    """Отзыв 12.13: при частичном пересечении предлагается перенести ИМЕННО ту заявку, с её видом в заголовке календаря."""
     day = first(anna.confirm(first(anna.say("отгул с 24 по 25 ноября"), "action_proposal")), "tool_result")[
         "external_id"
     ]
@@ -158,11 +162,11 @@ def test_S3_32_partial_overlap_moves_the_right_request(anna):
     assert (
         picker["purpose"] == "reschedule" and picker["ref_id"] == day and picker["label"] == f"Новые даты: отгул {day}"
     )
-    assert ". " in text_of(ev).split("оформить не получится:")[1][:200]  # sentences, not «a; b»
+    assert ". " in text_of(ev).split("оформить не получится:")[1][:200]  # предложения, а не «a; b»
 
 
 def test_S3_33_lead_sees_teammates_away_on_the_same_days(client, anna):
-    """Feedback 12.13: in the lead's list an absence shows who else of the team is away on those days."""
+    """Отзыв 12.13: в списке руководителя у отсутствия видно, кто ещё из команды отсутствует в эти дни."""
     oleg = client.login("mentor.oleg")
     oleg.confirm(first(oleg.say("отгул 25 ноября"), "action_proposal"))
     anna.confirm(first(anna.say("отгул 25 ноября"), "action_proposal"))

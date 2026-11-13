@@ -30,7 +30,8 @@ const (
 	key2 = "22222222-2222-4222-8222-222222222222"
 )
 
-// fixtureDir holds the synthetic documents the search tests rely on; data/kb (owned by A) is checked separately.
+// fixtureDir содержит синтетические документы, на которые опираются тесты поиска; data/kb (владелец A) проверяется
+// отдельно.
 func fixtureDir(t *testing.T) string {
 	t.Helper()
 	dir, err := filepath.Abs("testdata/kb")
@@ -64,7 +65,7 @@ func newServer(t *testing.T, pool *pgxpool.Pool) *mcpx.Server {
 	return srv
 }
 
-// loaded returns a server over a fresh database with the test fixtures loaded.
+// loaded возвращает сервер поверх свежей базы с загруженными тестовыми документами.
 func loaded(t *testing.T) (*mcpx.Server, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.New(t)
@@ -147,11 +148,11 @@ func TestSearch_S2_ACL_R71(t *testing.T) {
 			}
 		}
 	}
-	// general docs (teams *) are visible to the other team
+	// общие документы (teams *) видны другой команде
 	if got := doSearch(t, srv, ivan, map[string]any{"query": "доступы Confluence Jira"}); !has(got, "access-guide") {
 		t.Fatalf("general doc must be visible: %v", ids(got))
 	}
-	// role ACL: hrbp is not in any doc's roles
+	// ACL по ролям: hrbp нет в ролях ни одного документа
 	if got := doSearch(t, srv, elena, map[string]any{"query": "доступы Confluence Jira"}); len(got) != 0 {
 		t.Fatalf("hrbp must see nothing: %v", ids(got))
 	}
@@ -213,7 +214,7 @@ func TestSearch_S2_KAndValidation_R79(t *testing.T) {
 			t.Fatalf("args %v: %v", args, aerr)
 		}
 	}
-	// a query of only stop words matches nothing but is not an error
+	// запрос только из стоп-слов ничего не находит, но это не ошибка
 	if got := doSearch(t, srv, anna, map[string]any{"query": "и в на"}); len(got) != 0 {
 		t.Fatalf("got %v", ids(got))
 	}
@@ -259,13 +260,13 @@ func addFAQResult(t *testing.T, srv *mcpx.Server, c mcpx.Caller, args map[string
 
 func TestAddFAQ_S2_Rights_R71(t *testing.T) {
 	srv, _ := loaded(t)
-	// only mentors; the role check runs before the handler
+	// только наставники; проверка роли выполняется до обработчика
 	for _, c := range []mcpx.Caller{anna, who("lead.maria", "lead", "delivery"), elena} {
 		if _, aerr := addFAQResult(t, srv, c, addArgs(t, c, key1, "Как оформить пропуск", "Через портал.")); aerr == nil || aerr.Code != apierr.CodeForbidden {
 			t.Fatalf("%s: got %v", c.Role, aerr)
 		}
 	}
-	// no / foreign confirmation token
+	// нет токена подтверждения / чужой токен
 	if _, aerr := addFAQResult(t, srv, oleg, map[string]any{"title": "Заголовок", "body": "Текст ответа", "idempotency_key": key1, "confirmation_token": "x.y"}); aerr == nil || aerr.Code != apierr.CodeInvalidConfirmation {
 		t.Fatalf("got %v", aerr)
 	}
@@ -320,16 +321,16 @@ func TestAddFAQ_S2_Idempotent_R79(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("want one faq, got %d", n)
 	}
-	// same key, different arguments -> conflict
+	// тот же ключ, другие аргументы -> conflict
 	if _, aerr := addFAQResult(t, srv, oleg, addArgs(t, oleg, key1, "Другой заголовок", "Другой текст")); aerr == nil || aerr.Code != apierr.CodeConflict {
 		t.Fatalf("got %v", aerr)
 	}
-	// same key and arguments from another mentor -> conflict, no leak
+	// тот же ключ и аргументы от другого наставника -> conflict, без утечки
 	other := who("mentor.sergey", "mentor", "search")
 	if _, aerr := addFAQResult(t, srv, other, addArgs(t, other, key1, "Пропуск в офис", "Заказать пропуск нужно через портал.")); aerr == nil || aerr.Code != apierr.CodeConflict {
 		t.Fatalf("got %v", aerr)
 	}
-	// a new key creates a new document
+	// новый ключ создаёт новый документ
 	if o, aerr := addFAQResult(t, srv, oleg, addArgs(t, oleg, key2, "Пропуск в офис", "Заказать пропуск нужно через портал.")); aerr != nil || o["doc_id"] == first["doc_id"] {
 		t.Fatalf("got %v %v", o, aerr)
 	}
@@ -376,7 +377,7 @@ func TestHTTP_S2_RoundTrip_R79(t *testing.T) {
 	}
 }
 
-// ---- loader ----
+// ---- загрузчик ----
 
 const goodDoc = `---
 doc_id: doc-one
@@ -424,7 +425,7 @@ func TestLoadDir_R69_Valid(t *testing.T) {
 	if title != "Первый документ" || item != "CL-04" || url != "https://portal.example.test/one" || kind != "doc" || updated.Format("2006-01-02") != "2026-10-01" {
 		t.Fatalf("stored %q %q %q %q %v", title, item, url, kind, updated)
 	}
-	// reload with changed text is an upsert
+	// перезагрузка с изменённым текстом — это upsert
 	if err := os.WriteFile(filepath.Join(dir, "one.md"), []byte(strings.Replace(goodDoc, "Первый документ", "Новое название", 1)), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +497,7 @@ func TestLoadDir_R69_EdgeCases(t *testing.T) {
 	if n, err := LoadDir(ctx, pool, crlf); n != 1 || err != nil {
 		t.Fatalf("CRLF/BOM: %d %v", n, err)
 	}
-	// a faq record must not be overwritten by a file with the same doc_id
+	// запись FAQ не должна перезаписываться файлом с тем же doc_id
 	if _, err := pool.Exec(ctx, `INSERT INTO kb.documents (doc_id, title, body, acl_roles, acl_teams, kind) VALUES ('faq-x', 't', 'b', ARRAY['intern'], ARRAY['*'], 'faq')`); err != nil {
 		t.Fatal(err)
 	}
@@ -510,8 +511,9 @@ func TestLoadDir_R69_EdgeCases(t *testing.T) {
 	}
 }
 
-// TestLoadDir_R69_ExtraFields loads frontmatter written like A's data/kb: flow-style acl, checklist_item_id: null,
-// fields the loader does not know (checklist, tags, origin) and an `updated` that is not a date. README.md is skipped.
+// TestLoadDir_R69_ExtraFields загружает frontmatter, написанный как в data/kb от A: acl в flow-стиле,
+// checklist_item_id: null, поля, неизвестные загрузчику (checklist, tags, origin), и `updated`, который не является
+// датой. README.md пропускается.
 func TestLoadDir_R69_ExtraFields(t *testing.T) {
 	pool := pgtest.New(t)
 	dir := writeFiles(t, map[string]string{
@@ -566,8 +568,9 @@ updated: на прошлой неделе
 	}
 }
 
-// TestLoadDir_R69_RealDataDir loads the knowledge base A ships in data/kb exactly as mcp-mocks does at startup:
-// every document must be valid, marked source_type test, and the document of absence.get_policy must exist.
+// TestLoadDir_R69_RealDataDir загружает базу знаний, которую A поставляет в data/kb, ровно как mcp-mocks при старте:
+// каждый документ должен быть корректным, помеченным source_type test, а документ для absence.get_policy должен
+// существовать.
 func TestLoadDir_R69_RealDataDir(t *testing.T) {
 	pool := pgtest.New(t)
 	n, err := LoadDir(context.Background(), pool, realKBDir(t))
@@ -592,7 +595,7 @@ func TestLoadDir_R69_RealDataDir(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT title FROM kb.documents WHERE doc_id='absence-policy'`).Scan(&title); err != nil {
 		t.Fatalf("absence-policy (used by absence.get_policy) must be in data/kb: %v", err)
 	}
-	// loading twice is idempotent
+	// повторная загрузка идемпотентна
 	if n2, err := LoadDir(context.Background(), pool, realKBDir(t)); err != nil || n2 != n {
 		t.Fatalf("reload: %d %v", n2, err)
 	}

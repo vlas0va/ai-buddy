@@ -1,4 +1,4 @@
-"""Flask app: HTTP API of the agent service (contracts/agent-stream.md)."""
+"""Flask-приложение: HTTP API сервиса агента (contracts/agent-stream.md)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,9 @@ log = logging.getLogger("agent")
 
 
 class Attachment(BaseModel):
-    """contracts/agent-stream.md turn.attachments: text files carry their text, images and documents metadata only."""
+    """contracts/agent-stream.md turn.attachments: у текстовых файлов передаётся текст, у картинок и документов — только
+    метаданные.
+    """
 
     name: str = Field(min_length=1, max_length=200)
     kind: Literal["text", "image", "document"]
@@ -124,7 +126,7 @@ def create_app(
             "kb_docs": len(agent.kb.docs) if agent.kb else 0,
             "intent_model": agent.router.model is not None,
             "provider": getattr(agent.writer, "name", "stub"),
-            # openai_compat: ready | loading (Ollama still downloads the model) | down | slow; the stub answers meanwhile
+            # openai_compat: ready | loading (Ollama ещё скачивает модель) | down | slow; пока что отвечает stub
             "llm_state": getattr(agent.writer, "state", "stub"),
             "llm_model": getattr(getattr(agent.writer, "client", None), "model", None),
         }
@@ -209,7 +211,8 @@ def create_app(
         user = _user()
         doc = agent.kb.get(doc_id, user.role, user.team_id) if agent.kb else None
         if doc is None:
-            # A mentor answer added to the KB lives in mcp-kb only: the source link under an answer must open it too.
+            # Ответ наставника, добавленный в базу знаний, живёт только в mcp-kb: ссылка на источник под ответом тоже
+            # должна его открывать.
             try:
                 d = agent.gateway(user).read("kb.get", doc_id=doc_id)
             except AgentError:

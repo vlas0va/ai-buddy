@@ -1,4 +1,4 @@
-"""Mentor and lead scenarios — openspec/specs/team-roles/spec.md."""
+"""Сценарии наставника и руководителя — openspec/specs/team-roles/spec.md."""
 
 from __future__ import annotations
 

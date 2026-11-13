@@ -1,4 +1,4 @@
-"""Canonical JSON, args hashing and confirmation tokens (contracts/agent-stream.md, section 4)."""
+"""Канонический JSON, хеширование аргументов и токены подтверждения (contracts/agent-stream.md, раздел 4)."""
 
 from __future__ import annotations
 
@@ -43,9 +43,10 @@ def create_confirmation_token(
     now: float | None = None,
     ttl_s: int = CONFIRMATION_TTL_S,
 ) -> str:
-    """Format of contracts/mcp-tools.md: base64url(json{sub,key,args_hash,exp}) + "." + base64url(HMAC-SHA256(secret, part1)).
+    """Формат из contracts/mcp-tools.md: base64url(json{sub,key,args_hash,exp}) + "." + base64url(HMAC-SHA256(secret,
+    part1)).
 
-    Core issues it on confirmation; the agent uses this helper only in dev mode and tests.
+    Ядро выпускает его при подтверждении; агент использует этот помощник только в режиме разработки и в тестах.
     """
     exp = int((now if now is not None else time.time()) + ttl_s)
     payload = {"sub": user_id, "key": proposal_id, "args_hash": hash_hex, "exp": exp}

@@ -115,7 +115,7 @@ function Body({ r }: { r: Report }) {
   )
 }
 
-/** Internship report of an intern (idea 12.11), for the mentor and the lead of the team. */
+/** Отчёт за стажировку (идея 12.11) для наставника и руководителя команды. */
 export function ReportView({ userId }: { userId: string }) {
   const q = useQuery({ queryKey: keys.report(userId), queryFn: () => getReport(userId) })
   return (

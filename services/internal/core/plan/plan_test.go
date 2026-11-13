@@ -176,14 +176,14 @@ func TestPlan_OverdueComputedOnRead_R19(t *testing.T) {
 	e := setup(t)
 	_, p := e.getPlan(anna, "")
 	it := items(p)
-	// CL-04 is stored in_progress but its due date (cohort start + 7 days) has passed.
+	// CL-04 сохранена как in_progress, но её срок (начало когорты + 7 дней) прошёл.
 	if it["CL-04"]["status"] != "overdue" || it["CL-05"]["status"] != "overdue" || it["CL-07"]["status"] != "in_progress" {
 		t.Fatalf("statuses: 04=%v 05=%v 07=%v", it["CL-04"]["status"], it["CL-05"]["status"], it["CL-07"]["status"])
 	}
 	if it["CL-05"]["due_at"] == nil || len(it["CL-05"]["due_at"].(string)) != 10 {
 		t.Fatalf("due_at format: %v", it["CL-05"]["due_at"])
 	}
-	// waiting_approval and done are never reported as overdue
+	// waiting_approval и done никогда не показываются просроченными
 	e.setItem("intern.anna", "intern", "CL-05", "waiting_approval")
 	e.setItem("intern.anna", "intern", "CL-04", "done")
 	_, p = e.getPlan(anna, "")
@@ -191,8 +191,8 @@ func TestPlan_OverdueComputedOnRead_R19(t *testing.T) {
 	if it["CL-05"]["status"] != "waiting_approval" || it["CL-04"]["status"] != "done" {
 		t.Fatalf("statuses: %v %v", it["CL-05"]["status"], it["CL-04"]["status"])
 	}
-	// the clock drives the rule: a month later CL-07 is overdue too
-	// 6 days, not 5: the seed counts from the database date, which may already be tomorrow near midnight UTC
+	// правило зависит от часов: через месяц просрочена и CL-07. 6 дней, а не 5: демо-данные считают от даты базы,
+	// которая около полуночи UTC может уже быть завтрашней
 	e.h.Now = func() time.Time { return time.Now().AddDate(0, 0, 6) }
 	_, p = e.getPlan(anna, "")
 	if items(p)["CL-07"]["status"] != "overdue" || p["current_period"] != "month_1" {
@@ -207,7 +207,7 @@ func TestPlan_S1_NextStepOverdueFirst_R20(t *testing.T) {
 		setup      []step
 		extraSQL   string
 		daysAhead  int
-		wantItem   string // "" = next_step must be null
+		wantItem   string // "" — next_step должен быть null
 		wantAction string
 		wantPrompt bool
 	}{
@@ -257,7 +257,7 @@ func TestPlan_S1_NextStepOverdueFirst_R20(t *testing.T) {
 
 func TestPlan_S1_NextStepDefaultActions_R20(t *testing.T) {
 	e := setup(t)
-	// late in the internship, a non-human item without a dedicated action falls back to ask_buddy with a prompt
+	// в конце стажировки пункт не для людей без своего действия откатывается к ask_buddy с подсказкой
 	e.h.Now = func() time.Time { return time.Now().AddDate(0, 0, 150) }
 	for _, it := range []string{"CL-03", "CL-04", "CL-05", "CL-07", "CL-08", "CL-09", "CL-10", "CL-14", "CL-15"} {
 		e.setItem("intern.anna", "intern", it, "done")
@@ -267,7 +267,7 @@ func TestPlan_S1_NextStepDefaultActions_R20(t *testing.T) {
 	if p["current_period"] != "after_3_months" || ns["action"] != "ask_buddy" || !strings.Contains(ns["prompt"].(string), "Экваторная встреча") {
 		t.Fatalf("CL-11 fallback: %v (period %v)", ns, p["current_period"])
 	}
-	// CL-10 has its own prompt
+	// у CL-10 своя подсказка
 	e.setItem("intern.anna", "intern", "CL-10", "not_started")
 	_, p = e.getPlan(anna, "")
 	ns = p["next_step"].(map[string]any)
@@ -298,14 +298,14 @@ func TestPlan_MentorViews_R08_R71(t *testing.T) {
 		t.Fatalf("period follows the intern: %v", p["current_period"])
 	}
 
-	// explicit intern_id of the own mentee works, foreign one is 403
+	// явный intern_id собственного подопечного работает, чужой — 403
 	if code, p := e.getPlan(oleg, "?intern_id=intern.anna"); code != 200 || p["intern_id"] != "intern.anna" {
 		t.Fatalf("intern_id: %d", code)
 	}
 	if code, _ := e.getPlan(oleg, "?intern_id=intern.ivan"); code != 403 {
 		t.Fatalf("foreign intern_id: %d", code)
 	}
-	// user_id: intern plan of the own team
+	// user_id: план стажёра своей команды
 	if code, p := e.getPlan(oleg, "?user_id=intern.anna"); code != 200 || p["plan_role"] != "intern" || p["user_id"] != "intern.anna" {
 		t.Fatalf("mentor user_id: %d %v", code, p)
 	}
@@ -314,7 +314,7 @@ func TestPlan_MentorViews_R08_R71(t *testing.T) {
 			t.Errorf("mentor %s: %d", q, code)
 		}
 	}
-	// a mentor without mentees
+	// наставник без подопечных
 	e.exec(`INSERT INTO core.users (id, display_name, role, team_id, password_hash) VALUES ('mentor.new','Новый','mentor','delivery','x')`)
 	if code, _ := e.getPlan(user{"mentor.new", "mentor", "delivery"}, ""); code != 404 {
 		t.Fatalf("mentor without plan: %d", code)
@@ -349,7 +349,7 @@ func TestPlan_ForeignInternForbidden_R71(t *testing.T) {
 			t.Errorf("%s: %d, want %d", c.name, code, c.want)
 		}
 	}
-	// the 403 body is the same for existing and unknown ids
+	// тело ответа 403 одинаково для существующих и неизвестных id
 	_, b1 := e.do(anna, "GET", "/api/plan?user_id=intern.ivan", "")
 	_, b2 := e.do(anna, "GET", "/api/plan?user_id=nobody", "")
 	if !bytes.Equal(b1, b2) {
@@ -368,7 +368,7 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 		_ = json.Unmarshal(b, &m)
 		return code, m
 	}
-	// CL-07 is confirmed by a quiz since 12.13; CL-08 (month 1, with steps) is ticked by the intern
+	// CL-07 с 12.13 подтверждается тестом; CL-08 (первый месяц, с шагами) стажёр отмечает сам
 	cl07 := e.taskID("intern.anna", "intern", "CL-08")
 	code, m := patch(anna, cl07, "done")
 	if code != 200 || m["status"] != "done" || m["id"] != cl07 {
@@ -380,7 +380,7 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='plan.task_done' AND user_id='intern.anna' AND props->>'checklist_item_id'='CL-08' AND props->>'on_time'='true' AND props->>'period'='month_1'`); n != 1 {
 		t.Fatalf("task_done on time: %d", n)
 	}
-	// repeated done does not emit a second event; reopening works
+	// повторный done не отправляет второе событие; переоткрытие работает
 	patch(anna, cl07, "done")
 	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='plan.task_done'`); n != 1 {
 		t.Fatalf("duplicate events: %d", n)
@@ -388,7 +388,7 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 	if code, m = patch(anna, cl07, "not_started"); code != 200 || m["status"] != "not_started" {
 		t.Fatalf("reopen: %d %v", code, m)
 	}
-	// late completion
+	// выполнено с опозданием
 	cl05 := e.taskID("intern.anna", "intern", "CL-05")
 	if code, m = patch(anna, cl05, "done"); code != 200 || m["status"] != "done" {
 		t.Fatalf("cl05: %d %v", code, m)
@@ -396,7 +396,8 @@ func TestPatchTask_Status_R20_R76(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE props->>'checklist_item_id'='CL-05' AND props->>'on_time'='false'`); n != 1 {
 		t.Fatalf("late task_done: %d", n)
 	}
-	// a past-due task set back to in_progress is still reported as overdue (rule applies on read)
+	// задача с прошедшим сроком, возвращённая в in_progress, всё равно показывается просроченной (правило применяется
+	// при чтении)
 	if code, m = patch(anna, cl05, "in_progress"); code != 200 || m["status"] != "overdue" {
 		t.Fatalf("in_progress while overdue: %d %v", code, m)
 	}
@@ -443,7 +444,7 @@ func TestPatchTask_Subtasks_R20(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM core.plan_tasks WHERE id=$1 AND status='in_progress'`, cl04); n != 1 {
 		t.Fatal("reopened subtask reopens the parent")
 	}
-	// marking a parent done completes its subtasks
+	// отметка родителя выполненным завершает его подзадачи
 	cl08 := e.taskID("intern.anna", "intern", "CL-08")
 	code, m = patch(anna, cl08, "done")
 	if code != 200 {
@@ -520,7 +521,7 @@ func TestPutGoals_MentorAndLead_R18_R71(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='plan.goals_set' AND props->>'by_role'='mentor' AND (props->>'count')::int=2`); n != 1 {
 		t.Fatalf("goals_set event: %d", n)
 	}
-	// visible in the intern's and the mentor's plan
+	// видно в плане стажёра и наставника
 	for _, u := range []user{anna, oleg} {
 		_, p := e.getPlan(u, "")
 		g := p["goals"].([]any)
@@ -528,7 +529,7 @@ func TestPutGoals_MentorAndLead_R18_R71(t *testing.T) {
 			t.Fatalf("%s sees goals %v", u.id, g)
 		}
 	}
-	// replace by the lead, then clear
+	// замена руководителем, затем очистка
 	code, b = put(maria, `{"user_id":"intern.anna","goals":[{"title":"Новая цель"}]}`)
 	_ = json.Unmarshal(b, &goals)
 	if code != 200 || len(goals) != 1 || goals[0]["created_by"] != "lead.maria" {
@@ -570,7 +571,7 @@ func TestPutGoals_MentorAndLead_R18_R71(t *testing.T) {
 			t.Errorf("%s: %d, want %d (%s)", c.name, code, c.want, b)
 		}
 	}
-	// a team intern without a plan
+	// стажёр команды без плана
 	e.exec(`INSERT INTO core.users (id, display_name, role, team_id, cohort_start, password_hash) VALUES ('intern.new','Новый','intern','delivery',current_date,'x')`)
 	if code, _ := put(oleg, `{"user_id":"intern.new","goals":[]}`); code != 404 {
 		t.Errorf("intern without plan: %d", code)
@@ -616,7 +617,7 @@ func TestTeamInterns_Progress_R08_R11(t *testing.T) {
 	if code, _ := list(user{}); code != 401 {
 		t.Errorf("anon: %d", code)
 	}
-	// a mentor without mentees gets an empty list, not null
+	// наставник без подопечных получает пустой список, а не null
 	e.exec(`INSERT INTO core.users (id, display_name, role, team_id, password_hash) VALUES ('mentor.new','Новый','mentor','delivery','x')`)
 	if code, b := e.do(user{"mentor.new", "mentor", "delivery"}, "GET", "/api/team/interns", ""); code != 200 || string(b) != "[]" {
 		t.Errorf("empty team: %d %s", code, b)

@@ -81,7 +81,7 @@ func TestFakeAgent_S3_MessageThenConfirmCallsMCP(t *testing.T) {
 		t.Fatal("request log")
 	}
 
-	// A token for other args is rejected by mcpx and surfaces as the tool error.
+	// Токен для других аргументов mcpx отклоняет, и это всплывает как ошибка инструмента.
 	bad, _ := confirm.Issue(hmacSecret, "intern.anna", p.ProposalID, strings.Repeat("0", 64), time.Minute)
 	evs, _ = events(t, c, tok, agentclient.TurnRequest{Turn: agentclient.Turn{Kind: "confirm", ProposalID: p.ProposalID, Draft: p.Draft, ConfirmationToken: bad}})
 	if names(evs) != "error" || !strings.Contains(string(evs[0].Data), string(apierr.CodeInvalidConfirmation)) {

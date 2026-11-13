@@ -10,9 +10,9 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Benefit is the «Польза buddy» panel of the team (idea 13.11): how many questions of the caller's interns buddy closed
-// without a person, the mentor's time that saved (an estimate, MinutesPerQuestion per question) and the interns' «Полезно» /
-// «Не полезно» marks on buddy's answers. Counters only — no message texts (R71) and no absences (R72).
+// Benefit — панель «Польза buddy» команды (идея 13.11): сколько вопросов стажёров вызывающего buddy закрыл без
+// человека, сколько времени наставника это сэкономило (оценка, MinutesPerQuestion на вопрос) и оценки стажёров
+// «Полезно» / «Не полезно» к ответам buddy. Только счётчики — без текстов сообщений (R71) и без отсутствий (R72).
 type Benefit struct {
 	Interns            int              `json:"interns"`
 	MinutesPerQuestion int              `json:"minutes_per_question"`
@@ -21,14 +21,14 @@ type Benefit struct {
 	Answered           int              `json:"answered"`
 	AddedToKB          int              `json:"added_to_kb"`
 	SelfServed         int              `json:"self_served"`
-	SelfServedPercent  int              `json:"self_served_percent"` // share of the questions closed by buddy, 0 without questions
+	SelfServedPercent  int              `json:"self_served_percent"` // доля вопросов, закрытых buddy; 0, если вопросов нет
 	SavedMinutes       int              `json:"saved_minutes"`
 	Useful             int              `json:"useful"`
 	NotUseful          int              `json:"not_useful"`
 	Rows               []BenefitInterns `json:"rows"`
 }
 
-// BenefitInterns is one intern's line of the panel.
+// BenefitInterns — строка панели по одному стажёру.
 type BenefitInterns struct {
 	UserID       string `json:"user_id"`
 	DisplayName  string `json:"display_name"`
@@ -52,8 +52,8 @@ const benefitSQL = `SELECT u.id, u.display_name,
 	WHERE u.role = 'intern' AND %s
 	ORDER BY u.display_name, u.id`
 
-// internScope is the SQL filter and its argument for the interns the caller looks after: a mentor — the interns of
-// their mentor plans, a lead — the interns of their team; any other role is forbidden.
+// internScope — SQL-фильтр и его аргумент для стажёров, которых ведёт вызывающий: наставник — стажёры его планов
+// наставника, руководитель — стажёры его команды; остальным ролям запрещено.
 func internScope(c authn.Claims) (string, any, error) {
 	switch c.Role {
 	case "mentor":
@@ -65,7 +65,7 @@ func internScope(c authn.Claims) (string, any, error) {
 	}
 }
 
-// TeamBenefit builds the panel for the caller (GET /api/team/benefit).
+// TeamBenefit собирает панель для вызывающего (GET /api/team/benefit).
 func TeamBenefit(ctx context.Context, q Querier, c authn.Claims) (Benefit, error) {
 	out := Benefit{MinutesPerQuestion: MinutesPerQuestion, Rows: []BenefitInterns{}}
 	scope, arg, err := internScope(c)
@@ -105,7 +105,7 @@ func TeamBenefit(ctx context.Context, q Querier, c authn.Claims) (Benefit, error
 	return out, nil
 }
 
-// teamBenefit: GET /api/team/benefit — the mentor and the lead see the panel of their interns; others get 403.
+// teamBenefit: GET /api/team/benefit — наставник и руководитель видят панель своих стажёров; остальные получают 403.
 func (h *Handler) teamBenefit(w http.ResponseWriter, r *http.Request) {
 	c, ok := claims(w, r)
 	if !ok {

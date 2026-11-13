@@ -1,4 +1,4 @@
-"""Per-session dialogue state and proposal registry: Redis when configured, memory otherwise."""
+"""Состояние диалога по сессиям и реестр черновиков: Redis, если настроен, иначе память."""
 
 from __future__ import annotations
 

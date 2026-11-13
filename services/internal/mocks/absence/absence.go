@@ -1,8 +1,8 @@
-// Package absence implements the mock "absence" MCP server: policy, validation and requests for a day off, vacation,
-// absence and parental leave (S3; checkpoint 11.11). The lead approves first, then the HR admin; until the HR admin
-// approves, the request can be moved to other dates.
-// Data is synthetic (R68). Identity comes only from the verified JWT (R71); a request is visible only to its author.
-// create_request writes the request and its approval item in one transaction and is idempotent by key (R66, R79).
+// Пакет absence реализует мок-сервер MCP «absence»: правила, проверку и заявки на отгул, отпуск, отсутствие и декрет
+// (S3; чекпоинт 11.11). Сначала согласует руководитель, затем HR-администратор; пока HR-администратор не согласовал,
+// заявку можно перенести на другие даты. Данные синтетические (R68). Личность берётся только из проверенного JWT (R71);
+// заявку видит только её автор. create_request записывает заявку и её пункт согласования в одной транзакции и
+// идемпотентна по ключу (R66, R79).
 package absence
 
 import (
@@ -21,29 +21,30 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// Rules per type (test rules of the prototype): the longest request in calendar days and the minimum notice in days.
+// Правила по видам (тестовые правила прототипа): самая длинная заявка в календарных днях и минимальный срок подачи в
+// днях.
 const (
-	maxDays         = 3  // day off
-	maxVacationDays = 28 // vacation
-	vacationNotice  = 14 // vacation: submitted at least two weeks ahead
-	maxAbsenceDays  = 5  // absence for personal reasons
+	maxDays         = 3  // отгул
+	maxVacationDays = 28 // отпуск
+	vacationNotice  = 14 // отпуск: подаётся не меньше чем за две недели
+	maxAbsenceDays  = 5  // отсутствие по личным причинам
 	maxDocuments    = 3
 	maxDocumentName = 200
 )
 
-// typeLabels name each type in summaries and messages.
+// typeLabels называют каждый вид в сводках и сообщениях.
 var typeLabels = map[string]string{"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
 
-// moscow is the business time zone for "tomorrow". Europe/Moscow is UTC+3 without DST since 2014; a fixed zone
-// avoids depending on tzdata in the container image.
+// moscow — рабочий часовой пояс для «завтра». Europe/Moscow — UTC+3 без перехода на летнее время с 2014 года;
+// фиксированная зона избавляет от зависимости от tzdata в образе контейнера.
 var moscow = time.FixedZone("MSK", 3*60*60)
 
-// Register binds every tool of the absence contract to srv.
+// Register привязывает каждый инструмент контракта absence к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	return register(srv, pool, time.Now)
 }
 
-// register is Register with an injectable clock (tests).
+// register — это Register с подменяемыми часами (для тестов).
 func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error {
 	if srv == nil || pool == nil || now == nil {
 		return errors.New("absence: server, pool and clock are required")
@@ -67,13 +68,13 @@ type service struct {
 	now  func() time.Time
 }
 
-// querier is satisfied by *pgxpool.Pool and pgx.Tx.
+// querier удовлетворяют *pgxpool.Pool и pgx.Tx.
 type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// request is one absence request as returned by the tools.
+// request — одна заявка на отсутствие в том виде, как её возвращают инструменты.
 type request struct {
 	ID                  string     `json:"id"`
 	Type                string     `json:"type"`
@@ -87,7 +88,7 @@ type request struct {
 	Documents           []document `json:"documents"`
 	Steps               []step     `json:"steps"`
 	Replayed            *bool      `json:"replayed,omitempty"`
-	// ReplacedID: a pending request inside the new dates that create_request cancelled (feedback 12.13)
+	// ReplacedID: несогласованная заявка внутри новых дат, которую отменил create_request (отзыв 12.13)
 	ReplacedID string `json:"replaced_id,omitempty"`
 
 	employeeID     string
@@ -96,15 +97,15 @@ type request struct {
 	cancelKey      string
 }
 
-// document is the metadata of a file attached to a request; its content never reaches the service.
+// document — метаданные файла, приложенного к заявке; его содержимое в сервис не попадает.
 type document struct {
 	Name string `json:"name"`
 	Mime string `json:"mime,omitempty"`
 	Size int64  `json:"size,omitempty"`
 }
 
-// step is one stage of a day off after it is created (organizers' Q&A 10.11): the lead approves, the HR admin registers
-// the approved day off in the HR system, the HR BP is notified.
+// step — один этап отгула после его создания (ответы организаторов 10.11): руководитель согласует, HR-администратор
+// оформляет согласованный отгул в HR-системе, HR BP получает уведомление.
 type step struct {
 	Role        string `json:"role"`
 	DisplayName string `json:"display_name,omitempty"`
@@ -146,8 +147,8 @@ func scanRequest(row pgx.CollectableRow) (request, error) {
 	return r, err
 }
 
-// steps derives the stages of a request from its status and timestamps: the lead decides (leadDecided), then the HR
-// admin decides (decided) and registers it, then the HR BP is notified.
+// steps выводит этапы заявки из её статуса и отметок времени: решает руководитель (leadDecided), затем решает
+// HR-администратор (decided) и оформляет её, затем уведомляется HR BP.
 func steps(status, lead, hrAdmin, hrbp string, leadDecided, decided, registered, notified *time.Time) []step {
 	at := func(t *time.Time) string {
 		if t == nil {
@@ -180,7 +181,7 @@ func steps(status, lead, hrAdmin, hrbp string, leadDecided, decided, registered,
 	return out
 }
 
-// findRequest returns the request matching where (a condition on alias r with parameter $1), or ok=false.
+// findRequest возвращает заявку, подходящую под where (условие на псевдоним r с параметром $1), или ok=false.
 func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) {
 	rows, err := q.Query(ctx, selectRequest+" WHERE "+where, arg)
 	if err != nil {
@@ -210,8 +211,8 @@ type policy struct {
 	URL        string `json:"url,omitempty"`
 }
 
-// getPolicy returns the team's test instruction (absence-policy-<team>) or the common one (absence-policy).
-// The KB ACL is applied as in kb.search, so a document the caller may not read is never returned (R71).
+// getPolicy возвращает тестовую инструкцию команды (absence-policy-<team>) или общую (absence-policy). ACL базы знаний
+// применяется как в kb.search, поэтому документ, который вызывающему читать нельзя, никогда не возвращается (R71).
 func (s *service) getPolicy(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	var p policy
 	err := s.pool.QueryRow(ctx, `
@@ -274,7 +275,7 @@ func (s *service) getRequest(ctx context.Context, c mcpx.Caller, args json.RawMe
 		return nil, err
 	}
 	if !ok || r.employeeID != c.Sub {
-		return nil, forbiddenRequest() // never reveal whether another user's request exists (R71)
+		return nil, forbiddenRequest() // никогда не раскрывать, существует ли заявка другого пользователя (R71)
 	}
 	return r, nil
 }
@@ -304,7 +305,7 @@ func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.
 	return s.validate(ctx, s.pool, c, in)
 }
 
-// validate checks the dates of a new request for c and finds the approver (the employee's lead).
+// validate проверяет даты новой заявки для c и находит согласующего (руководителя сотрудника).
 func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in dates) (validateOut, error) {
 	out := validateOut{Problems: []string{}}
 	start, errStart := time.Parse(time.DateOnly, in.StartDate)
@@ -353,7 +354,7 @@ WHERE e.id = $1`, c.Sub).Scan(&leadID, &leadName)
 	return out, nil
 }
 
-// typeProblems applies the rules of each type; a day off keeps its working-days rules (dateProblems).
+// typeProblems применяет правила каждого вида; у отгула остаются правила по рабочим дням (dateProblems).
 func typeProblems(kind string, start, end time.Time, docs int, now time.Time) []string {
 	y, m, d := now.In(moscow).Date()
 	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
@@ -397,8 +398,8 @@ func typeProblems(kind string, start, end time.Time, docs int, now time.Time) []
 	return problems
 }
 
-// dateProblems applies the day-off rules: start not before tomorrow (Moscow date of now), end not before start,
-// working days only, at most maxDays consecutive days.
+// dateProblems применяет правила отгула: начало не раньше завтра (московская дата now), конец не раньше начала, только
+// рабочие дни, не больше maxDays дней подряд.
 func dateProblems(start, end, now time.Time) []string {
 	var problems []string
 	y, m, d := now.In(moscow).Date()
@@ -433,8 +434,8 @@ func dateProblems(start, end, now time.Time) []string {
 	return problems
 }
 
-// overlapProblems reports the caller's pending or approved requests that intersect [start, end], except excludeID (the
-// request being moved).
+// overlapProblems сообщает о несогласованных или согласованных заявках вызывающего, пересекающих [start, end], кроме
+// excludeID (переносимой заявки).
 func overlapProblems(ctx context.Context, q querier, sub, start, end, excludeID string) ([]string, error) {
 	rows, err := q.Query(ctx, `
 SELECT id, start_date, end_date, status
@@ -469,11 +470,11 @@ type createIn struct {
 	dates
 	Comment        string `json:"comment"`
 	IdempotencyKey string `json:"idempotency_key"`
-	Replaces       string `json:"replaces"` // a pending request of the caller inside the new dates: cancelled in the same step
+	Replaces       string `json:"replaces"` // несогласованная заявка вызывающего внутри новых дат: отменяется тем же шагом
 }
 
-// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead)
-// and its approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+// createRequest повторно проверяет и в одной транзакции вставляет заявку (pending_approval, согласующий = руководитель)
+// и её пункт согласования. Тот же idempotency_key возвращает сохранённую заявку с replayed=true (R79).
 func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in createIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
@@ -484,7 +485,7 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
 		return nil, fmt.Errorf("begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	// Serialise the caller's writes: the replay lookup and the overlap check must see each other's commits.
+	// Сериализуем записи вызывающего: поиск повтора и проверка пересечений должны видеть коммиты друг друга.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil {
 		return nil, fmt.Errorf("lock employee: %w", err)
 	}
@@ -500,7 +501,7 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
 	}
 	d := in.dates
 	if in.Replaces != "" {
-		// feedback 12.13: a vacation or a parental leave that covers a pending day off replaces it
+		// отзыв 12.13: отпуск или декрет, накрывающий несогласованный отгул, заменяет его
 		old, ok, err := findRequest(ctx, tx, "r.id = $1", in.Replaces)
 		if err != nil {
 			return nil, err
@@ -535,7 +536,7 @@ INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, 
 VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid, $8)
 RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey, docs).Scan(&id)
 	if isUniqueViolation(err) {
-		return nil, keyConflict() // the key belongs to another employee's request
+		return nil, keyConflict() // ключ принадлежит заявке другого сотрудника
 	}
 	if err != nil {
 		return nil, fmt.Errorf("insert absence request: %w", err)
@@ -566,8 +567,8 @@ type cancelIn struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// cancelRequest withdraws the caller's request while the HR admin has not approved it (feedback 12.13): the request
-// becomes cancelled and its open approval items disappear from «Согласования». A repeated key returns it again.
+// cancelRequest отзывает заявку вызывающего, пока HR-администратор её не согласовал (отзыв 12.13): заявка становится
+// cancelled, а её открытые пункты согласования исчезают из «Согласований». Повтор ключа снова возвращает её.
 func (s *service) cancelRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in cancelIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
@@ -626,7 +627,7 @@ WHERE kind = 'absence_request' AND ref_id = $1 AND status = 'pending'`, id); err
 	return nil
 }
 
-// replay returns the stored request for a repeated key, or conflict when the key was used for other arguments.
+// replay возвращает сохранённую заявку при повторе ключа или conflict, если ключ использовался с другими аргументами.
 func replay(prev request, c mcpx.Caller, in createIn) (any, error) {
 	if prev.employeeID != c.Sub || prev.Type != in.Type || prev.StartDate != in.StartDate ||
 		prev.EndDate != in.EndDate || prev.Comment != in.Comment || len(prev.Documents) != len(in.Documents) {
@@ -653,9 +654,9 @@ type rescheduleIn struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// rescheduleRequest moves the caller's request to other dates while the HR admin has not approved it (checkpoint
-// 11.11). The approval starts again: open approval items are cancelled and the lead gets a new one. The same key
-// returns the moved request with replayed=true (R79).
+// rescheduleRequest переносит заявку вызывающего на другие даты, пока HR-администратор её не согласовал (чекпоинт
+// 11.11). Согласование начинается заново: открытые пункты согласования отменяются, руководитель получает новый. Тот же
+// ключ возвращает перенесённую заявку с replayed=true (R79).
 func (s *service) rescheduleRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in rescheduleIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {
@@ -737,12 +738,12 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
-// --- formatting ---
+// --- форматирование ---
 
-// ru formats a date as DD.MM.YYYY.
+// ru форматирует дату как DD.MM.YYYY.
 func ru(t time.Time) string { return t.Format("02.01.2006") }
 
-// period formats a date range: one date for a single day, otherwise "start–end".
+// period форматирует диапазон дат: одна дата для одного дня, иначе «начало–конец».
 func period(start, end time.Time) string {
 	if start.Equal(end) {
 		return ru(start)
@@ -750,7 +751,7 @@ func period(start, end time.Time) string {
 	return ru(start) + "–" + ru(end)
 }
 
-// plural picks the Russian plural form for n: 1 день, 2 дня, 5 дней.
+// plural выбирает русскую форму множественного числа для n: 1 день, 2 дня, 5 дней.
 func plural(n int, one, few, many string) string {
 	switch n10, n100 := n%10, n%100; {
 	case n10 == 1 && n100 != 11:

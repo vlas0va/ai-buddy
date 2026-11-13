@@ -1,7 +1,8 @@
-"""S4 «Доступы и каналы»: required accesses with statuses, request via access MCP (elevated → manager approval),
-team channels with advice. A request names a concrete resource (a Jira project, a Bitbucket repository, a database), the
-environment and the rights (checkpoint 11.11). Spec: openspec/specs/access-and-channels/spec.md (S4-01 … S4-17).
-Tool shapes: contracts/schemas/access.json."""
+"""S4 «Доступы и каналы»: обязательные доступы со статусами, заявка через access MCP (повышенные права → согласование
+руководителя), каналы команды с советом. Заявка называет конкретный ресурс (проект Jira, репозиторий Bitbucket, базу
+данных), окружение и права (чекпоинт 11.11). Спецификация: openspec/specs/access-and-channels/spec.md (S4-01 … S4-17).
+Формы инструментов: contracts/schemas/access.json.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ KIND_SYNONYMS = {
     "repo": ["репозитор", "репо ", "код"],
     "database": ["бд", "базе данных", "база данных", "базу данных", "database", "postgres", "постгрес"],
 }
-LEVELS = [  # order matters: «редактирование» is write, «полные права» is admin
+LEVELS = [  # порядок важен: «редактирование» — это запись, «полные права» — администрирование
     ("admin", re.compile(r"админ|admin|полн\w*\s+(права|доступ)|владел")),
     ("write", re.compile(r"запис|write|редакт|измен|пуш|push|мерж|merge|коммит")),
     ("read", re.compile(r"чтени|read|просмотр|смотреть|только\s+чита")),
@@ -103,8 +104,8 @@ def _mentions_other_team(text: str, own_team: str) -> bool:
     return any(rx.search(t) for team, rx in TEAM_NAMES.items() if team != own_team) and not (own and own.search(t))
 
 
-# Organizers 12.11: a request names the project, the level of rights and a justification; before asking for an access the
-# intern may check with the mentor whether it is needed at all.
+# Организаторы 12.11: заявка называет проект, уровень прав и обоснование; прежде чем просить доступ, стажёр может
+# уточнить у наставника, нужен ли он вообще.
 REASON = re.compile(
     r"(?:обосновани\w*|причин\w*|зачем)\s*[:—–-]?\s*(.+)$|[,—–-]\s*(?:потому\s+что|так\s+как|нужно?\s+для|для\s+задач\w*)\s+(.+)$",
     re.I,
@@ -123,7 +124,9 @@ def parse_reason(text: str) -> str:
 
 
 def needs_approval(r: dict[str, Any], env: str, level: str) -> bool:
-    """= the access service: elevated resources, write/admin rights and prod go to the lead (checkpoint 11.11)."""
+    """= сервис доступов: ресурсы с повышенными правами, права на запись и администрирование и prod уходят руководителю
+    (чекпоинт 11.11).
+    """
     return bool(r["elevated"]) or level != "read" or env == "prod"
 
 
@@ -269,7 +272,7 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         who = "согласование: " + (r.get("approver_label") or "руководитель") if r["elevated"] else "чтение — сразу"
         rows.append(f"| {r['name']} | {envs} | {levels} | {st} | {who} |")
         if r["status"] == "not_requested" and not r.get("optional"):
-            missing.append(r)  # elevated ones too: the chat shows one list with checkboxes (feedback 12.11)
+            missing.append(r)  # с повышенными правами тоже: чат показывает один список с галочками (отзыв 12.11)
     intro = "Для работы в команде нужны такие доступы:" if turn.user.role == "intern" else "Доступы команды:"
     table = "| Ресурс | Окружения | Права | Статус | Кто согласует |\n|---|---|---|---|---|\n" + "\n".join(rows)
     rules = (
@@ -298,7 +301,7 @@ def handle_channels(turn: Turn, text: str) -> Iterator[Event]:
         return
     mentor = turn.contact("mentor")
     who = f" ({person_name(mentor)})" if mentor else ""
-    # checkpoint 11.11: asking for chats is done in a personal message, not through buddy — advice only, no draft
+    # чекпоинт 11.11: о добавлении в чаты просят в личном сообщении, а не через buddy — только совет, без черновика
     yield from say(
         "\n\nОткрытые каналы найди по названию в мессенджере и вступи сам. В закрытые добавляет наставник"
         f"{who} — напиши ему в личные сообщения, какие каналы нужны."

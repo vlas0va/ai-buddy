@@ -11,7 +11,7 @@ import { createAppRouter } from '@/router'
 import { useChatStore } from '@/store/chat'
 import { signInAs } from '@/test/mockWorld'
 
-// S3 end to end on the mock server: intern creates -> lead approves -> intern sees "Согласовано".
+// S3 от начала до конца на мок-сервере: стажёр создаёт -> руководитель согласует -> стажёр видит «Согласовано».
 const server = setupServer(...handlers)
 beforeAll(() => server.listen())
 afterAll(() => server.close())

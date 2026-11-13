@@ -1,4 +1,4 @@
-"""MCP over streamable HTTP and the OpenAI-compatible provider, tested with httpx.MockTransport (no network)."""
+"""MCP поверх streamable HTTP и OpenAI-совместимый провайдер, протестированы через httpx.MockTransport (без сети)."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def test_MCP_11_handshake_token_forwarding_and_results():
     assert s.call("absence.get_policy", {}, "TOKEN") == {"doc_id": "d"}
     assert s.call("x.plain", {}, "TOKEN") == "not json"
     assert calls[0][0] == "initialize" and all(c[1] == "Bearer TOKEN" for c in calls)
-    assert calls[2][2] == "sess-1"  # session id sent after the handshake
+    assert calls[2][2] == "sess-1"  # id сессии отправляется после рукопожатия
 
 
 @pytest.mark.parametrize(
@@ -84,7 +84,7 @@ def test_MCP_13_http_failures_and_session_reinit():
     ok = {"t": {"structuredContent": {"ok": True}}, "e": {"isError": True, "content": [{"type": "text", "text": "{}"}]}}
     s = McpHttpServer("x", "http://mcp/mcp", client=httpx.Client(transport=mcp_transport(ok, calls, [404, 200])))
     assert s.call("x.t", {}, "T") == {"ok": True}
-    assert [c[0] for c in calls].count("initialize") == 2  # re-handshake after 404
+    assert [c[0] for c in calls].count("initialize") == 2  # повторное рукопожатие после 404
     with pytest.raises(ToolValidationError):
         s.call("x.e", {}, "T")
     for code, exc in ((401, ToolDenied), (503, ToolError)):
@@ -147,16 +147,18 @@ def test_MCP_14_agent_uses_http_backend_when_url_set(monkeypatch):
     s = c.login("intern.anna")
     ev = s.say("как проходит код-ревью")
     ids = [x["doc_id"] for x in first(ev, "sources")["items"]]
-    assert ids == ["delivery-code-review"]  # agent-side ACL re-check drops the mentor-only doc (defense in depth)
+    assert ids == [
+        "delivery-code-review"
+    ]  # перепроверка ACL на стороне агента отбрасывает документ только для наставников (эшелонированная защита)
     assert any(cl[0] == "tools/call" for cl in calls)
 
 
-# --------------------------------------------------------------------------- LLM provider
+# --------------------------------------------------------------------------- провайдер LLM
 def llm_transport(stream_chunks=None, complete_msgs=None, status: int = 200):  # noqa: ANN001, ANN201
     complete_msgs = list(complete_msgs or [])
 
     def handler(req: httpx.Request) -> httpx.Response:
-        if req.method == "GET":  # GET /models: this server cannot tell, so the model counts as ready
+        if req.method == "GET":  # GET /models: этот сервер не может сказать, поэтому модель считается готовой
             return httpx.Response(404, text="no such route")
         body = json.loads(req.content)
         if status != 200:
@@ -180,8 +182,9 @@ def test_LLM_01_stream_and_complete():
 
 
 def test_LLM_05_avibe_reasoning_is_never_shown():
-    """A-Vibe (Qwen3) may answer with <think>…</think>: the block is cut out, also when a tag is split between chunks;
-    with no_think the request asks the model not to reason."""
+    """A-Vibe (Qwen3) может ответить с <think>…</think>: блок вырезается, в том числе когда тег разорван между кусками; с
+    no_think запрос просит модель не рассуждать.
+    """
     seen: list[dict] = []
     chunks = ["<thi", "nk>план ответа", "</th", "ink>\n\nПри", "вет <", "b>"]
     inner = llm_transport(chunks, [{"content": "<think>x</think>Ответ"}])
@@ -248,7 +251,7 @@ def test_S2_18_llm_answer_is_streamed_with_same_events(monkeypatch):
     assert "наставник [delivery-code-review]" in text_of(ev)
     assert first(ev, "sources")["items"][0]["doc_id"] == "delivery-code-review"
     assert first(ev, "done")["provider"] == "openai_compat"
-    # write scenarios stay deterministic with the LLM provider (ADR-007)
+    # сценарии записи остаются детерминированными и с провайдером LLM (ADR-007)
     assert first(s.say("хочу отгул в пятницу"), "action_proposal")["draft"]["args"]["start_date"] == "2026-11-13"
 
 
@@ -292,7 +295,7 @@ def test_S2_21_llm_tool_calling_only_read_tools_of_role(monkeypatch):
     offered = seen_tools[0]
     assert "kb__search" in offered and "approvals__list_pending" not in offered
     assert not any(n.endswith("create_request") or n.endswith("request_access") for n in offered)
-    assert "approvals.list_pending" not in first(ev, "done")["tool_calls"]  # denied by the gateway, never executed
+    assert "approvals.list_pending" not in first(ev, "done")["tool_calls"]  # запрещено шлюзом, никогда не выполняется
 
 
 def test_LLM_04_make_writer_and_stub():
@@ -322,8 +325,9 @@ def test_MCP_15_mcp_base_url_routes_every_server(monkeypatch):
 
 
 def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
-    """A small local model (A-Vibe Q4) sometimes says «не нашёл» although the document answers: the answer then comes
-    from the document; a «not found» over a weak hit and a normal answer are streamed as they are."""
+    """Маленькая локальная модель (A-Vibe Q4) иногда говорит «не нашёл», хотя документ отвечает: тогда ответ берётся из
+    документа; «не нашёл» при слабом совпадении и обычный ответ отдаются как есть.
+    """
     from agent.auth import User
     from agent.llm.writer import LLMWriter, StubWriter
 
@@ -354,8 +358,9 @@ def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
 
 
 def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, client):
-    """QA 12.11 / organizers 13.11: «уточни у наставника» in the answer → a ready message to copy into the messenger, and
-    the question goes to the mentor's stack so the answer can reach the knowledge base."""
+    """QA 12.11 / организаторы 13.11: «уточни у наставника» в ответе → готовое сообщение для копирования в мессенджер, а
+    вопрос попадает в список наставника, чтобы ответ мог попасть в базу знаний.
+    """
     from agent.llm.writer import StubWriter
 
     def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
@@ -372,7 +377,9 @@ def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, 
 
 
 def test_LLM_09_a_polite_sign_off_is_not_a_reason_for_a_draft(monkeypatch, client):
-    """Rita 12.13: A-Vibe ends a full answer with «Если что-то не учтено — уточни у наставника»: no draft for that."""
+    """Рита 12.13: A-Vibe заканчивает полный ответ фразой «Если что-то не учтено — уточни у наставника»: черновика на это
+    нет.
+    """
     from agent.llm.writer import StubWriter
 
     def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
@@ -384,8 +391,9 @@ def test_LLM_09_a_polite_sign_off_is_not_a_reason_for_a_draft(monkeypatch, clien
 
 
 def test_LLM_08_avibe_by_default_with_the_stub_while_it_loads_or_fails(monkeypatch):
-    """Rita 12.11: the expert gets A-Vibe by default (compose: LLM_DEFAULT_* → bundled Ollama); while Ollama still
-    downloads the model, or when it fails or is too slow, the stub answers at once instead of waiting for a timeout."""
+    """Рита 12.11: эксперт по умолчанию получает A-Vibe (compose: LLM_DEFAULT_* → встроенная Ollama); пока Ollama ещё
+    скачивает модель, или если она сбоит или слишком медленная, stub отвечает сразу, а не ждёт таймаута.
+    """
     from agent.config import with_llm_defaults
 
     env = with_llm_defaults({"LLM_DEFAULT_PROVIDER": "openai_compat", "LLM_DEFAULT_MODEL": "avibe", "LLM_PROVIDER": ""})
@@ -410,7 +418,7 @@ def test_LLM_08_avibe_by_default_with_the_stub_while_it_loads_or_fails(monkeypat
     s = c.login("intern.anna")
     c.agent.writer.clock = lambda: now[0]
 
-    ev = s.say("как проходит код-ревью?")  # the model is not pulled yet
+    ev = s.say("как проходит код-ревью?")  # модель ещё не скачана
     assert "ещё загружается" in text_of(ev) and first(ev, "done")["provider"] == "stub_fallback" and state["chat"] == 0
     assert c.http.get("/readyz").get_json()["checks"]["llm_state"] == "loading"
 
@@ -419,7 +427,7 @@ def test_LLM_08_avibe_by_default_with_the_stub_while_it_loads_or_fails(monkeypat
     ev = s.say("как проходит код-ревью?")
     assert "Ответ модели." in text_of(ev) and first(ev, "done")["provider"] == "openai_compat"
 
-    state["mode"] = "slow"  # e.g. no GPU: one timeout, then the stub answers at once for 5 minutes
+    state["mode"] = "slow"  # например, нет GPU: один таймаут, затем 5 минут сразу отвечает stub
     assert "упрощённом режиме" in text_of(s.say("как проходит код-ревью?"))
     calls = state["chat"]
     assert "упрощённом режиме" in text_of(s.say("как проходит код-ревью?")) and state["chat"] == calls

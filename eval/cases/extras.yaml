@@ -1,4 +1,4 @@
-# Trips, consents and web search (openspec/specs/trips-consents, attachments-websearch). Organizers' Q&A 10.11.
+# Командировки, согласия и веб-поиск (openspec/specs/trips-consents, attachments-websearch). Ответы организаторов 10.11.
 - {id: tp-01, category: trips, turns: ["как оформить командировку?"], expect: {intent: trip, text_contains: ["за 5 дней", "город, даты и цель"], not_events: [action_proposal]}}
 - {id: tp-02, category: trips, turns: ["оформи командировку в Казань с 23 по 25 ноября, цель — встреча с командой"], expect: {intent: trip, events: [action_proposal], args: {city: "Казань", start_date: "2026-11-23", end_date: "2026-11-25"}}, confirm: true, expect_result: {status: pending_approval}}
 - {id: tp-03, category: trips, turns: ["хочу в командировку в Новосибирск", "с 1 по 3 декабря", "конференция по Go"], expect: {events: [action_proposal], args: {city: "Новосибирск", purpose: "конференция по Go"}}}

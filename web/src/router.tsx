@@ -52,7 +52,8 @@ const indexRoute = createRoute({
 const chatRoute = createRoute({ getParentRoute: () => appRoute, path: '/chat', component: ChatPage })
 const planRoute = createRoute({ getParentRoute: () => appRoute, path: '/plan', component: PlanPage })
 
-// only a lead and the HR admin (second stage of an absence) decide requests; the server returns 403 for everyone else, this guard just keeps the page out of reach
+// решения по заявкам принимают только руководитель и HR-администратор (второй этап отсутствия); остальным сервер
+// отвечает 403, эта защита лишь не пускает на страницу
 const approvalsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/approvals',
@@ -68,7 +69,8 @@ const teamGuard = () => {
   if (role !== 'mentor' && role !== 'lead') throw redirect({ to: '/chat' })
 }
 
-// mentor and lead: interns of the team; the server filters by team (R71), the guard only keeps others off the page
+// наставник и руководитель: стажёры команды; сервер фильтрует по команде (R71), защита лишь не пускает остальных на
+// страницу
 const teamRoute = createRoute({ getParentRoute: () => appRoute, path: '/team', beforeLoad: teamGuard, component: TeamPage })
 const internRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -80,7 +82,7 @@ const internRoute = createRoute({
   },
 })
 
-// Internship report (idea 12.11): for the mentor and the lead of the team only.
+// Отчёт за стажировку (идея 12.11): только для наставника и руководителя команды.
 const internReportRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/team/$internId/report',

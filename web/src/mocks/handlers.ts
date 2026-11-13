@@ -7,7 +7,7 @@ import { recordConfirm, recordTurn, setStoredProposalState } from './history'
 import { confirmEvents, messageEvents, type MockAttachment } from './scenario'
 import { sseResponse } from './sse'
 
-// Paths and shapes mirror contracts/openapi.yaml; `*` keeps them independent of VITE_API_BASE_URL.
+// Пути и формы повторяют contracts/openapi.yaml; `*` делает их независимыми от VITE_API_BASE_URL.
 
 const unauthorized = () =>
   HttpResponse.json({ code: 'unauthorized', message: 'Войдите в систему.', retryable: false }, { status: 401 })
@@ -15,10 +15,10 @@ const forbidden = () =>
   HttpResponse.json({ code: 'forbidden', message: 'Недостаточно прав для этого действия.', retryable: false }, { status: 403 })
 const notFound = () => HttpResponse.json({ code: 'not_found', message: 'Не найдено.', retryable: false }, { status: 404 })
 
-/** mentor and lead see interns of their own team only (R71) */
+/** наставник и руководитель видят только стажёров своей команды (R71) */
 const teamOf = (viewer: User, other: User) => viewer.team_id === other.team_id
 
-/** the wire shape has no sender id (openapi Escalation) */
+/** в передаваемой форме нет id отправителя (openapi Escalation) */
 function publicEscalation(e: MockEscalation) {
   const out: Partial<MockEscalation> = { ...e }
   delete out.from_id
@@ -58,7 +58,7 @@ export const handlers = [
     const task = findTask(user.id, String(params.taskId))
     if (!task) return notFound()
     state.taskStatus.set(`${user.id}:${task.id}`, body.status as string)
-    // like core: a done parent completes its subtasks, the last done subtask completes the parent
+    // как в ядре: выполненный родитель завершает подзадачи, последняя выполненная подзадача завершает родителя
     if (body.status === 'done') task.subtasks?.forEach((s) => state.taskStatus.set(`${user.id}:${s.id}`, 'done'))
     if (task.parent_task_id) {
       const parent = findTask(user.id, task.parent_task_id)
@@ -162,7 +162,7 @@ export const handlers = [
     const open = state.escalations
       .filter((e) => e.status === 'open' && e.to_role === user.role && (user.role === 'hrbp' || teamOf(user, MOCK_USERS.find((u) => u.id === e.from_id)!)))
       .slice()
-      .reverse() // oldest first
+      .reverse() // сначала самые старые
     const groups: { ids: string[]; question: string; count: number; askers: string[]; first_asked_at: string; last_asked_at: string }[] = []
     for (const e of open) {
       const g = groups.find((x) => x.question.toLowerCase() === e.text.toLowerCase())
@@ -216,7 +216,7 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 })
   }),
 
-  // feedback 12.11: a source chip opens the test document
+  // отзыв 12.11: чип источника открывает тестовый документ
   http.get('*/api/kb/:docId', ({ request, params }) => {
     if (!userByToken(request.headers.get('Authorization'))) return unauthorized()
     const id = String(params.docId)

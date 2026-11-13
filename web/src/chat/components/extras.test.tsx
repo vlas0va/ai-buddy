@@ -15,7 +15,8 @@ import { ChatInput } from './ChatInput'
 import { MessageBubble } from './MessageBubble'
 import { SourceChips } from './SourceChips'
 
-// Trips, consents, HR steps of a day off, attachments and external sources (openspec trips-consents, attachments-websearch).
+// Командировки, согласия, HR-шаги отгула, вложения и внешние источники (openspec trips-consents,
+// attachments-websearch).
 
 function withClient(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

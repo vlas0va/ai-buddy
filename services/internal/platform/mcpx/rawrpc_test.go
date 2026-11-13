@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// rawPost sends one JSON-RPC message the way the Python MCP SDK (streamablehttp_client) does.
+// rawPost отправляет одно сообщение JSON-RPC так, как это делает Python MCP SDK (streamablehttp_client).
 func rawPost(t *testing.T, url, token, protocol string, msg map[string]any) (*http.Response, map[string]any) {
 	t.Helper()
 	body, _ := json.Marshal(msg)
@@ -49,8 +49,8 @@ func dig(m map[string]any, path ...string) any {
 	return cur
 }
 
-// A non-Go client (the Python agent) speaks plain JSON-RPC over HTTP: initialize, initialized, tools/list,
-// tools/call — all answered as application/json without a session id.
+// Клиент не на Go (агент на Python) говорит на обычном JSON-RPC поверх HTTP: initialize, initialized, tools/list,
+// tools/call — все отвечаются как application/json без id сессии.
 func TestRawJSONRPC_PythonStyleClient_R71(t *testing.T) {
 	ts, _ := stack(t, newAbsence(t, nil, &recorder{}))
 	url := ts.URL + "/mcp/absence"
@@ -89,7 +89,7 @@ func TestRawJSONRPC_PythonStyleClient_R71(t *testing.T) {
 			t.Fatalf("contract inputSchema not served as is: %v", tool["inputSchema"])
 		}
 	}
-	if strings.Join(names, ",") != "cancel_request,create_request,get_policy,get_request,list_my_requests,reschedule_request,validate_request" { // go-sdk sorts by name
+	if strings.Join(names, ",") != "cancel_request,create_request,get_policy,get_request,list_my_requests,reschedule_request,validate_request" { // go-sdk сортирует по имени
 		t.Fatalf("tools %v", names)
 	}
 
@@ -110,7 +110,7 @@ func TestRawJSONRPC_PythonStyleClient_R71(t *testing.T) {
 		t.Fatalf("text content must carry the same JSON: %v", content)
 	}
 
-	// Tool error, and a call without any initialize (pure stateless).
+	// Ошибка инструмента и вызов вообще без initialize (чистый режим без состояния).
 	_, denied := rawPost(t, url, tok, "2025-06-18", map[string]any{
 		"jsonrpc": "2.0", "id": 4, "method": "tools/call",
 		"params": map[string]any{"name": "get_request", "arguments": map[string]any{"id": "ABS-000777"}},
@@ -120,7 +120,7 @@ func TestRawJSONRPC_PythonStyleClient_R71(t *testing.T) {
 		t.Fatalf("denied %v", denied)
 	}
 
-	// Unknown tool is a JSON-RPC error, not a tool result.
+	// Неизвестный инструмент — ошибка JSON-RPC, а не результат инструмента.
 	_, unknown := rawPost(t, url, tok, "2025-06-18", map[string]any{
 		"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": map[string]any{"name": "drop_tables"},
 	})
@@ -155,7 +155,7 @@ func TestRawJSONRPC_TransportRules(t *testing.T) {
 	ts, _ := stack(t, newAbsence(t, nil, &recorder{}))
 	url := ts.URL + "/mcp/absence"
 	tok := jwtFor(t, "intern.anna", "intern", "delivery")
-	// The go-sdk requires both media types in Accept (the Python SDK sends both).
+	// go-sdk требует оба типа в Accept (Python SDK отправляет оба).
 	req, _ := http.NewRequest(http.MethodPost, url, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
 	req.Header.Set("Accept", "application/json")
@@ -167,7 +167,7 @@ func TestRawJSONRPC_TransportRules(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("Accept json only: %d", resp.StatusCode)
 	}
-	// Body limit.
+	// Ограничение тела.
 	big := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"x":"` + strings.Repeat("a", MaxRequestBody) + `"}}`
 	req, _ = http.NewRequest(http.MethodPost, url, strings.NewReader(big))
 	req.Header.Set("Authorization", "Bearer "+tok)

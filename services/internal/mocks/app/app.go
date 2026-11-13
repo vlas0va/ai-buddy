@@ -1,6 +1,7 @@
-// Package app wires mcp-mocks: eight independent mock Avito MCP servers served by one binary at /mcp/<server>
-// (absence, approvals, access, directory, checklist, kb, trips, consents). Each server owns its DB schema and tool set, so it can be
-// moved to its own process or replaced by a real Avito API by changing a URL in the agent config (R23, R56).
+// Пакет app собирает mcp-mocks: восемь независимых мок-серверов MCP Авито в одном бинарнике по адресу /mcp/<server>
+// (absence, approvals, access, directory, checklist, kb, trips, consents). У каждого сервера своя схема БД и набор
+// инструментов, поэтому его можно вынести в отдельный процесс или заменить настоящим API Авито, поменяв URL в конфиге
+// агента (R23, R56).
 package app
 
 import (
@@ -27,7 +28,7 @@ import (
 	"aibuddy/services/internal/platform/pg"
 )
 
-// Config holds mcp-mocks settings (docs/backend/IMPLEMENTATION.md §7).
+// Config хранит настройки mcp-mocks (docs/backend/IMPLEMENTATION.md §7).
 type Config struct {
 	Port               int
 	PostgresURL        string
@@ -36,7 +37,7 @@ type Config struct {
 	KBDir              string
 }
 
-// LoadConfig reads configuration from getenv; Validate reports missing secrets.
+// LoadConfig читает конфигурацию из getenv; об отсутствующих секретах сообщает Validate.
 func LoadConfig(getenv func(string) string) Config {
 	env := config.New(getenv)
 	return Config{
@@ -48,7 +49,7 @@ func LoadConfig(getenv func(string) string) Config {
 	}
 }
 
-// Validate fails when a required secret is missing: the service must not start with empty secrets.
+// Validate падает, если нет обязательного секрета: сервис не должен стартовать с пустыми секретами.
 func (c Config) Validate() error {
 	var missing []string
 	if c.JWTSecret == "" {
@@ -63,7 +64,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// registrars lists every mock server and its registration function, in a stable order.
+// registrars перечисляет все мок-серверы и их функции регистрации в стабильном порядке.
 var registrars = []struct {
 	name     string
 	register func(*mcpx.Server, *pgxpool.Pool) error
@@ -78,7 +79,7 @@ var registrars = []struct {
 	{"consents", consents.Register},
 }
 
-// NewHandler builds the HTTP handler: /healthz plus /mcp/<server> for all eight servers.
+// NewHandler собирает HTTP-обработчик: /healthz плюс /mcp/<server> для всех восьми серверов.
 func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -111,7 +112,7 @@ func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler,
 	return httpx.Chain(httpx.RequestID, httpx.Recover(log), httpx.AccessLog(log))(mux), nil
 }
 
-// Run connects to Postgres, loads the knowledge base from KB_DIR and serves until ctx is cancelled.
+// Run подключается к Postgres, загружает базу знаний из KB_DIR и работает, пока ctx не отменён.
 func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -151,7 +152,7 @@ func serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) e
 	}
 }
 
-// Healthcheck performs GET url and fails on a non-200 answer (Docker HEALTHCHECK via `-healthcheck`).
+// Healthcheck выполняет GET url и падает на ответе не 200 (Docker HEALTHCHECK через `-healthcheck`).
 func Healthcheck(url string) error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(url)

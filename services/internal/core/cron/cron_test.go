@@ -44,7 +44,8 @@ func TestCron_MarksOverdueAndNotifies_R54(t *testing.T) {
 	if res.Plans != 4 {
 		t.Fatalf("plans: %+v", res)
 	}
-	// anna: CL-04 (in_progress, due passed) becomes overdue, CL-05 already was; done CL-03 stays done
+	// anna: CL-04 (in_progress, срок прошёл) становится просроченной, CL-05 уже была; выполненная CL-03 остаётся
+	// выполненной
 	if n := count(t, pool, `SELECT count(*) FROM core.plan_tasks t JOIN core.plans p ON p.id=t.plan_id
 		WHERE p.user_id='intern.anna' AND t.parent_task_id IS NULL AND t.checklist_item_id IN ('CL-04','CL-05') AND t.status='overdue'`); n != 2 {
 		t.Fatalf("anna overdue tasks: %d", n)
@@ -53,11 +54,11 @@ func TestCron_MarksOverdueAndNotifies_R54(t *testing.T) {
 		WHERE p.user_id='intern.anna' AND t.checklist_item_id='CL-03' AND t.status='done'`); n < 1 {
 		t.Fatal("done task was touched")
 	}
-	// the finished sub-step of CL-04 is not reopened
+	// выполненный подшаг CL-04 не переоткрывается
 	if n := count(t, pool, `SELECT count(*) FROM core.plan_tasks WHERE title LIKE 'Попроси добавить себя%' AND status='done'`); n != 1 {
 		t.Fatalf("done subtasks: %d", n)
 	}
-	// overdue notifications: one per overdue top-level task, to the plan owner
+	// уведомления о просрочке: по одному на каждую просроченную задачу верхнего уровня, владельцу плана
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.anna' AND kind='overdue' AND checklist_item_id IN ('CL-04','CL-05')`); n != 2 {
 		t.Fatalf("anna overdue notifications: %d", n)
 	}
@@ -67,25 +68,26 @@ func TestCron_MarksOverdueAndNotifies_R54(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE kind='overdue' AND body LIKE 'Срок был __.__.____%'`); n < 3 {
 		t.Fatalf("date format in body")
 	}
-	// period reminders: anna is in week_2 -> CL-07 open (CL-14 etc are other periods); no reminder for done items
+	// напоминания этапа: anna на week_2 -> CL-07 открыта (CL-14 и др. — другие этапы); по выполненным пунктам
+	// напоминаний нет
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.anna' AND dedupe_key='period:CL-07:week_2' AND kind='reminder'`); n != 1 {
 		t.Fatalf("anna CL-07 reminder: %d", n)
 	}
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.anna' AND dedupe_key='period:CL-03:week_1'`); n != 0 {
 		t.Fatalf("reminder for another period")
 	}
-	// ivan is in week_1: reminders for CL-03 (human_only, in progress), CL-04, CL-05
+	// ivan на week_1: напоминания по CL-03 (human_only, в работе), CL-04, CL-05
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.ivan' AND kind='reminder' AND dedupe_key LIKE 'period:%:week_1'`); n != 3 {
 		t.Fatalf("ivan reminders: %d", n)
 	}
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.ivan' AND dedupe_key='period:CL-03:week_1' AND body LIKE '%только напоминает%'`); n != 1 {
 		t.Fatalf("human_only text")
 	}
-	// mentor plans get reminders with the mentor wording
+	// планы наставника получают напоминания в формулировке для наставника
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='mentor.sergey' AND title LIKE 'Напоминание наставнику%'`); n < 1 {
 		t.Fatalf("mentor reminder")
 	}
-	// events
+	// события
 	if n := count(t, pool, `SELECT count(*) FROM core.analytics_events WHERE name='plan.task_overdue'`); n != res.Overdue {
 		t.Fatalf("task_overdue events %d vs %d", n, res.Overdue)
 	}
@@ -118,7 +120,7 @@ func TestCron_DedupeReminders_R54(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.analytics_events`); n != events {
 		t.Fatalf("events grew %d -> %d", events, n)
 	}
-	// a read notification is not recreated either
+	// прочитанное уведомление тоже не создаётся заново
 	exec(t, pool, `UPDATE core.notifications SET read_at = now()`)
 	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
@@ -134,7 +136,7 @@ func TestCron_NewPeriodAndSurveys_R54(t *testing.T) {
 	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// 15 days later anna (25 days in) enters month_1: CL-08 is announced, once
+	// через 15 дней anna (25-й день) переходит в month_1: CL-08 объявляется один раз
 	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 15) }
 	res, err := r.RunOnce(context.Background())
 	if err != nil {
@@ -143,11 +145,11 @@ func TestCron_NewPeriodAndSurveys_R54(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id='intern.anna' AND dedupe_key='period:CL-08:month_1'`); n != 1 {
 		t.Fatalf("CL-08 reminder: %d (%+v)", n, res)
 	}
-	// CL-07 (due week_2 end) is now overdue and announced
+	// CL-07 (срок — конец week_2) теперь просрочена и объявлена
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications t JOIN core.plan_tasks k ON t.dedupe_key = 'overdue:' || k.id::text WHERE t.user_id='intern.anna' AND k.checklist_item_id='CL-07'`); n != 1 {
 		t.Fatalf("CL-07 overdue notification: %d", n)
 	}
-	// after 3 months: survey texts for CL-15 (intern) and CL-16 (mentor)
+	// через 3 месяца: тексты опросов для CL-15 (стажёр) и CL-16 (наставник)
 	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 120) }
 	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
@@ -157,7 +159,7 @@ func TestCron_NewPeriodAndSurveys_R54(t *testing.T) {
 			t.Errorf("%s survey reminder for %s: %d", c.user, c.item, n)
 		}
 	}
-	// a plan whose intern has no cohort start falls back to week_1 instead of failing
+	// план, у стажёра которого нет даты начала когорты, откатывается на week_1, а не падает
 	exec(t, pool, `UPDATE core.users SET cohort_start = NULL WHERE id = 'intern.ivan'`)
 	if _, err := r.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
@@ -180,7 +182,7 @@ func TestCron_RunLoopAndErrors_R54(t *testing.T) {
 	cancel()
 	<-done
 
-	// failures are returned by RunOnce and only logged by Run
+	// сбои RunOnce возвращает, а Run только логирует
 	pool.Close()
 	if _, err := r.RunOnce(context.Background()); err == nil {
 		t.Fatal("expected error on closed pool")
@@ -229,7 +231,7 @@ func TestCron_HTTPDemoOnly_R54(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications`); n == 0 {
 		t.Fatal("job did not run")
 	}
-	// background mode: 202 immediately, job completes shortly after
+	// фоновый режим: 202 сразу, задача завершается чуть позже
 	exec(t, pool, `DELETE FROM core.notifications`)
 	h.Sync = false
 	if c := post(true); c != 202 {
@@ -242,7 +244,7 @@ func TestCron_HTTPDemoOnly_R54(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	// failing job still answers 202
+	// упавшая задача всё равно отвечает 202
 	pool.Close()
 	h.Sync = true
 	if c := post(true); c != 202 {
@@ -263,7 +265,7 @@ func TestCron_ReportAfterThreeMonths_Idea1211(t *testing.T) {
 	if err != nil || res.Reports != 0 {
 		t.Fatalf("day 10: %+v %v", res, err)
 	}
-	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 85) } // Анна started 10 days ago: day 95
+	r.Now = func() time.Time { return time.Now().AddDate(0, 0, 85) } // Анна начала 10 дней назад: день 95
 	res, err = r.RunOnce(context.Background())
 	if err != nil || res.Reports < 1 {
 		t.Fatalf("day 95: %+v %v", res, err)
@@ -280,7 +282,7 @@ func TestCron_ReportAfterThreeMonths_Idea1211(t *testing.T) {
 	}
 }
 
-// Organizers 13.11: questions wait in the stack; the addressee gets one digest a day, not a notification each.
+// Организаторы 13.11: вопросы ждут в списке; адресат получает одну сводку в день, а не уведомление на каждый.
 func TestCron_QuestionDigestOncePerDay_S2_23(t *testing.T) {
 	pool := pgtest.New(t)
 	exec(t, pool, `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, text) VALUES

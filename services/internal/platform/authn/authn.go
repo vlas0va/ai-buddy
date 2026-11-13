@@ -1,10 +1,10 @@
-// Package authn issues and verifies the HS256 JWTs of the mock IdP and puts verified claims into the request
-// context. Identity used anywhere in the backend comes only from these claims (R71).
+// Пакет authn выпускает и проверяет JWT HS256 мок-IdP и кладёт проверенные claims в контекст запроса. Личность в любом
+// месте бэкенда берётся только из этих claims (R71).
 //
-// Token: base64url (no padding) of header {"alg":"HS256","typ":"JWT"}, payload Claims and the HMAC-SHA256 of
-// "<header>.<payload>" with JWT_SECRET. Verification is strict: exactly HS256 and typ JWT (alg "none" and every
-// other algorithm are rejected, as is a "crit" header), constant-time MAC comparison, exp required,
-// sub and role required, iat not in the future.
+// Токен: base64url (без выравнивания) от заголовка {"alg":"HS256","typ":"JWT"}, payload Claims и HMAC-SHA256 от
+// "<header>.<payload>" на JWT_SECRET. Проверка строгая: ровно HS256 и typ JWT (alg "none" и любые другие алгоритмы
+// отклоняются, как и заголовок "crit"), сравнение MAC за постоянное время, exp обязателен, sub и role обязательны, iat
+// не в будущем.
 package authn
 
 import (
@@ -23,20 +23,20 @@ import (
 	"aibuddy/services/internal/platform/apierr"
 )
 
-// DefaultLeeway is the clock skew tolerated for exp and iat by Verify and NewVerifier.
+// DefaultLeeway — допустимое расхождение часов для exp и iat в Verify и NewVerifier.
 const DefaultLeeway = 30 * time.Second
 
-// Claims are the JWT claims of a user. Times are Unix seconds.
+// Claims — claims JWT пользователя. Время — в секундах Unix.
 type Claims struct {
 	Sub         string `json:"sub"`
 	Role        string `json:"role"`
 	TeamID      string `json:"team_id"`
-	CohortStart string `json:"cohort_start,omitempty"` // YYYY-MM-DD, empty for users without a cohort
+	CohortStart string `json:"cohort_start,omitempty"` // YYYY-MM-DD, пусто для пользователей без когорты
 	Iat         int64  `json:"iat,omitempty"`
 	Exp         int64  `json:"exp"`
 }
 
-// Verification errors. Middleware answers all of them with the same 401 and does not tell the client which one.
+// Ошибки проверки. Middleware на все отвечает одинаковым 401 и не говорит клиенту, какая именно.
 var (
 	ErrNoSecret      = errors.New("authn: empty secret")
 	ErrMalformed     = errors.New("authn: malformed token")
@@ -53,7 +53,7 @@ var (
 	headerPart = b64.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
 )
 
-// Issue signs c with Iat = now and Exp = now + ttl. ttl must be positive.
+// Issue подписывает c с Iat = now и Exp = now + ttl. ttl должен быть положительным.
 func Issue(secret []byte, c Claims, ttl time.Duration) (string, error) {
 	if ttl <= 0 {
 		return "", fmt.Errorf("authn: issue: ttl must be positive, got %s", ttl)
@@ -64,7 +64,7 @@ func Issue(secret []byte, c Claims, ttl time.Duration) (string, error) {
 	return Sign(secret, c)
 }
 
-// Sign signs c exactly as given (tests use it to build expired tokens). Sub, Role and Exp are required.
+// Sign подписывает c ровно как передано (тесты собирают им истёкшие токены). Sub, Role и Exp обязательны.
 func Sign(secret []byte, c Claims) (string, error) {
 	if len(secret) == 0 {
 		return "", ErrNoSecret
@@ -80,7 +80,7 @@ func Sign(secret []byte, c Claims) (string, error) {
 	return signingInput + "." + b64.EncodeToString(mac(secret, signingInput)), nil
 }
 
-// Verify checks token at time now with DefaultLeeway and returns its claims.
+// Verify проверяет token на момент now с DefaultLeeway и возвращает его claims.
 func Verify(secret []byte, token string, now time.Time) (Claims, error) {
 	return verify(secret, token, now, DefaultLeeway)
 }
@@ -93,7 +93,7 @@ func verify(secret []byte, token string, now time.Time, leeway time.Duration) (C
 	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		return Claims{}, ErrMalformed
 	}
-	// A map, not a struct: encoding/json matches struct fields case-insensitively ("ALG" would pass).
+	// Map, а не структура: encoding/json сопоставляет поля структуры без учёта регистра ("ALG" прошёл бы).
 	var h map[string]any
 	if err := decodePart(parts[0], &h); err != nil {
 		return Claims{}, err
@@ -141,19 +141,19 @@ func mac(secret []byte, signingInput string) []byte {
 	return m.Sum(nil)
 }
 
-// Verifier verifies tokens with a fixed secret, leeway and clock; it is safe for concurrent use.
+// Verifier проверяет токены с фиксированными секретом, допуском и часами; безопасен для конкурентного использования.
 type Verifier struct {
 	Secret []byte
-	Leeway time.Duration    // tolerated clock skew; NewVerifier sets DefaultLeeway
-	Now    func() time.Time // nil means time.Now
+	Leeway time.Duration    // допустимое расхождение часов; NewVerifier ставит DefaultLeeway
+	Now    func() time.Time // nil означает time.Now
 }
 
-// NewVerifier returns a Verifier with DefaultLeeway and the system clock.
+// NewVerifier возвращает Verifier с DefaultLeeway и системными часами.
 func NewVerifier(secret []byte) *Verifier {
 	return &Verifier{Secret: secret, Leeway: DefaultLeeway, Now: time.Now}
 }
 
-// Verify checks token and returns its claims.
+// Verify проверяет token и возвращает его claims.
 func (v *Verifier) Verify(token string) (Claims, error) {
 	now := time.Now
 	if v.Now != nil {
@@ -162,9 +162,8 @@ func (v *Verifier) Verify(token string) (Claims, error) {
 	return verify(v.Secret, token, now(), v.Leeway)
 }
 
-// Middleware requires a valid `Authorization: Bearer <JWT>`; on success it stores the claims and the raw token
-// in the request context (FromContext, TokenFromContext), otherwise it answers apierr 401 with
-// `WWW-Authenticate: Bearer`.
+// Middleware требует корректный `Authorization: Bearer <JWT>`; при успехе кладёт claims и исходный токен в контекст
+// запроса (FromContext, TokenFromContext), иначе отвечает apierr 401 с `WWW-Authenticate: Bearer`.
 func (v *Verifier) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := BearerToken(r)
@@ -182,7 +181,7 @@ func (v *Verifier) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// Middleware is NewVerifier(secret).Middleware.
+// Middleware — это NewVerifier(secret).Middleware.
 func Middleware(secret []byte) func(http.Handler) http.Handler {
 	return NewVerifier(secret).Middleware
 }
@@ -192,7 +191,7 @@ func unauthorized(w http.ResponseWriter) {
 	apierr.WriteJSON(w, apierr.Unauthorized())
 }
 
-// BearerToken returns the token of an `Authorization: Bearer <token>` header (scheme case-insensitive).
+// BearerToken возвращает токен из заголовка `Authorization: Bearer <token>` (схема без учёта регистра).
 func BearerToken(r *http.Request) (string, bool) {
 	scheme, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") {
@@ -206,25 +205,25 @@ type claimsKey struct{}
 
 type tokenKey struct{}
 
-// NewContext returns ctx carrying c (Middleware does this; tests of handlers may call it directly).
+// NewContext возвращает ctx с c (так делает Middleware; тесты обработчиков могут вызывать напрямую).
 func NewContext(ctx context.Context, c Claims) context.Context {
 	return context.WithValue(ctx, claimsKey{}, c)
 }
 
-// FromContext returns the verified claims stored by Middleware or NewContext.
+// FromContext возвращает проверенные claims, сохранённые Middleware или NewContext.
 func FromContext(ctx context.Context) (Claims, bool) {
 	c, ok := ctx.Value(claimsKey{}).(Claims)
 	return c, ok
 }
 
-// TokenFromContext returns the raw bearer token accepted by Middleware, for forwarding to the agent and MCP servers.
+// TokenFromContext возвращает исходный bearer-токен, принятый Middleware, для передачи агенту и MCP-серверам.
 func TokenFromContext(ctx context.Context) (string, bool) {
 	t, ok := ctx.Value(tokenKey{}).(string)
 	return t, ok && t != ""
 }
 
-// WithToken returns ctx carrying a raw bearer token, for code paths that call MCP without an HTTP request
-// (e.g. tests or core acting on behalf of a user with a token it issued).
+// WithToken возвращает ctx с исходным bearer-токеном для путей кода, которые вызывают MCP без HTTP-запроса (например,
+// тесты или ядро, действующее от имени пользователя с выпущенным им токеном).
 func WithToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, tokenKey{}, token)
 }

@@ -92,7 +92,8 @@ describe('RichText', () => {
     expect(container.querySelector('img')).toBeNull()
     expect(container.querySelector('br')).not.toBeNull()
     expect(parseBlocks('\n\n')).toEqual([])
-    // Rita 12.13: numbered sections split by bullets keep one numbering, also when the model wrote «1.» every time
+    // Рита 12.13: нумерованные разделы, разбитые пунктами, сохраняют одну нумерацию, даже если модель каждый раз писала
+    // «1.»
     const starts = (t: string) => parseBlocks(t).flatMap((x) => (x.kind === 'ol' ? [x.start] : []))
     expect(starts('1. **Кто**:\n- наставник\n\n1. **Правила**:\n- до 400 строк\n1. **Сроки**:\n- день')).toEqual([1, 2, 3])
     expect(starts('1. А\n- x\n2. Б\n- y\n3. В')).toEqual([1, 2, 3])
