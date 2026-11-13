@@ -158,21 +158,25 @@ describe('questions and notifications', () => {
     expect(screen.queryByRole('button', { name: 'Ответить' })).not.toBeInTheDocument()
   })
 
-  it('S2_R10: mentor answers with add_to_kb', async () => {
-    state.escalations.push({ id: 'e1', from_id: 'intern.anna', from_display_name: 'Анна Соколова', to_role: 'mentor', text: 'Где лежит дизайн-ревью?', status: 'open', answer: null, added_to_kb: false, created_at: '2026-11-10T09:00:00Z' })
+  it('S2_R10 / organizers 13.11: the mentor answers a group of the stack once, the answer goes to the KB', async () => {
+    const q = { from_id: 'intern.anna', from_display_name: 'Анна Соколова', to_role: 'mentor' as const, status: 'open' as const, answer: null, added_to_kb: false }
+    state.escalations.push({ ...q, id: 'e2', text: 'Где лежит дизайн-ревью?', created_at: '2026-11-10T10:00:00Z' })
+    state.escalations.push({ ...q, id: 'e1', text: 'Где лежит дизайн-ревью?', created_at: '2026-11-10T09:00:00Z' })
     signInAs('mentor.oleg')
     mountAt('/questions')
     await userEvent.type(await screen.findByLabelText('Ответ для Анна Соколова'), 'В Confluence, раздел «Дизайн»')
-    await userEvent.click(screen.getByLabelText(/Добавить ответ в базу знаний/))
+    expect(screen.getByText('Спросили 2 раза')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Добавить ответ в базу знаний/)).toBeChecked() // the stack fills the KB by default
     expect(screen.getByText(/без имён и конкретных дат/)).toBeInTheDocument() // checkpoint 11.11: the FAQ is general
     // feedback 12.13: a general answer can go to every team
     expect(screen.getByLabelText(/Стажёрам моей команды/)).toBeChecked()
     await userEvent.click(screen.getByLabelText(/Всем стажёрам/))
     expect(screen.getByLabelText(/Всем стажёрам/)).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: 'Ответить' }))
-    expect(await screen.findByText('Есть ответ')).toBeInTheDocument()
-    expect(screen.getByText(/Ответ добавлен в базу знаний/)).toBeInTheDocument()
-    expect(state.notifications.get('intern.anna')?.[0]?.kind).toBe('escalation_answer')
+    await userEvent.click(screen.getByRole('button', { name: 'Ответить всем (2)' }))
+    expect(await screen.findByText('Новых вопросов нет.')).toBeInTheDocument()
+    expect(await screen.findAllByText('Есть ответ')).toHaveLength(2)
+    expect(screen.getAllByText(/Ответ добавлен в базу знаний/)).toHaveLength(2)
+    expect(state.notifications.get('intern.anna')?.filter((n) => n.kind === 'escalation_answer')).toHaveLength(2)
   })
 
   it('empty questions list', async () => {

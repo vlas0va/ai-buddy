@@ -101,10 +101,10 @@ describe('RichText', () => {
 })
 
 describe('EscalationDraft for non-interns', () => {
-  it('offers the text to copy instead of sending (core accepts escalations from interns only)', async () => {
+  it('offers the text to copy instead of sending (organizers 13.11)', async () => {
     const { EscalationDraft } = await import('./EscalationDraft')
     withRouter(<EscalationDraft draft={{ to_role: 'lead', text: 'Привет' }} canSend={false} />)
-    expect(await screen.findByText('Скопируйте текст и отправьте в рабочий мессенджер.')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Скопировать' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Отправить/ })).not.toBeInTheDocument()
   })
 })

@@ -92,3 +92,4 @@
 .buddy-benefit-meter span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--avito-blue), var(--avito-green)); }
 .buddy-benefit-table { margin-top: 12px; }
 .buddy-benefit .hint { margin: 12px 0 0; }
+.esc-section { margin: var(--space-6, 24px) 0 var(--space-3, 12px); font-size: 18px; }

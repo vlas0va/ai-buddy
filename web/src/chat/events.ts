@@ -33,7 +33,14 @@ export const resultSchema = z.object({
 })
 export type ActionResult = z.infer<typeof resultSchema>
 
-export const escalationDraftSchema = z.object({ to_role: contactRoleSchema, text: z.string() })
+export const escalationDraftSchema = z.object({
+  to_role: contactRoleSchema,
+  text: z.string(),
+  to_name: z.string().nullable().optional(),
+  channel: z.string().nullable().optional(),
+  // organizers 13.11: the question is in the addressee's stack (core stored it with the assistant message)
+  queue: z.boolean().optional(),
+})
 export type EscalationDraftData = z.infer<typeof escalationDraftSchema>
 
 export const refusalSchema = z.object({

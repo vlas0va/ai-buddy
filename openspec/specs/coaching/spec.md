@@ -92,4 +92,4 @@ The agent SHALL understand the colloquial words interns type (ноут, репа
 
 #### Scenario: CO-17 Nearby documents and the knowledge loop
 - **WHEN** no document answers the question
-- **THEN** the closest readable documents are offered as «возможно, поможет», a draft to the mentor follows and the text explains that the answer can be added to the knowledge base
+- **THEN** the closest readable documents are offered as «возможно, поможет», a draft to copy to the mentor follows and the text explains that the question is in the mentor's list and the answer will reach the knowledge base

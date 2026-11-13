@@ -513,6 +513,29 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/Escalation" }
 
+  /api/escalations/queue:
+    get:
+      tags: [escalations]
+      summary: "Question stack of the caller (organizers 13.11): open questions addressed to the caller, similar ones grouped, most asked first"
+      responses:
+        "200":
+          description: Groups of open questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [ids, question, count, askers, first_asked_at, last_asked_at]
+                  properties:
+                    ids: { type: array, items: { type: string, format: uuid }, description: "Oldest first: answer the first, pass the rest as also_ids" }
+                    question: { type: string, description: Question without greetings and names }
+                    count: { type: integer }
+                    askers: { type: array, items: { type: string } }
+                    first_asked_at: { type: string, format: date-time }
+                    last_asked_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /api/escalations/{escalation_id}/answer:
     post:
       tags: [escalations]
@@ -533,6 +556,11 @@ paths:
                 text: { type: string, minLength: 1, maxLength: 4000 }
                 add_to_kb: { type: boolean, default: false }
                 kb_scope: { type: string, enum: [team, all], default: team, description: "team = the mentor's team only; all = every team (a general answer)" }
+                also_ids:
+                  type: array
+                  maxItems: 100
+                  description: "Other questions of the same stack group (GET /api/escalations/queue): answered with the same text; foreign or already answered ones are skipped"
+                  items: { type: string, format: uuid }
       responses:
         "200":
           description: Answered

@@ -83,14 +83,13 @@ describe('scripted answers', () => {
     expect(await screen.findByText(/Все доступы уже есть или запрошены/)).toBeInTheDocument()
   })
 
-  it('S4: channels list comes with an escalation draft to the mentor that can be sent', async () => {
+  it('S4: channels list comes with a message to the mentor to copy (organizers 13.11)', async () => {
     mountApp()
     await ask('Добавь меня в каналы команды')
     expect(await screen.findByText(/#delivery-general/, { selector: '.chat-bubble li, .chat-bubble p' })).toBeInTheDocument()
     const draft = await screen.findByLabelText('Черновик сообщения')
     expect(within(draft).getByLabelText('Текст сообщения')).toHaveValue('Олег, добавь меня, пожалуйста, в каналы: #delivery-general, #delivery-releases, #delivery-help.')
-    await userEvent.click(within(draft).getByRole('button', { name: 'Отправить наставнику' }))
-    expect(await within(draft).findByText('Сообщение отправлено.')).toBeInTheDocument()
+    expect(within(draft).getByRole('button', { name: 'Скопировать' })).toBeInTheDocument()
   })
 
   it('S2: "Кто мой наставник?" names the mentor, lead and curator', async () => {

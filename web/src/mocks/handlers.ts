@@ -156,20 +156,43 @@ export const handlers = [
     return HttpResponse.json(mine.map(publicEscalation))
   }),
 
+  http.get('*/api/escalations/queue', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    const open = state.escalations
+      .filter((e) => e.status === 'open' && e.to_role === user.role && (user.role === 'hrbp' || teamOf(user, MOCK_USERS.find((u) => u.id === e.from_id)!)))
+      .slice()
+      .reverse() // oldest first
+    const groups: { ids: string[]; question: string; count: number; askers: string[]; first_asked_at: string; last_asked_at: string }[] = []
+    for (const e of open) {
+      const g = groups.find((x) => x.question.toLowerCase() === e.text.toLowerCase())
+      if (g) {
+        g.ids.push(e.id)
+        g.count++
+        g.last_asked_at = e.created_at
+        if (!g.askers.includes(e.from_display_name)) g.askers.push(e.from_display_name)
+      } else groups.push({ ids: [e.id], question: e.text, count: 1, askers: [e.from_display_name], first_asked_at: e.created_at, last_asked_at: e.created_at })
+    }
+    return HttpResponse.json(groups.sort((a, b) => b.count - a.count))
+  }),
+
   http.post('*/api/escalations/:id/answer', async ({ request, params }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()
     const e = state.escalations.find((x) => x.id === params.id)
     if (!e) return notFound()
     if (e.to_role !== user.role) return forbidden()
-    const body = (await request.json().catch(() => ({}))) as { text?: string; add_to_kb?: boolean }
+    const body = (await request.json().catch(() => ({}))) as { text?: string; add_to_kb?: boolean; also_ids?: string[] }
     if (!body.text?.trim()) return HttpResponse.json({ code: 'validation_error', message: 'Введите ответ.', retryable: false }, { status: 400 })
-    e.status = 'answered'
-    e.answer = body.text.trim()
-    e.added_to_kb = Boolean(body.add_to_kb)
-    const list = state.notifications.get(e.from_id) ?? []
-    list.unshift({ id: uuid(), kind: 'escalation_answer', title: `Ответ от ${user.display_name}`, body: e.answer, read: false, created_at: new Date().toISOString() })
-    state.notifications.set(e.from_id, list)
+    const group = [e, ...state.escalations.filter((x) => body.also_ids?.includes(x.id) && x.status === 'open' && x.to_role === user.role)]
+    for (const x of group) {
+      x.status = 'answered'
+      x.answer = body.text.trim()
+      x.added_to_kb = Boolean(body.add_to_kb)
+      const list = state.notifications.get(x.from_id) ?? []
+      list.unshift({ id: uuid(), kind: 'escalation_answer', title: `Ответ от ${user.display_name}`, body: x.answer, read: false, created_at: new Date().toISOString() })
+      state.notifications.set(x.from_id, list)
+    }
     saveState()
     return HttpResponse.json(publicEscalation(e))
   }),

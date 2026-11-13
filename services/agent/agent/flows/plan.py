@@ -257,9 +257,6 @@ def handle_task_message(turn: Turn, text: str) -> Iterator[Event]:
             "Нужна помощь с: <вопрос>. Когда тебе удобно обсудить?"
         )
         lead = f"Подготовил сообщение {mentor} про задачу «{title}»."
-    yield from say(
-        lead
-        + " Допиши, что уже сделал, и нажми «Отправить» — сообщение уйдёт наставнику, а ответ появится в «Мои вопросы»."
-    )
+    yield from say(lead + " Допиши, что уже сделал, скопируй и отправь наставнику в личные сообщения.")
     yield _mentor_draft(turn, "task", body)
     turn.meta["escalated"] = True

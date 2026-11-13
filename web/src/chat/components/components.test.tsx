@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -278,35 +278,30 @@ describe('MessageBubble layout rules', () => {
 })
 
 describe('EscalationDraft', () => {
-  it('edits the text and posts it to /api/escalations', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({ id: 'e1', to_role: 'mentor', text: 'Новый текст', status: 'open', created_at: '2026-11-09T10:00:00Z' }, 201),
-    )
+  it('organizers 13.11: the text is copied for a direct message, nothing is sent from buddy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <EscalationDraft draft={{ to_role: 'mentor', text: 'Здравствуйте' }} />
-      </QueryClientProvider>,
-    )
+    render(<EscalationDraft draft={{ to_role: 'mentor', text: 'Здравствуйте', to_name: 'Олег Мартынов', channel: '#delivery-team', queue: true }} />)
     const box = screen.getByLabelText('Текст сообщения')
     await userEvent.clear(box)
     await userEvent.type(box, 'Новый текст')
-    await userEvent.click(screen.getByRole('button', { name: 'Отправить наставнику' }))
-    expect(await screen.findByText('Сообщение отправлено.')).toBeInTheDocument()
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/api/escalations')
-    expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body))).toMatchObject({ to_role: 'mentor', text: 'Новый текст' })
+    await userEvent.click(screen.getByRole('button', { name: 'Скопировать' }))
+    expect(writeText).toHaveBeenCalledWith('Новый текст')
+    expect(await screen.findByRole('button', { name: 'Скопировано' })).toBeInTheDocument()
+    expect(screen.getByText('Отправь в личные сообщения (Олег Мартынов) или в канал #delivery-team.')).toBeInTheDocument()
+    expect(screen.getByText(/Вопрос уже в списке наставника/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Отправить/ })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('shows an error when sending fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ code: 'internal', message: 'Сбой отправки', retryable: true }, 500)))
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <EscalationDraft draft={{ to_role: 'lead', text: 'Текст' }} />
-      </QueryClientProvider>,
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Отправить наставнику' }))
-    await waitFor(() => expect(screen.getByText('Сбой отправки')).toBeInTheDocument())
+  it('without a clipboard the text is selected for Ctrl+C; a lead draft has no stack line without queue', async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) }, configurable: true })
+    render(<EscalationDraft draft={{ to_role: 'lead', text: 'Текст' }} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Скопировать' }))
+    expect(screen.getByRole('button', { name: 'Скопировать' })).toBeInTheDocument()
+    expect(screen.getByText('Отправь в личные сообщения.')).toBeInTheDocument()
+    expect(screen.queryByText(/Вопрос уже в списке/)).not.toBeInTheDocument()
   })
 })

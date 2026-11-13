@@ -62,6 +62,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/escalations", h.create)
 	mux.HandleFunc("GET /api/escalations", h.list)
 	mux.HandleFunc("POST /api/escalations/{escalation_id}/answer", h.answer)
+	mux.HandleFunc("GET /api/escalations/queue", h.queue)
 }
 
 var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -275,6 +276,8 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 		Text    string `json:"text"`
 		AddToKB bool   `json:"add_to_kb"`
 		KBScope string `json:"kb_scope"` // team (default) | all: a general answer for every team
+		// the other questions of the same stack group (organizers 13.11): one answer closes them all
+		AlsoIDs []string `json:"also_ids"`
 	}
 	if err := httpx.ReadJSON(w, r, &body); err != nil {
 		apierr.WriteJSON(w, err)
@@ -291,6 +294,19 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	answered := []string{id}
+	for _, other := range body.AlsoIDs {
+		if len(answered) > 100 {
+			break
+		}
+		if other == id || !uuidRE.MatchString(other) || contains(answered, other) {
+			continue
+		}
+		// a question of another addressee or one answered meanwhile is skipped, the rest of the group is answered
+		if _, err := h.saveAnswer(ctx, c, other, text); err == nil {
+			answered = append(answered, other)
+		}
+	}
 	added := false
 	if body.AddToKB && h.faq != nil && h.flags != nil && h.flags.Enabled(ctx, flags.EscalationToKB, c.TeamID) {
 		token, _ := authn.TokenFromContext(ctx)
@@ -310,7 +326,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if added {
-		if _, err := h.pool.Exec(ctx, `UPDATE core.escalations SET added_to_kb = true WHERE id = $1`, id); err != nil {
+		if _, err := h.pool.Exec(ctx, `UPDATE core.escalations SET added_to_kb = true WHERE id = ANY($1::uuid[])`, answered); err != nil {
 			h.log.Error("mark added_to_kb failed", "escalation_id", id, "err", err)
 		}
 	}

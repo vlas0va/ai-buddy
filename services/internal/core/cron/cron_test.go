@@ -279,3 +279,27 @@ func TestCron_ReportAfterThreeMonths_Idea1211(t *testing.T) {
 		t.Fatalf("report notification repeated: %+v", res)
 	}
 }
+
+// Organizers 13.11: questions wait in the stack; the addressee gets one digest a day, not a notification each.
+func TestCron_QuestionDigestOncePerDay_S2_23(t *testing.T) {
+	pool := pgtest.New(t)
+	exec(t, pool, `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, text) VALUES
+		('intern.anna', 'mentor.oleg', 'mentor', 'Можно ли с собакой?'), ('intern.anna', 'mentor.oleg', 'mentor', 'Где митап?'),
+		('intern.anna', 'lead.maria', 'lead', 'Какие цели?')`)
+	exec(t, pool, `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, text, status, answer) VALUES
+		('intern.ivan', 'mentor.sergey', 'mentor', 'Уже отвечено', 'answered', 'да')`)
+	r := cron.NewRunner(pool, analytics.NewEmitter(false), 0, nil)
+	res, err := r.RunOnce(context.Background())
+	if err != nil || res.Questions != 2 {
+		t.Fatalf("digests: %+v %v", res, err)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'mentor.oleg' AND title = 'Вопросы стажёров ждут ответа: 2'`); n != 1 {
+		t.Fatalf("oleg digest: %d", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'mentor.sergey' AND dedupe_key LIKE 'questions:%'`); n != 0 {
+		t.Fatal("no digest without open questions")
+	}
+	if res, _ = r.RunOnce(context.Background()); res.Questions != 0 {
+		t.Fatalf("the same day sends no second digest: %+v", res)
+	}
+}

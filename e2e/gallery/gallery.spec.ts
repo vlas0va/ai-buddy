@@ -39,9 +39,7 @@ test('gallery', async ({ browser }) => {
   await newDialog(anna)
   await ask(anna, 'Где посмотреть расписание командного митапа по архитектуре в этом квартале?')
   await waitAnswer(anna)
-  const draft = anna.getByLabel('Черновик сообщения').last()
-  await draft.getByRole('button', { name: /Отправить/ }).click()
-  await expect(draft.getByText('Сообщение отправлено.')).toBeVisible()
+  await expect(anna.getByLabel('Черновик сообщения').last()).toContainText('Вопрос уже в списке наставника')
   for (const q of ['кто мой наставник?', 'Как настроить VPN?', 'Как создать ветку и открыть PR?']) {
     await ask(anna, q)
     await waitAnswer(anna)

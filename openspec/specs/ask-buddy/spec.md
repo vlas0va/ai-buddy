@@ -53,7 +53,10 @@ The agent SHALL answer only from documents returned by kb.search and readable by
 - **THEN** BM25 and vector results are fused; a failing embedder falls back to BM25
 
 ### Requirement: Escalation when the KB has no answer
-The agent SHALL say it found nothing and SHALL prepare an editable draft to the right person instead of guessing.
+The agent SHALL say it found nothing and SHALL prepare an editable draft to the right person instead of guessing. The
+intern sends it personally (direct message or the team channel): buddy does not deliver messages to the mentor
+(organizers 13.11). An intern's question to the mentor, the lead or HR BP goes to that person's question stack, where it is
+answered in a batch and the answer can be added to the knowledge base.
 
 #### Scenario: S2-05 No answer
 - **WHEN** the KB has no relevant document
@@ -62,6 +65,11 @@ The agent SHALL say it found nothing and SHALL prepare an editable draft to the 
 #### Scenario: S2-06 Curator topics
 - **WHEN** the question is about university documents
 - **THEN** the draft goes to the internship curator
+
+#### Scenario: S2-23 Write the mentor directly, the question goes to the stack
+- **WHEN** an intern's question has no answer in the KB
+- **THEN** the agent names the mentor and the team channel, the escalation_draft carries `channel`, `queue: true` and the
+  question, and the text says the question was added to the mentor's list; a mentor's or lead's draft has no `queue`
 
 #### Scenario: S2-12 Manual escalation uses history
 - **WHEN** the intern writes «спроси у наставника» after a question
