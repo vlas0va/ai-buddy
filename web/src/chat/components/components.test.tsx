@@ -50,11 +50,11 @@ describe('ActionProposalCard (S3, R66)', () => {
   it('cancel calls onCancel; finished states hide the buttons', async () => {
     const onCancel = vi.fn()
     const { rerender } = render(<ActionProposalCard proposal={absence} onConfirm={vi.fn()} onCancel={onCancel} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Не отправлять' }))
     expect(onCancel).toHaveBeenCalledWith('p1')
     rerender(<ActionProposalCard proposal={{ ...absence, state: 'cancelled' } as never} onConfirm={vi.fn()} onCancel={onCancel} />)
     expect(screen.queryByRole('button', { name: 'Отправить' })).not.toBeInTheDocument()
-    expect(screen.getByText(/отменена/)).toBeInTheDocument()
+    expect(screen.getByText(/Черновик закрыт, ничего не отправлено/)).toBeInTheDocument()
     rerender(<ActionProposalCard proposal={{ ...absence, state: 'confirmed' } as never} onConfirm={vi.fn()} onCancel={onCancel} />)
     expect(screen.getByText('Заявка отправлена.')).toBeInTheDocument()
   })

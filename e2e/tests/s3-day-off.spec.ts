@@ -94,6 +94,6 @@ test('S3: dates in a pop-up calendar, then the request is withdrawn before the H
   await waitAnswer(page)
   const cancel = page.getByLabel('Черновик заявки').last()
   await expect(cancel).toContainText('Отмена заявки')
-  await cancel.getByRole('button', { name: 'Отправить' }).click()
+  await cancel.getByRole('button', { name: 'Отменить заявку' }).click()
   await expect(page.getByLabel('Результат заявки').last()).toContainText('Отменена')
 })

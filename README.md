@@ -8,7 +8,7 @@
 > «Тестовая инструкция прототипа» на каждом ответе), а не регламенты Авито. Зарплаты, выплаты и медицинские данные
 > buddy не обсуждает и направляет к HR BP.
 
-**Видео-демо:** [presentation/demo.mp4](presentation/demo.mp4) · **Презентация:** [presentation/AI-buddy.pdf](presentation/AI-buddy.pdf)
+**Видео** — [раздел ниже](#видео) · **Галерея экранов** — [по ролям](#галерея) · **Презентация:** [presentation/AI-buddy.pdf](presentation/AI-buddy.pdf)
 
 ## Быстрый старт — одна команда
 
@@ -51,6 +51,41 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 | + | Наставничество: «сделай за меня» → план из шагов, подготовка к код-ревью, разбор лога с маскированием секретов, квиз по инструкции, справка по бенефитам без денежных операций | ответы организаторов 10.11 | — | `guards-and-coaching.spec.ts` |
 | + | Командировка в другой офис (trips MCP → TRP-… → согласует руководитель), согласия (статусы, подпись добровольных), шаги отгула: руководитель → HR-администратор → HR BP | «Пространство решений», ответы 10.11 | — | `extras.spec.ts` |
 | + | Файлы в чате: лог и конфиг (секреты скрыты), код (подготовка к ревью), скриншот и документ (не читаются, честно говорит, что делать); поиск по открытым источникам для общих техвопросов | ответы организаторов 10.11 | — | `extras.spec.ts` |
+| + | Для наставника и руководителя: панель «Польза buddy» (доля вопросов, закрытых без наставника, сэкономленные часы, оценки «Полезно»), отчёт за стажировку с темами для 1:1, согласование целей и подтверждение задач, в согласованиях — кто из команды отсутствует в те же дни | метрики кейса, ответы организаторов 12.11–12.13 | CL-03, CL-06 | `roles.spec.ts`, `s1-plan.spec.ts` |
+
+## Галерея
+
+Снято на свежем стеке со stub-LLM: `cd e2e && npx playwright test --config gallery.config.ts` (сценарий съёмки —
+`e2e/gallery/gallery.spec.ts`, картинки — `docs/screenshots/`).
+
+**Стажёр**
+
+| Чат: отгул через черновик | Доступы одной карточкой |
+|---|---|
+| [![Чат стажёра: черновик отгула](docs/screenshots/02-intern-chat-day-off.png)](docs/screenshots/02-intern-chat-day-off.png) | [![Недостающие доступы](docs/screenshots/03-intern-accesses.png)](docs/screenshots/03-intern-accesses.png) |
+| **План адаптации** | **Вход и тестовые учётные записи** |
+| [![План стажёра](docs/screenshots/04-intern-plan.png)](docs/screenshots/04-intern-plan.png) | [![Вход](docs/screenshots/01-login.png)](docs/screenshots/01-login.png) |
+
+**Наставник**
+
+| «Польза buddy»: доля вопросов, закрытых без наставника, и сэкономленное время | Вопросы стажёров и ответ в базу знаний |
+|---|---|
+| [![Мои стажёры и польза buddy](docs/screenshots/05-mentor-team-benefit.png)](docs/screenshots/05-mentor-team-benefit.png) | [![Вопросы стажёров](docs/screenshots/06-mentor-questions.png)](docs/screenshots/06-mentor-questions.png) |
+| **Отчёт за стажировку (факты, а не оценка)** | |
+| [![Отчёт за стажировку](docs/screenshots/07-mentor-report.png)](docs/screenshots/07-mentor-report.png) | |
+
+**Руководитель**
+
+| Согласования: кто из команды отсутствует в эти же дни |
+|---|
+| [![Согласования руководителя](docs/screenshots/08-lead-approvals.png)](docs/screenshots/08-lead-approvals.png) |
+
+## Видео
+
+<!-- VIDEO: ссылка на запись демо команды — вставить сюда -->
+**Демо команды:** ссылка появится здесь.
+
+Короткое автоматическое демо с подписями: [presentation/demo.mp4](presentation/demo.mp4) (как пересобрать — `presentation/README.md`).
 
 ## Порядок проверки (10 минут)
 
@@ -137,12 +172,12 @@ web (React, SSE) ──► core (Go: REST, SSE-прокси, план, журн�
 
 | Команда | Что | Результат |
 |---|---|---|
-| `make test` | Go (core, mocks, platform) + агент (pytest) | 36 Go-пакетов, 215 тестов агента |
+| `make test` | Go (core, mocks, platform) + агент (pytest) | 36 Go-пакетов, 253 теста агента |
 | `make coverage` | покрытие по сервисам, падает < 80% | core 89.3%, mocks 88.5%, platform 98%, agent 97%, web 96.5% — снимок отчётов в [docs/coverage-report](docs/coverage-report/README.md) |
-| `cd web && npm run coverage` | vitest | 159 тестов |
-| `make eval` | 134 кейса качества ответов, guard-метрики | 100%, guard 100% |
-| `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 180/180 |
-| `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 27 тестов, по спеке на сценарий |
+| `cd web && npm run coverage` | vitest | 194 теста |
+| `make eval` | 139 кейсов качества ответов, guard-метрики | 100%, guard 100% |
+| `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 195/195 |
+| `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 35 тестов, по спеке на сценарий |
 | `make smoke` | S3, S4, командировка, согласие, шаги HR, вложение через API core | SMOKE OK |
 | `make lint` | golangci/gofmt, ruff, eslint, `openspec validate --all` | |
 

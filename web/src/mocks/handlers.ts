@@ -118,6 +118,35 @@ export const handlers = [
     )
   }),
 
+  http.get('*/api/team/benefit', ({ request }) => {
+    const user = userByToken(request.headers.get('Authorization'))
+    if (!user) return unauthorized()
+    if (user.role !== 'mentor' && user.role !== 'lead') return forbidden()
+    const rows = MOCK_USERS.filter((u) => u.role === 'intern' && teamOf(user, u)).map((i, k) => {
+      const asked = 6 + 3 * k
+      const escalated = state.escalations.filter((e) => e.from_id === i.id).length
+      const selfServed = Math.max(asked - escalated, 0)
+      return { user_id: i.id, display_name: i.display_name, asked, escalated, self_served: selfServed, saved_minutes: selfServed * 10, useful: 2 + k, not_useful: k % 2 }
+    })
+    const sum = (f: (r: (typeof rows)[number]) => number) => rows.reduce((a, r) => a + f(r), 0)
+    const asked = sum((r) => r.asked)
+    const selfServed = sum((r) => r.self_served)
+    return HttpResponse.json({
+      interns: rows.length,
+      minutes_per_question: 10,
+      asked,
+      escalated: sum((r) => r.escalated),
+      answered: 0,
+      added_to_kb: 0,
+      self_served: selfServed,
+      self_served_percent: asked ? Math.round((selfServed * 100) / asked) : 0,
+      saved_minutes: selfServed * 10,
+      useful: sum((r) => r.useful),
+      not_useful: sum((r) => r.not_useful),
+      rows,
+    })
+  }),
+
   http.get('*/api/escalations', ({ request }) => {
     const user = userByToken(request.headers.get('Authorization'))
     if (!user) return unauthorized()

@@ -7,6 +7,7 @@ import { QueryState } from '@/components/QueryState'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { BenefitPanel } from '@/plan/BenefitPanel'
 import { PERIOD_LABELS } from '@/plan/periods'
 import '@/plan/plan.css'
 
@@ -16,6 +17,7 @@ export function TeamPage() {
   return (
     <section>
       <PageHeader title="Мои стажёры" hint="Прогресс по плану адаптации. Откройте стажёра, чтобы увидеть задачи и задать цели." />
+      <BenefitPanel />
       <QueryState
         isLoading={interns.isPending}
         error={interns.error}

@@ -85,7 +85,7 @@ describe('S3 day off flow', () => {
     mount()
     await ask('хочу отгул в пятницу')
     const draft = await screen.findByLabelText('Черновик заявки')
-    await userEvent.click(within(draft).getByRole('button', { name: 'Отменить' }))
+    await userEvent.click(within(draft).getByRole('button', { name: 'Не отправлять' }))
     expect(await screen.findByText(/ничего не отправлено/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Результат заявки')).not.toBeInTheDocument()
     expect(screen.getAllByText('Заявок пока нет.').length).toBeGreaterThan(0)
