@@ -2,7 +2,6 @@
 # web/ has its own context and web/.dockerignore.
 .git
 .github
-.claude
 .env
 .env.*
 !.env.example

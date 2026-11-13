@@ -15,6 +15,6 @@ go_line="$(grep -E '^go [0-9]' go.mod | awk '{print $2}')"
 echo "go directive: $go_line ($(go version | awk '{print $3}') used)"
 case "$go_line" in
   1.24|1.24.*) echo "OK: compatible with Go 1.24 toolchains (Dockerfile, CI)";;
-  *) echo "WARNING: go directive is $go_line, expected ${TARGET_GO}.x — send this output to Claude"; exit 1;;
+  *) echo "WARNING: go directive is $go_line, expected ${TARGET_GO}.x — send this output to the backend owner"; exit 1;;
 esac
 echo "vendored modules: $(grep -c '^# ' vendor/modules.txt)"

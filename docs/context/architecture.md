@@ -1,4 +1,4 @@
-# Architecture (working context for Claude; the jury-facing version lives in docs/architecture.md)
+# Architecture (working context of the team; the jury-facing version lives in docs/architecture.md)
 
 Kept in English to save tokens. Requirement IDs refer to `requirements.md`.
 
