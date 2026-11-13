@@ -74,6 +74,17 @@
     radial-gradient(circle at 80% 86%, rgba(150, 94, 235, 0.18) 0 120px, transparent 121px),
     radial-gradient(circle at 10% 96%, rgba(255, 97, 99, 0.18) 0 70px, transparent 71px),
     #eef6ff;
+  /* login page (Rita 13.11): one Avito-style background with circles behind both halves */
+  --gradient-login:
+    radial-gradient(circle at 37% 11%, rgba(0, 170, 255, 0.22) 0 110px, transparent 111px),
+    radial-gradient(circle at 44% 50%, rgba(151, 207, 38, 0.24) 0 60px, transparent 61px),
+    radial-gradient(circle at 34% 94%, rgba(150, 94, 235, 0.18) 0 140px, transparent 141px),
+    radial-gradient(circle at 3% 98%, rgba(255, 97, 99, 0.18) 0 80px, transparent 81px),
+    radial-gradient(circle at 97% 7%, rgba(151, 207, 38, 0.24) 0 100px, transparent 101px),
+    radial-gradient(circle at 100% 72%, rgba(0, 170, 255, 0.2) 0 150px, transparent 151px),
+    radial-gradient(circle at 58% 3%, rgba(255, 97, 99, 0.16) 0 46px, transparent 47px),
+    radial-gradient(circle at 63% 99%, rgba(150, 94, 235, 0.16) 0 70px, transparent 71px),
+    #eef6ff;
 
   --focus-ring: 0 0 0 3px rgba(0, 111, 219, 0.4);
 }

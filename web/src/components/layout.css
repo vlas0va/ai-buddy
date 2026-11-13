@@ -51,7 +51,7 @@
 }
 
 /* Login */
-.login-page { min-height: 100vh; display: grid; grid-template-columns: 1fr; }
+.login-page { min-height: 100vh; display: grid; grid-template-columns: 1fr; background: var(--gradient-hero); }
 .login-panel { display: grid; align-content: center; justify-items: center; gap: var(--space-4); padding: var(--space-4); }
 .login-mobile-logo { display: block; }
 .login-hero { display: none; }
@@ -80,12 +80,18 @@
 @media (max-width: 420px) { .accounts { grid-template-columns: 1fr; } }
 
 @media (min-width: 960px) {
-  .login-page { grid-template-columns: 45% 55%; }
+  /* Rita 13.11: the login page does not scroll; the whole page shares one background with circles */
+  .login-page { grid-template-columns: 45% 55%; height: 100vh; height: 100dvh; overflow: hidden; background: var(--gradient-login); }
   .login-mobile-logo { display: none; }
-  .login-panel { padding: var(--space-8); }
+  .login-panel { padding: var(--space-6) var(--space-8); overflow-y: auto; min-height: 0; }
+  .login-card { padding: var(--space-6) var(--space-8); gap: var(--space-3); max-width: 460px; }
+  .login-form { gap: var(--space-3); }
+  .accounts-group { gap: 6px; }
+  .account-card { padding: 6px var(--space-2); }
+  .account-selected .account-card { padding: 5px calc(var(--space-2) - 1px); }
   .login-hero {
     display: flex; flex-direction: column; justify-content: space-between; gap: var(--space-8);
-    padding: var(--space-8) 56px; background: var(--gradient-hero);
+    padding: var(--space-8) 56px; background: transparent; min-height: 0;
   }
   .login-hero-main { display: grid; gap: var(--space-6); align-content: center; flex: 1; max-width: 460px; }
   .login-hero .brand { padding: 0; gap: var(--space-3); }
