@@ -1,4 +1,4 @@
-"""Shared turn context and helpers for flows."""
+"""Общий контекст хода и помощники для сценариев."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ class Turn:
     session_id: str
     writer: Any
     kb: Any = None
-    web: Any = None  # websearch.WebSearch for general technical questions the KB does not cover
+    web: Any = None  # websearch.WebSearch для общих технических вопросов, которых нет в базе знаний
     history: list[dict[str, str]] = field(default_factory=list)
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -103,8 +103,8 @@ class Turn:
         requires_approval: bool,
         checklist_item_id: str | None = None,
     ) -> dict[str, Any]:
-        """action_proposal of contracts/agent-stream.md: draft = {tool, args, display}; args are signed by core."""
-        pid = str(uuid.uuid4())  # = idempotency_key of the MCP write (format: uuid)
+        """action_proposal из contracts/agent-stream.md: draft = {tool, args, display}; args подписывает ядро."""
+        pid = str(uuid.uuid4())  # = idempotency_key записи в MCP (формат: uuid)
         h = args_hash(args)
         exp = datetime.now(timezone.utc) + timedelta(seconds=PROPOSAL_TTL_S)
         proposal = {
@@ -118,7 +118,8 @@ class Turn:
             "task_checklist_item_id": checklist_item_id,
             "expires_at": exp.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
-        # Registry so the confirm turn can check the proposal really came from this agent for this user.
+        # Реестр, чтобы ход подтверждения мог проверить, что черновик действительно пришёл от этого агента для этого
+        # пользователя.
         self.store.set(
             f"proposal:{pid}",
             {
@@ -136,14 +137,14 @@ class Turn:
 
 
 def items(result: Any) -> list[dict[str, Any]]:
-    """MCP list tools return {"items": [...]} (contracts/schemas)."""
+    """Инструменты-списки MCP возвращают {"items": [...]} (contracts/schemas)."""
     if isinstance(result, dict):
         return list(result.get("items", []))
     return list(result or [])
 
 
 def say(text: str, chunk: int = 48) -> Iterator[Event]:
-    """Stream a prepared text as token events (word-boundary chunks)."""
+    """Отдать готовый текст событиями token (кусками по границам слов)."""
     buf = ""
     for part in re.split(r"(\s+)", text):
         buf += part

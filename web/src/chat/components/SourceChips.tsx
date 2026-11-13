@@ -8,7 +8,7 @@ import { CloseIcon } from '@/components/ui/icons'
 import type { Source } from '../stream'
 import { safeUrl } from '../attachments'
 
-/** The test document behind a source chip, in a side panel (feedback 12.11: chips were not clickable). */
+/** Тестовый документ за чипом источника, в боковой панели (отзыв 12.11: чипы не нажимались). */
 function DocDrawer({ source, onClose }: { source: Source; onClose: () => void }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const doc = useQuery({ queryKey: ['kb-doc', source.doc_id], queryFn: () => getKBDoc(source.doc_id), staleTime: 5 * 60_000 })
@@ -38,8 +38,9 @@ function DocDrawer({ source, onClose }: { source: Source; onClose: () => void })
   )
 }
 
-// R69: every KB answer shows that the source is a test instruction of the prototype. Web search results for general
-// technical questions are public pages: they open in a new tab and carry «Внешний источник», never the KB badge.
+// R69: каждый ответ из базы знаний показывает, что источник — тестовая инструкция прототипа. Результаты веб-поиска по
+// общим техническим вопросам — публичные страницы: они открываются в новой вкладке и помечены «Внешний источник»,
+// никогда не плашкой базы знаний.
 export function SourceChips({ sources }: { sources: Source[] }) {
   const [open, setOpen] = useState<Source | null>(null)
   if (sources.length === 0) return null
@@ -49,11 +50,11 @@ export function SourceChips({ sources }: { sources: Source[] }) {
     <>
       {kb.length > 0 && (
         <div className="chat-sources" aria-label="Источники">
-          {/* R69: where the answer comes from; a click opens the document, to read it in full or check the answer */}
+          {/* R69: откуда взят ответ; клик открывает документ, чтобы прочитать его целиком или проверить ответ */}
           <span className="chat-sources-label">{kb.length > 1 ? 'Источники:' : 'Источник:'}</span>
           {kb.map((s) => (
             <button key={s.doc_id} type="button" className="chat-chip chat-chip-doc" onClick={() => setOpen(s)} title="Открыть документ">
-              {/* a mentor answer added to the team KB (kb.add_faq) is marked so the intern sees where it came from */}
+              {/* ответ наставника, добавленный в базу знаний команды (kb.add_faq), помечен, чтобы стажёр видел, откуда он */}
               {s.doc_id.startsWith('faq-') ? `Ответ наставника: ${s.title}` : s.title}
             </button>
           ))}

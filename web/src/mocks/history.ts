@@ -1,7 +1,8 @@
 import { saveState, state, uuid, type StoredMessage } from './db'
 import type { MockEvent } from './sse'
 
-// Stores chat turns the way GET /api/chat/sessions/{id} returns them. proposal/result are optional extensions of ChatMessage.
+// Хранит ходы чата в том виде, как их возвращает GET /api/chat/sessions/{id}. proposal/result — необязательные
+// расширения ChatMessage.
 
 function assistantFrom(events: MockEvent[]): StoredMessage {
   const msg: StoredMessage = { id: uuid(), author: 'assistant', text: '', sources: [], created_at: new Date().toISOString() }
@@ -30,9 +31,9 @@ export function recordTurn(
   events: MockEvent[],
   files: { name: string; kind: string; size: number }[] = [],
 ): void {
-  // a failed turn is not stored: "Повторить" sends the same text again
+  // неудачный ход не сохраняется: «Повторить» снова отправляет тот же текст
   if (events.some((e) => e.event === 'error')) return
-  const attachments = files.map(({ name, kind, size }) => ({ name, kind, size })) // metadata only, never the text
+  const attachments = files.map(({ name, kind, size }) => ({ name, kind, size })) // только метаданные, никогда не текст
   const user: StoredMessage = { id: uuid(), author: 'user', text: userText, sources: [], attachments, created_at: new Date().toISOString() }
   push(sessionId, user, assistantFrom(events))
 }
@@ -48,7 +49,7 @@ export function recordConfirm(sessionId: string, proposalId: string, events: Moc
   setStoredProposalState(sessionId, proposalId, 'confirmed')
   const assistant = assistantFrom(events)
   const actionId = (assistant.result as { action_id?: string } | undefined)?.action_id
-  // a replay of an executed proposal is already stored (R79)
+  // повтор выполненного черновика уже сохранён (R79)
   if (state.sessions.get(sessionId)?.some((m) => actionId && (m.result as { action_id?: string } | undefined)?.action_id === actionId)) return
   push(sessionId, assistant)
 }

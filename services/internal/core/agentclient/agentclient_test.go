@@ -272,7 +272,7 @@ func TestStream_SizeLimits_R76(t *testing.T) {
 	}
 }
 
-// rewriteQuery adds ?case=<q> to every request.
+// rewriteQuery добавляет ?case=<q> к каждому запросу.
 type rewriteQuery struct{ q string }
 
 func (r rewriteQuery) RoundTrip(req *http.Request) (*http.Response, error) {

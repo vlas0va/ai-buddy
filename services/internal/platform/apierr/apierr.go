@@ -1,6 +1,6 @@
-// Package apierr is the error type shared by the HTTP API (contracts/openapi.yaml, schema Error) and the MCP tool
-// results (contracts/mcp-tools.md, "Errors"). Messages are Russian, user-facing, neutral; they never reveal whether
-// a foreign resource exists (R71).
+// Пакет apierr — тип ошибки, общий для HTTP API (contracts/openapi.yaml, схема Error) и результатов инструментов MCP
+// (contracts/mcp-tools.md, «Errors»). Сообщения на русском, для пользователя, нейтральные; никогда не раскрывают,
+// существует ли чужой ресурс (R71).
 package apierr
 
 import (
@@ -12,10 +12,10 @@ import (
 	"net/http"
 )
 
-// Code is a machine-readable error code.
+// Code — машиночитаемый код ошибки.
 type Code string
 
-// Codes of the HTTP API (openapi Error.code).
+// Коды HTTP API (openapi Error.code).
 const (
 	CodeUnauthorized        Code = "unauthorized"
 	CodeForbidden           Code = "forbidden"
@@ -28,13 +28,13 @@ const (
 	CodeInternal            Code = "internal"
 )
 
-// Codes that exist only in MCP tool results (forbidden, not_found, validation_error and conflict are shared).
+// Коды, которые есть только в результатах инструментов MCP (forbidden, not_found, validation_error и conflict — общие).
 const (
 	CodeInvalidConfirmation Code = "invalid_confirmation"
 	CodeUnavailable         Code = "unavailable"
 )
 
-// Error is an API or tool error. Status is the HTTP status used by WriteJSON; it is not serialised.
+// Error — ошибка API или инструмента. Status — HTTP-статус, который использует WriteJSON; не сериализуется.
 type Error struct {
 	Code      Code   `json:"code"`
 	Message   string `json:"message"`
@@ -62,8 +62,8 @@ var specs = map[Code]spec{
 	CodeUnavailable:         {http.StatusServiceUnavailable, true, "Сервис временно недоступен, попробуйте ещё раз"},
 }
 
-// New returns an error with the given code; an empty message means the default Russian message of the code.
-// Status and Retryable come from the code (unknown codes: 500, not retryable).
+// New возвращает ошибку с указанным кодом; пустое сообщение означает русское сообщение кода по умолчанию. Status и
+// Retryable берутся из кода (неизвестные коды: 500, без повтора).
 func New(code Code, message string) *Error {
 	s, ok := specs[code]
 	if !ok {
@@ -75,56 +75,60 @@ func New(code Code, message string) *Error {
 	return &Error{Code: code, Message: message, Retryable: s.retryable, Status: s.status}
 }
 
-// Unauthorized returns the error for a missing or invalid JWT (401).
+// Unauthorized возвращает ошибку для отсутствующего или некорректного JWT (401).
 func Unauthorized() *Error { return New(CodeUnauthorized, "") }
 
-// Forbidden returns the error for an action or resource the caller may not access, including other users' data (403).
+// Forbidden возвращает ошибку для действия или ресурса, к которому у вызывающего нет доступа, включая чужие данные
+// (403).
 func Forbidden() *Error { return New(CodeForbidden, "") }
 
-// NotFound returns the error for a missing resource of the caller (404).
+// NotFound возвращает ошибку для отсутствующего ресурса вызывающего (404).
 func NotFound() *Error { return New(CodeNotFound, "") }
 
-// Validation returns the error for invalid request data or tool arguments (400); usually followed by WithMessage.
+// Validation возвращает ошибку для некорректных данных запроса или аргументов инструмента (400); обычно дальше идёт
+// WithMessage.
 func Validation() *Error { return New(CodeValidation, "") }
 
-// Conflict returns the error for a state conflict, e.g. an already decided approval (409).
+// Conflict возвращает ошибку для конфликта состояния, например уже решённого согласования (409).
 func Conflict() *Error { return New(CodeConflict, "") }
 
-// Expired returns the error for an expired or cancelled proposal (409).
+// Expired возвращает ошибку для истёкшего или отменённого черновика (409).
 func Expired() *Error { return New(CodeExpired, "") }
 
-// RateLimited returns the error for too many requests (429, retryable).
+// RateLimited возвращает ошибку для слишком частых запросов (429, можно повторить).
 func RateLimited() *Error { return New(CodeRateLimited, "") }
 
-// UpstreamUnavailable returns the error for an agent or MCP server that did not answer (502, retryable).
+// UpstreamUnavailable возвращает ошибку для агента или MCP-сервера, который не ответил (502, можно повторить).
 func UpstreamUnavailable() *Error { return New(CodeUpstreamUnavailable, "") }
 
-// Internal returns the error for an unexpected server failure (500).
+// Internal возвращает ошибку для неожиданного сбоя сервера (500).
 func Internal() *Error { return New(CodeInternal, "") }
 
-// InvalidConfirmation returns the tool error for a write without a valid confirmation token (403 if sent over HTTP).
+// InvalidConfirmation возвращает ошибку инструмента для записи без корректного токена подтверждения (403 при отправке
+// по HTTP).
 func InvalidConfirmation() *Error { return New(CodeInvalidConfirmation, "") }
 
-// Unavailable returns the tool error for an MCP server whose dependency is down (503 if sent over HTTP, retryable).
+// Unavailable возвращает ошибку инструмента для MCP-сервера, у которого недоступна зависимость (503 при отправке по
+// HTTP, можно повторить).
 func Unavailable() *Error { return New(CodeUnavailable, "") }
 
-// Error implements error.
+// Error реализует error.
 func (e *Error) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Message) }
 
-// Is reports whether target is an *Error with the same code, so errors.Is(err, apierr.Forbidden()) works.
+// Is сообщает, является ли target ошибкой *Error с тем же кодом, чтобы работал errors.Is(err, apierr.Forbidden()).
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
 	return ok && t.Code == e.Code
 }
 
-// WithMessage returns a copy of e with a different user-facing message.
+// WithMessage возвращает копию e с другим сообщением для пользователя.
 func (e *Error) WithMessage(msg string) *Error {
 	c := *e
 	c.Message = msg
 	return &c
 }
 
-// As returns the *Error in err's chain, if any.
+// As возвращает *Error из цепочки err, если она есть.
 func As(err error) (*Error, bool) {
 	var e *Error
 	if errors.As(err, &e) && e != nil {
@@ -133,8 +137,8 @@ func As(err error) (*Error, bool) {
 	return nil, false
 }
 
-// From converts any error to an *Error: an *Error in the chain is returned as is, context deadline or
-// cancellation becomes UpstreamUnavailable, anything else becomes Internal. From(nil) is nil.
+// From превращает любую ошибку в *Error: *Error из цепочки возвращается как есть, дедлайн или отмена контекста
+// становятся UpstreamUnavailable, всё остальное — Internal. From(nil) — это nil.
 func From(err error) *Error {
 	if err == nil {
 		return nil
@@ -148,14 +152,15 @@ func From(err error) *Error {
 	return Internal()
 }
 
-// HasCode reports whether err is (or wraps) an *Error with the given code.
+// HasCode сообщает, является ли err ошибкой *Error с указанным кодом (или оборачивает её).
 func HasCode(err error, code Code) bool {
 	e, ok := As(err)
 	return ok && e.Code == code
 }
 
-// ToAPI maps MCP-only codes onto openapi Error.code values, keeping message and retryable:
-// unavailable → upstream_unavailable (502), invalid_confirmation → expired (409). Other errors are returned as is.
+// ToAPI переводит коды, которые есть только в MCP, в значения openapi Error.code, сохраняя сообщение и retryable:
+// unavailable → upstream_unavailable (502), invalid_confirmation → expired (409). Остальные ошибки возвращаются как
+// есть.
 func ToAPI(e *Error) *Error {
 	switch e.Code {
 	case CodeUnavailable:
@@ -169,9 +174,9 @@ func ToAPI(e *Error) *Error {
 	return e
 }
 
-// ToMCP maps API-only codes onto MCP tool error codes, keeping message and retryable:
-// unauthorized → forbidden, expired → invalid_confirmation, rate_limited/upstream_unavailable/internal and
-// unknown codes → unavailable. Shared codes are returned as is.
+// ToMCP переводит коды, которые есть только в API, в коды ошибок инструментов MCP, сохраняя сообщение и retryable:
+// unauthorized → forbidden, expired → invalid_confirmation, rate_limited/upstream_unavailable/internal и неизвестные
+// коды → unavailable. Общие коды возвращаются как есть.
 func ToMCP(e *Error) *Error {
 	switch e.Code {
 	case CodeForbidden, CodeNotFound, CodeValidation, CodeConflict, CodeInvalidConfirmation, CodeUnavailable:
@@ -192,8 +197,8 @@ func remap(e *Error, code Code) *Error {
 	return &c
 }
 
-// WriteJSON writes err as the openapi Error body with its HTTP status (MCP-only codes mapped by ToAPI).
-// Errors that are not *Error are logged with slog and answered as Internal, so details never leak to clients.
+// WriteJSON пишет err как тело openapi Error с его HTTP-статусом (коды только MCP переводятся через ToAPI). Ошибки,
+// которые не *Error, логируются через slog и отдаются как Internal, чтобы подробности не утекали клиентам.
 func WriteJSON(w http.ResponseWriter, err error) {
 	e, ok := As(err)
 	if !ok {
@@ -210,7 +215,7 @@ func WriteJSON(w http.ResponseWriter, err error) {
 	if status == 0 {
 		status = New(e.Code, "").Status
 	}
-	body, _ := json.Marshal(e) // fields are strings and a bool: cannot fail
+	body, _ := json.Marshal(e) // поля — строки и bool: ошибки быть не может
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)

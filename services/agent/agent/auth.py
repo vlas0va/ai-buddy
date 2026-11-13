@@ -1,4 +1,4 @@
-"""User identity from the mock-IdP JWT; the agent never trusts role/team from the request body (ADR-003)."""
+"""Личность пользователя из JWT мок-IdP; агент никогда не доверяет role/team из тела запроса (ADR-003)."""
 
 from __future__ import annotations
 
@@ -50,14 +50,14 @@ class User:
     tasks: list[PlanTask] = field(default_factory=list)
     flags: dict[str, bool] = field(default_factory=dict)
     mentees: list[dict[str, Any]] = field(default_factory=list)
-    location: str = ""  # office city or «удалённо»: personal data the organizers allow buddy to use (Q&A 10.11)
+    location: str = ""  # город офиса или «удалённо»: персональные данные, которые организаторы разрешают использовать buddy (ответы 10.11)
 
     def flag_enabled(self, key: str | None) -> bool:
         return True if not key else self.flags.get(key, True)
 
 
 def mint_token(secret: str, claims: dict[str, Any], ttl_s: int = 8 * 3600) -> str:
-    """Dev/test helper mirroring mock IdP."""
+    """Помощник для разработки и тестов, повторяющий мок-IdP."""
     payload = dict(claims)
     payload.setdefault("exp", int(time.time()) + ttl_s)
     return jwt.encode(payload, secret, algorithm="HS256")
@@ -82,7 +82,9 @@ def bearer(headers: Any) -> str:
 
 def check_service_token(expected: str, headers: Any) -> None:
     got = headers.get("X-Service-Token", "")
-    if expected and not hmac.compare_digest(got.encode(), expected.encode()):  # bytes: a non-ASCII value must not crash
+    if expected and not hmac.compare_digest(
+        got.encode(), expected.encode()
+    ):  # bytes: не-ASCII значение не должно ронять
         raise Unauthorized("Неверный сервисный токен.")
 
 
@@ -94,7 +96,7 @@ def build_user(
     for key, claim in (("user_id", "sub"), ("role", "role"), ("team_id", "team_id")):
         if ctx.get(key) not in (None, "") and str(ctx[key]) != str(claims.get(claim)):
             raise Forbidden("Контекст пользователя не совпадает с токеном.", code="context_mismatch")
-    # contracts/agent-stream.md: open_tasks (core) or plan.tasks (full plan); current_period (core) or stage.
+    # contracts/agent-stream.md: open_tasks (ядро) или plan.tasks (полный план); current_period (ядро) или stage.
     raw_tasks = (ctx.get("plan") or {}).get("tasks") or ctx.get("open_tasks") or []
     tasks = [PlanTask.from_dict(t) for t in raw_tasks]
     return User(

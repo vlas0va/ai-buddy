@@ -1,12 +1,12 @@
--- Core schema (owner B). Runs once on first Postgres start via /docker-entrypoint-initdb.d.
--- Identity comes from the mock IdP (core.users); all data is synthetic (R68, R70).
+-- Схема ядра (владелец B). Выполняется один раз при первом запуске Postgres через /docker-entrypoint-initdb.d. Личность
+-- берётся из мок-IdP (core.users); все данные синтетические (R68, R70).
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE SCHEMA IF NOT EXISTS core;
 
--- Mock IdP store. Passwords are bcrypt hashes of test passwords listed in README (R34).
+-- Хранилище мок-IdP. Пароли — bcrypt-хеши тестовых паролей, перечисленных в README (R34).
 CREATE TABLE core.users (
-    id            text PRIMARY KEY,              -- = login, e.g. intern.anna
+    id            text PRIMARY KEY,              -- = логин, например intern.anna
     display_name  text NOT NULL,
     role          text NOT NULL CHECK (role IN ('intern','mentor','lead','hrbp','alumni','curator')),
     team_id       text NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE core.plans (
     id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id      text NOT NULL REFERENCES core.users(id),
     plan_role    text NOT NULL CHECK (plan_role IN ('intern','mentor')),
-    intern_id    text REFERENCES core.users(id),  -- for a mentor plan: whose onboarding it supports
+    intern_id    text REFERENCES core.users(id),  -- для плана наставника: чью адаптацию он сопровождает
     created_at   timestamptz NOT NULL DEFAULT now(),
     UNIQUE (user_id, plan_role, intern_id)
 );
@@ -29,7 +29,7 @@ CREATE TABLE core.plan_tasks (
     plan_id           uuid NOT NULL REFERENCES core.plans(id) ON DELETE CASCADE,
     parent_task_id    uuid REFERENCES core.plan_tasks(id) ON DELETE CASCADE,
     source            text NOT NULL DEFAULT 'checklist' CHECK (source IN ('checklist','action')),
-    checklist_item_id text,                      -- CL-01..CL-16; NULL for source = 'action' (S3 day off, R66)
+    checklist_item_id text,                      -- CL-01..CL-16; NULL для source = 'action' (отгул S3, R66)
     period            text NOT NULL CHECK (period IN ('week_1','week_2','month_1','month_2','after_3_months')),
     position          int  NOT NULL DEFAULT 0,
     title             text NOT NULL,
@@ -69,21 +69,21 @@ CREATE TABLE core.chat_messages (
 );
 CREATE INDEX chat_messages_session_idx ON core.chat_messages (session_id, created_at);
 
--- Write proposals waiting for user confirmation (R66, R71).
+-- Черновики записей, ожидающие подтверждения пользователя (R66, R71).
 CREATE TABLE core.proposals (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id  uuid NOT NULL REFERENCES core.chat_sessions(id) ON DELETE CASCADE,
     user_id     text NOT NULL REFERENCES core.users(id),
     kind        text NOT NULL CHECK (kind IN ('absence_request','access_request')),
     draft       jsonb NOT NULL,
-    draft_hash  text NOT NULL,                   -- sha256(canonical_json(draft.args)), see contracts/mcp-tools.md
+    draft_hash  text NOT NULL,                   -- sha256(canonical_json(draft.args)), см. contracts/mcp-tools.md
     status      text NOT NULL DEFAULT 'pending'
                 CHECK (status IN ('pending','confirmed','executed','cancelled','expired','failed')),
     created_at  timestamptz NOT NULL DEFAULT now(),
     expires_at  timestamptz NOT NULL DEFAULT now() + interval '30 minutes'
 );
 
--- Executed actions: result returned by the mock service, shown and saved (R66).
+-- Выполненные действия: результат, который вернул мок-сервис, показан и сохранён (R66).
 CREATE TABLE core.actions (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id          text NOT NULL REFERENCES core.users(id),
@@ -92,7 +92,7 @@ CREATE TABLE core.actions (
     status           text NOT NULL CHECK (status IN ('pending_approval','approved','rejected','granted','created','failed')),
     summary          text NOT NULL,
     payload          jsonb NOT NULL DEFAULT '{}',
-    idempotency_key  uuid NOT NULL UNIQUE,       -- = proposal id (R79)
+    idempotency_key  uuid NOT NULL UNIQUE,       -- = id черновика (R79)
     task_id          uuid REFERENCES core.plan_tasks(id) ON DELETE SET NULL,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now()
@@ -122,7 +122,7 @@ CREATE TABLE core.notifications (
     title             text NOT NULL,
     body              text,
     checklist_item_id text,
-    dedupe_key        text,                      -- AI-cron: one reminder per (user, item, kind, period)
+    dedupe_key        text,                      -- AI-cron: одно напоминание на (пользователь, пункт, вид, этап)
     read_at           timestamptz,
     created_at        timestamptz NOT NULL DEFAULT now()
 );
@@ -138,7 +138,7 @@ CREATE TABLE core.feedback (
     PRIMARY KEY (message_id, user_id)
 );
 
--- Runtime feature flags (R55); empty teams = all teams.
+-- Runtime feature flags (R55); пустой teams — все команды.
 CREATE TABLE core.feature_flags (
     key        text PRIMARY KEY,
     enabled    boolean NOT NULL,
@@ -149,7 +149,7 @@ INSERT INTO core.feature_flags (key, enabled) VALUES
     ('scenario_s1', true), ('scenario_s2', true), ('scenario_s3', true), ('scenario_s4', true),
     ('proactive_digest', true), ('escalation_to_kb', false);
 
--- Analytics (contracts/events.md, R24) and transactional outbox for Kafka (R62).
+-- Аналитика (contracts/events.md, R24) и транзакционный outbox для Kafka (R62).
 CREATE TABLE core.analytics_events (
     event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     ts       timestamptz NOT NULL DEFAULT now(),

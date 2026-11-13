@@ -12,7 +12,7 @@ def test_S3_01_explains_procedure_with_test_source_and_asks_dates(anna):
     assert src["items"][0]["doc_id"] == "absence-policy"
     assert src["items"][0]["source_type"] == "test" and src["items"][0]["badge"] == "Тестовая инструкция прототипа"
     assert "Выбери даты в календаре" in text_of(ev) and first(ev, "date_picker")["kind"] == "day_off"
-    assert "Мария Лебедева" in text_of(ev)  # approver from the directory
+    assert "Мария Лебедева" in text_of(ev)  # согласующий из справочника
     assert ev[-1].name == "done"
 
 
@@ -55,7 +55,7 @@ def test_S3_05_confirmed_request_created_shown_saved(anna):
     assert r["external_id"].startswith("ABS-") and r["status"] == "pending_approval"
     assert r["status_label"] == "На согласовании" and r["approver_display_name"] == "Мария Лебедева"
     assert r["kind"] == "absence_request" and r["replayed"] is False
-    # visible after "reload": the service returns it in the list
+    # видно после «перезагрузки»: сервис возвращает заявку в списке
     status = text_of(anna.say("какой статус моей заявки?"))
     assert r["external_id"] in status and "На согласовании" in status
 
@@ -105,7 +105,7 @@ def test_S3_10_service_timeout_does_not_duplicate_request(app_factory):
     token = s.token_for(p)
     err = first(s.confirm(p, token), "error")
     assert err["retryable"] is True and err["code"] == "service_timeout"
-    r = first(s.confirm(p, token), "tool_result")  # «Повторить» with the same proposal
+    r = first(s.confirm(p, token), "tool_result")  # «Повторить» с тем же черновиком
     assert r["replayed"] is True
     assert len(client.agent.mocks.t_absence__list_my_requests({"sub": "intern.anna"}, {})["items"]) == 1
 
@@ -129,7 +129,7 @@ def test_S3_12_invalid_or_tampered_confirmation_is_rejected(anna, ivan):
     assert first(anna.confirm(p, token="bad.token"), "error")["code"] == "confirmation_invalid"
     tampered = {**p["draft"], "args": {**p["draft"]["args"], "start_date": "2026-11-12", "end_date": "2026-11-12"}}
     assert first(anna.confirm(p, draft=tampered), "error")["code"] == "confirmation_invalid"
-    # another user cannot execute Anna's proposal even with a token minted for himself
+    # другой пользователь не может выполнить черновик Анны даже с токеном, выпущенным для себя
     assert first(ivan.confirm(p), "error")["code"] == "confirmation_invalid"
 
 

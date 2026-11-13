@@ -21,11 +21,11 @@ import (
 var (
 	jwtSecret  = []byte("test-jwt-secret")
 	confSecret = []byte("test-confirm-secret")
-	// monday is Monday 2026-11-09 12:00 Moscow time: the earliest trip start is 2026-11-14.
+	// monday — понедельник 2026-11-09 12:00 по Москве: самое раннее начало командировки — 2026-11-14.
 	monday = time.Date(2026, 11, 9, 9, 0, 0, 0, time.UTC)
 	anna   = mcpx.Caller{Claims: authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}} // Москва, lead.maria
 	ivan   = mcpx.Caller{Claims: authn.Claims{Sub: "intern.ivan", Role: "intern", TeamID: "search"}}   // Санкт-Петербург
-	maria  = mcpx.Caller{Claims: authn.Claims{Sub: "lead.maria", Role: "lead", TeamID: "delivery"}}    // no lead
+	maria  = mcpx.Caller{Claims: authn.Claims{Sub: "lead.maria", Role: "lead", TeamID: "delivery"}}    // без руководителя
 	petr   = mcpx.Caller{Claims: authn.Claims{Sub: "alumni.petr", Role: "alumni", TeamID: "delivery"}}
 )
 
@@ -124,7 +124,7 @@ func TestGetPolicy_Trips(t *testing.T) {
 	if len(p.Offices) != 5 || p.MinNoticeDays != 5 || p.MaxDays != 14 || !strings.Contains(p.Text, "тестовые") {
 		t.Fatalf("policy %+v", p)
 	}
-	e.wantCode(petr, "get_policy", nil, apierr.CodeForbidden) // roles: intern, mentor, lead
+	e.wantCode(petr, "get_policy", nil, apierr.CodeForbidden) // роли: стажёр, наставник, руководитель
 }
 
 func TestValidateRequest_Trips_Rules(t *testing.T) {
@@ -133,7 +133,7 @@ func TestValidateRequest_Trips_Rules(t *testing.T) {
 		name string
 		c    mcpx.Caller
 		args map[string]any
-		want string // substring of a problem; empty = valid
+		want string // подстрока проблемы; пусто — корректно
 	}{
 		{"valid", anna, trip("Санкт-Петербург", "2026-11-16", "2026-11-18", "Знакомство с командой"), ""},
 		{"unknown office", anna, trip("Сочи", "2026-11-16", "2026-11-18", "Отдых"), "Офиса в этом городе нет"},
@@ -189,7 +189,7 @@ AND summary = 'Командировка: Санкт-Петербург, 16.11.20
 	if len(list.Items) != 1 || list.Items[0].ID != got.ID || len(must[listOut](e, ivan, "list_my_requests", nil).Items) != 0 {
 		t.Fatalf("list %+v", list)
 	}
-	e.wantCode(anna, "create_request", trip("Казань", "2026-11-20", "2026-11-21", "Проект"), apierr.CodeInvalidConfirmation) // no confirmation
+	e.wantCode(anna, "create_request", trip("Казань", "2026-11-20", "2026-11-21", "Проект"), apierr.CodeInvalidConfirmation) // без подтверждения
 }
 
 func TestRegister_Trips_Errors(t *testing.T) {

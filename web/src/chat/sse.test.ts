@@ -72,7 +72,7 @@ describe('readEvents', () => {
     )
     expect(events[0]).toEqual({ type: 'token', data: { text: 'Привет' } })
     expect(events[1]).toMatchObject({ type: 'error', data: { retryable: true } })
-    // contracts/agent-stream.md: new events are additive, an unknown one is skipped instead of breaking the turn
+    // contracts/agent-stream.md: новые события только добавляются, неизвестное пропускается и не ломает ход
     expect(events[2]).toEqual({ type: 'ignored', data: { name: 'nope' } })
     expect(events[3]).toEqual({ type: 'done', data: { message_id: 'm1' } })
   })

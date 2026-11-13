@@ -17,14 +17,14 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Handler serves POST /api/events and POST /api/feedback.
+// Handler обслуживает POST /api/events и POST /api/feedback.
 type Handler struct {
 	pool    *pgxpool.Pool
 	emitter *Emitter
 	log     *slog.Logger
 }
 
-// New returns the analytics HTTP handler.
+// New возвращает HTTP-обработчик аналитики.
 func New(pool *pgxpool.Pool, emitter *Emitter, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -32,7 +32,7 @@ func New(pool *pgxpool.Pool, emitter *Emitter, log *slog.Logger) *Handler {
 	return &Handler{pool: pool, emitter: emitter, log: log}
 }
 
-// Register adds POST /api/events and POST /api/feedback (auth required).
+// Register добавляет POST /api/events и POST /api/feedback (нужна авторизация).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/events", h.events)
 	mux.HandleFunc("POST /api/feedback", h.feedback)
@@ -80,7 +80,7 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 			apierr.WriteJSON(w, apierr.Validation().WithMessage("Время события должно быть в формате RFC 3339"))
 			return
 		}
-		// A client clock far in the future would corrupt time series: fall back to server time.
+		// Часы клиента далеко в будущем испортили бы временные ряды: используем серверное время.
 		if ts.After(now.Add(5 * time.Minute)) {
 			ts = now
 		}
@@ -138,7 +138,7 @@ func (h *Handler) feedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// Only assistant messages of the caller's own sessions can be rated; anything else is 403 (R71).
+	// Оценивать можно только сообщения ассистента в собственных сессиях вызывающего; всё остальное — 403 (R71).
 	var owned bool
 	err := h.pool.QueryRow(ctx, `SELECT true FROM core.chat_messages m JOIN core.chat_sessions s ON s.id = m.session_id
 		WHERE m.id = $1 AND s.user_id = $2 AND m.author = 'assistant'`, body.MessageID, c.Sub).Scan(&owned)

@@ -1,4 +1,4 @@
-"""Rights and guardrails — openspec/specs/rights-guardrails/spec.md (ADR-003)."""
+"""Права и ограничения — openspec/specs/rights-guardrails/spec.md (ADR-003)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,10 @@ def test_RG_refusals(anna, sid, message, reason, detail):
     assert refusal is not None, sid
     assert refusal["reason"] == reason and refusal["detail"] == detail
     assert first(ev, "action_proposal") is None
-    assert first(ev, "done")["tool_calls"] in ([], ["directory.get_my_contacts"])  # no data tools for refused requests
+    assert first(ev, "done")["tool_calls"] in (
+        [],
+        ["directory.get_my_contacts"],
+    )  # никаких инструментов данных для отклонённых запросов
 
 
 def test_RG_13_sensitive_refusal_redirects_to_hrbp(anna):

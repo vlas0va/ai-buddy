@@ -1,13 +1,14 @@
-// Package confirm issues and verifies confirmation tokens for MCP write tools (contracts/mcp-tools.md, R71, R79).
+// Пакет confirm выпускает и проверяет токены подтверждения для инструментов записи MCP (contracts/mcp-tools.md, R71,
+// R79).
 //
-// Token = P + "." + S, where
+// Токен = P + "." + S, где
 //
 //	P = base64url(payload JSON), S = base64url(HMAC-SHA256(CONFIRMATION_HMAC_SECRET, P))
 //
-// base64url is RFC 4648 §5 WITHOUT padding; the MAC is computed over the ASCII bytes of P (not the decoded JSON).
-// The payload is the canonical JSON (canonjson, keys sorted) of {"args_hash","exp","key","sub"}: exp is Unix
-// seconds, args_hash is the lowercase hex SHA-256 of the canonical arguments (ArgsHash). Python produces the same P
-// with json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).
+// base64url — RFC 4648 §5 БЕЗ выравнивания; MAC считается по ASCII-байтам P (а не по декодированному JSON). Payload —
+// канонический JSON (canonjson, ключи отсортированы) от {"args_hash","exp","key","sub"}: exp — секунды Unix, args_hash
+// — SHA-256 канонических аргументов строчным hex (ArgsHash). Python выдаёт тот же P через json.dumps(payload,
+// sort_keys=True, separators=(",", ":"), ensure_ascii=False).
 package confirm
 
 import (
@@ -24,16 +25,16 @@ import (
 	"aibuddy/services/internal/platform/canonjson"
 )
 
-// Argument keys excluded from the hash: they are not part of what the user confirmed.
+// Ключи аргументов, исключённые из хеша: они не входят в то, что подтвердил пользователь.
 const (
 	KeyIdempotency  = "idempotency_key"
 	KeyConfirmation = "confirmation_token"
 )
 
-// ErrInvalid is wrapped by every verification failure; MCP servers answer all of them with invalid_confirmation.
+// ErrInvalid оборачивается каждой ошибкой проверки; MCP-серверы на все отвечают invalid_confirmation.
 var ErrInvalid = errors.New("confirm: invalid confirmation token")
 
-// Specific verification failures; each satisfies errors.Is(err, ErrInvalid).
+// Конкретные ошибки проверки; каждая удовлетворяет errors.Is(err, ErrInvalid).
 var (
 	ErrMalformed = fmt.Errorf("%w: malformed", ErrInvalid)
 	ErrSignature = fmt.Errorf("%w: bad signature", ErrInvalid)
@@ -43,7 +44,7 @@ var (
 	ErrArgsHash  = fmt.Errorf("%w: arguments mismatch", ErrInvalid)
 )
 
-// ErrNoSecret is a configuration error (empty secret), deliberately not wrapping ErrInvalid.
+// ErrNoSecret — ошибка конфигурации (пустой секрет), намеренно не оборачивает ErrInvalid.
 var ErrNoSecret = errors.New("confirm: empty secret")
 
 type payload struct {
@@ -55,8 +56,8 @@ type payload struct {
 
 var b64 = base64.RawURLEncoding.Strict()
 
-// Issue returns a token for sub (JWT subject), key (idempotency_key) and argsHash (from ArgsHash) that expires
-// ttl from now. ttl must be positive.
+// Issue возвращает токен для sub (субъект JWT), key (idempotency_key) и argsHash (из ArgsHash), который истекает через
+// ttl. ttl должен быть положительным.
 func Issue(secret []byte, sub, key, argsHash string, ttl time.Duration) (string, error) {
 	if ttl <= 0 {
 		return "", fmt.Errorf("confirm: issue: ttl must be positive, got %s", ttl)
@@ -64,7 +65,7 @@ func Issue(secret []byte, sub, key, argsHash string, ttl time.Duration) (string,
 	return IssueUntil(secret, sub, key, argsHash, time.Now().Add(ttl))
 }
 
-// IssueUntil is Issue with an absolute expiry (truncated to seconds); tests use it for expired tokens.
+// IssueUntil — это Issue с абсолютным сроком (обрезается до секунд); тесты используют его для истёкших токенов.
 func IssueUntil(secret []byte, sub, key, argsHash string, exp time.Time) (string, error) {
 	if len(secret) == 0 {
 		return "", ErrNoSecret
@@ -83,9 +84,9 @@ func IssueUntil(secret []byte, sub, key, argsHash string, exp time.Time) (string
 	return p + "." + base64.RawURLEncoding.EncodeToString(sign(secret, p)), nil
 }
 
-// Verify checks token against the caller's JWT subject, the idempotency_key of the call and the arguments the
-// server actually received (idempotency_key and confirmation_token are ignored, see ArgsHash), at time now.
-// Checks run in order signature, exp, sub, key, args; the first failure is returned.
+// Verify проверяет token по субъекту JWT вызывающего, idempotency_key вызова и аргументам, которые сервер действительно
+// получил (idempotency_key и confirmation_token игнорируются, см. ArgsHash), на момент now. Проверки идут по порядку:
+// подпись, exp, sub, key, args; возвращается первая неудача.
 func Verify(secret []byte, token, sub, key string, args any, now time.Time) error {
 	if len(secret) == 0 {
 		return ErrNoSecret
@@ -130,9 +131,9 @@ func Verify(secret []byte, token, sub, key string, args any, now time.Time) erro
 	return nil
 }
 
-// ArgsHash returns the lowercase hex SHA-256 of the canonical JSON of args (a JSON object: map, struct or
-// json.RawMessage) after removing the top-level keys idempotency_key and confirmation_token.
-// It equals canonjson.SHA256Hex(draft.args) for the draft the user confirmed.
+// ArgsHash возвращает SHA-256 канонического JSON от args (JSON-объект: map, структура или json.RawMessage) строчным hex
+// после удаления ключей верхнего уровня idempotency_key и confirmation_token. Равен canonjson.SHA256Hex(draft.args) для
+// черновика, который подтвердил пользователь.
 func ArgsHash(args any) (string, error) {
 	raw, err := json.Marshal(args)
 	if err != nil {

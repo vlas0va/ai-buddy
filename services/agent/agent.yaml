@@ -1,5 +1,5 @@
-# AI-buddy agent configuration — the single place for prompt, model, MCP servers and role → tools (R53).
-# Mirrors Avito's internal "prompt + MCP" agent tool. ${VAR:-default} is substituted from the environment.
+# Конфигурация агента AI-buddy — единственное место для промпта, модели, MCP-серверов и соответствия роль → инструменты
+# (R53). Повторяет внутренний инструмент агентов Авито «промпт + MCP». ${VAR:-default} подставляется из окружения.
 version: 1
 name: ai-buddy
 
@@ -7,7 +7,7 @@ prompt:
   system: prompts/system.v1.md
   answer: prompts/answer.v1.md
   version: system.v1
-  tone: ty                      # informal «ты», as in the Avito intern checklist; no emojis
+  tone: ty                      # неформальное «ты», как в чек-листе стажёра Авито; без эмодзи
 
 llm:
   provider: ${LLM_PROVIDER:-stub}          # stub | openai_compat
@@ -16,30 +16,31 @@ llm:
   timeout_s: ${LLM_TIMEOUT_S:-30}
   temperature: ${LLM_TEMPERATURE:-0.2}
   max_tokens: 700
-  tool_calling: ${LLM_TOOL_CALLING:-false}  # let the LLM call READ tools of the user's role (never write tools)
+  tool_calling: ${LLM_TOOL_CALLING:-false}  # разрешить LLM вызывать инструменты ЧТЕНИЯ роли пользователя (никогда инструменты записи)
   max_tool_iterations: 3
   fallback_to_stub: ${LLM_FALLBACK_TO_STUB:-true}
-  no_think: ${LLM_NO_THINK:-true}           # reasoning models (A-Vibe/Qwen3): no <think> in answers
+  no_think: ${LLM_NO_THINK:-true}           # модели с рассуждениями (A-Vibe/Qwen3): без <think> в ответах
 
-embeddings:                     # optional hybrid retrieval (BM25 + vectors, RRF)
+embeddings:                     # необязательный гибридный поиск (BM25 + векторы, RRF)
   base_url: ${EMBEDDINGS_BASE_URL:-}
   model: ${EMBEDDINGS_MODEL:-}
 
 retrieval:
   k: 4
-  min_score: 1.2                # BM25 score below which «не нашёл» + escalation is offered (in-process index)
-  min_score_remote: 0.0         # mcp-kb returns ts_rank (0..1): there the coverage check below is the gate
-  min_coverage: 0.25            # IDF-weighted share of query terms that must appear in the document
-  team_boost: 1.25              # documents of the user's team rank higher (R02)
-  stage_boost: 1.15             # documents linked to the user's open plan tasks rank higher (R15)
+  min_score: 1.2                # оценка BM25, ниже которой предлагается «не нашёл» + обращение к человеку (индекс в процессе)
+  min_score_remote: 0.0         # mcp-kb возвращает ts_rank (0..1): там порогом служит проверка покрытия ниже
+  min_coverage: 0.25            # взвешенная по IDF доля слов запроса, которые должны быть в документе
+  team_boost: 1.25              # документы команды пользователя ранжируются выше (R02)
+  stage_boost: 1.15             # документы, связанные с открытыми задачами плана пользователя, ранжируются выше (R15)
 
 nlu:
   model_path: agent/models/intent_model.json
   min_confidence: 0.30
 
-# Web search for general technical questions the KB does not cover (git, Docker, SQL …): only the masked question
-# leaves the agent, results are external sources («Внешний источник»). curated = official docs list, works offline;
-# searxng = live search through a SearXNG instance (WEB_SEARCH_URL, compose profile websearch); off = disabled.
+# Веб-поиск по общим техническим вопросам, которых нет в базе знаний (git, Docker, SQL …): из агента уходит только
+# замаскированный вопрос, результаты — внешние источники («Внешний источник»). curated — список официальной
+# документации, работает без сети; searxng — живой поиск через экземпляр SearXNG (WEB_SEARCH_URL, профиль compose
+# websearch); off — выключено.
 web_search:
   provider: ${WEB_SEARCH_PROVIDER:-curated}
   url: ${WEB_SEARCH_URL:-}
@@ -47,9 +48,10 @@ web_search:
   max_results: 3
   curated_path: fixtures/web_curated.yaml
 
-# MCP servers (streamable HTTP, contracts/mcp-tools.md): B runs all eight in one binary at http://mcp-mocks:8100/mcp/<server>.
-# Per-server MCP_<SERVER>_URL wins; else MCP_BASE_URL + "/<server>"; else the in-process mock of that server is used
-# (standalone/dev/test, or until B's server implements its tools).
+# MCP-серверы (streamable HTTP, contracts/mcp-tools.md): B запускает все восемь в одном бинарнике по
+# http://mcp-mocks:8100/mcp/<server>. Приоритет у MCP_<SERVER>_URL конкретного сервера; иначе MCP_BASE_URL +
+# "/<server>"; иначе используется мок этого сервера в процессе (автономно/разработка/тесты или пока сервер B не
+# реализовал свои инструменты).
 mcp_servers:
   absence:   {url: "${MCP_ABSENCE_URL:-}",   timeout_s: 5}   # http://mcp-mocks:8100/mcp/absence
   approvals: {url: "${MCP_APPROVALS_URL:-}", timeout_s: 5}   # http://mcp-mocks:8100/mcp/approvals
@@ -62,9 +64,9 @@ mcp_servers:
 
 roles: [intern, mentor, lead, hrbp, alumni, hr_admin]
 
-# Role → tools, mirrors "roles" in contracts/schemas/*.json. The LLM is offered only READ tools of the caller's role;
-# write tools run only in a confirm turn after the user pressed «Отправить» (ADR-003).
-# There are no tools for salary, compensation, medical data, hiring or dismissal (R72).
+# Роль → инструменты, повторяет "roles" в contracts/schemas/*.json. LLM предлагаются только инструменты ЧТЕНИЯ роли
+# вызывающего; инструменты записи выполняются только в ходе подтверждения после нажатия пользователем «Отправить»
+# (ADR-003). Инструментов для зарплаты, компенсаций, медицинских данных, найма и увольнения нет (R72).
 tools:
   - name: absence.get_policy
     roles: [intern, mentor, lead]
@@ -190,7 +192,7 @@ tools:
     write: true
     proposal_kind: consent
 
-# Intents available per role (feature flags from core can switch scenarios off per team, R55).
+# Намерения, доступные каждой роли (feature flags из ядра могут выключать сценарии для команды, R55).
 intents:
   absence:      {roles: [intern, mentor, lead], flag: scenario_s3}
   access:       {roles: [intern, mentor], flag: scenario_s4}

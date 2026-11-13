@@ -37,7 +37,7 @@ func jwtFor(t *testing.T, sub, role, team string) string {
 	return tok
 }
 
-// syncBuffer is a log sink safe for the server goroutines.
+// syncBuffer — приёмник логов, безопасный для горутин сервера.
 type syncBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -55,7 +55,7 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// recorder keeps the arguments the write handler received.
+// recorder хранит аргументы, которые получил обработчик записи.
 type recorder struct {
 	mu    sync.Mutex
 	calls []json.RawMessage
@@ -80,7 +80,7 @@ func absenceRequest(id string) map[string]any {
 	}
 }
 
-// newAbsence binds test handlers to the real absence contract.
+// newAbsence привязывает тестовые обработчики к настоящему контракту absence.
 func newAbsence(t *testing.T, log *slog.Logger, writes *recorder) *Server {
 	t.Helper()
 	if log == nil {
@@ -119,11 +119,11 @@ func newAbsence(t *testing.T, log *slog.Logger, writes *recorder) *Server {
 		case "2026-01-01":
 			panic("boom")
 		case "2026-01-02":
-			return map[string]any{"valid": "yes"}, nil // violates outputSchema
+			return map[string]any{"valid": "yes"}, nil // нарушает outputSchema
 		case "2026-01-03":
-			return []int{1}, nil // not an object
+			return []int{1}, nil // не объект
 		case "2026-01-04":
-			return map[string]any{"bad": make(chan int)}, nil // not encodable
+			return map[string]any{"bad": make(chan int)}, nil // не кодируется
 		}
 		return map[string]any{"valid": true, "problems": []string{}}, nil
 	})
@@ -184,7 +184,7 @@ func newApprovals(t *testing.T) *Server {
 	return s
 }
 
-// stack mounts servers on a test HTTP server and returns it with a client.
+// stack монтирует серверы на тестовом HTTP-сервере и возвращает его вместе с клиентом.
 func stack(t *testing.T, servers ...*Server) (*httptest.Server, *Client) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -196,7 +196,7 @@ func stack(t *testing.T, servers ...*Server) (*httptest.Server, *Client) {
 	return ts, &Client{BaseURL: ts.URL + "/mcp/"}
 }
 
-// session opens a go-sdk client session with a bearer token (for tools/list).
+// session открывает клиентскую сессию go-sdk с bearer-токеном (для tools/list).
 func session(t *testing.T, url, token string) *mcp.ClientSession {
 	t.Helper()
 	hc := &http.Client{Transport: &bearerTransport{token: token, base: http.DefaultTransport}}

@@ -1,6 +1,6 @@
-// Package flags serves runtime feature flags (R55) from core.feature_flags with a Redis cache (30 s TTL, fail-open
-// to the database) and per-team targeting. GET /api/flags is open to every user; PUT /api/flags/{key} exists only in
-// demo builds (buildflags.Demo) and only for the lead role.
+// Пакет flags отдаёт runtime feature flags (R55) из core.feature_flags с кешем в Redis (TTL 30 с, при сбое — из базы) и
+// таргетингом по командам. GET /api/flags открыт всем пользователям; PUT /api/flags/{key} есть только в демо-сборках
+// (buildflags.Demo) и только для роли руководителя.
 package flags
 
 import (
@@ -24,7 +24,7 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Flag keys (openapi FlagKey).
+// Ключи флагов (openapi FlagKey).
 const (
 	ScenarioS1      = "scenario_s1"
 	ScenarioS2      = "scenario_s2"
@@ -36,24 +36,24 @@ const (
 
 var knownKeys = []string{ScenarioS1, ScenarioS2, ScenarioS3, ScenarioS4, ProactiveDigest, EscalationToKB}
 
-// CacheTTL is how long the flag table is cached in Redis.
+// CacheTTL — сколько таблица флагов хранится в кеше Redis.
 const CacheTTL = 30 * time.Second
 
 const cacheKey = "flags:v1"
 
-// Flag is one row of core.feature_flags. Empty Teams means all teams.
+// Flag — одна строка core.feature_flags. Пустой Teams означает все команды.
 type Flag struct {
 	Key     string   `json:"key"`
 	Enabled bool     `json:"enabled"`
 	Teams   []string `json:"teams"`
 }
 
-// On reports whether the flag is on for team.
+// On сообщает, включён ли флаг для команды team.
 func (f Flag) On(team string) bool {
 	return f.Enabled && (len(f.Teams) == 0 || slices.Contains(f.Teams, team))
 }
 
-// Service reads and writes flags.
+// Service читает и пишет флаги.
 type Service struct {
 	pool    *pgxpool.Pool
 	rdb     redis.Cmdable
@@ -61,7 +61,7 @@ type Service struct {
 	log     *slog.Logger
 }
 
-// NewService returns a flag service. rdb may be nil (no cache); it must not be a typed-nil pointer.
+// NewService возвращает сервис флагов. rdb может быть nil (без кеша); это не должен быть типизированный nil-указатель.
 func NewService(pool *pgxpool.Pool, rdb redis.Cmdable, emitter *analytics.Emitter, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.Default()
@@ -69,7 +69,7 @@ func NewService(pool *pgxpool.Pool, rdb redis.Cmdable, emitter *analytics.Emitte
 	return &Service{pool: pool, rdb: rdb, emitter: emitter, log: log}
 }
 
-// All returns every flag, from the Redis cache when it is available and fresh, otherwise from the database.
+// All возвращает все флаги — из кеша Redis, если он доступен и свеж, иначе из базы.
 func (s *Service) All(ctx context.Context) ([]Flag, error) {
 	if s.rdb != nil {
 		raw, err := s.rdb.Get(ctx, cacheKey).Bytes()
@@ -119,7 +119,7 @@ func (s *Service) load(ctx context.Context) ([]Flag, error) {
 	return out, nil
 }
 
-// ForTeam returns key -> enabled for team (targeting applied).
+// ForTeam возвращает key -> enabled для команды team (с учётом таргетинга).
 func (s *Service) ForTeam(ctx context.Context, team string) (map[string]bool, error) {
 	fl, err := s.All(ctx)
 	if err != nil {
@@ -132,7 +132,7 @@ func (s *Service) ForTeam(ctx context.Context, team string) (map[string]bool, er
 	return out, nil
 }
 
-// Enabled reports whether key is on for team; unknown keys and read errors count as off.
+// Enabled сообщает, включён ли key для команды team; неизвестные ключи и ошибки чтения считаются выключенными.
 func (s *Service) Enabled(ctx context.Context, key, team string) bool {
 	fl, err := s.All(ctx)
 	if err != nil {
@@ -147,7 +147,7 @@ func (s *Service) Enabled(ctx context.Context, key, team string) bool {
 	return false
 }
 
-// Set upserts a flag, emits flag.changed and drops the cache. teams empty = all teams.
+// Set вставляет или обновляет флаг, отправляет flag.changed и сбрасывает кеш. Пустой teams — все команды.
 func (s *Service) Set(ctx context.Context, actor authn.Claims, key string, enabled bool, teams []string) error {
 	if teams == nil {
 		teams = []string{}
@@ -177,15 +177,15 @@ func (s *Service) Set(ctx context.Context, actor authn.Claims, key string, enabl
 	return nil
 }
 
-// Handler serves /api/flags.
+// Handler обслуживает /api/flags.
 type Handler struct {
 	svc *Service
 	log *slog.Logger
-	// Demo enables PUT /api/flags/{key}; it defaults to buildflags.Demo and is a field so tests can flip it.
+	// Demo включает PUT /api/flags/{key}; по умолчанию buildflags.Demo, это поле, чтобы тесты могли его переключать.
 	Demo bool
 }
 
-// New returns the flags HTTP handler.
+// New возвращает HTTP-обработчик флагов.
 func New(svc *Service, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -193,7 +193,7 @@ func New(svc *Service, log *slog.Logger) *Handler {
 	return &Handler{svc: svc, log: log, Demo: buildflags.Demo}
 }
 
-// Register adds GET /api/flags and PUT /api/flags/{key} (auth required; PUT answers 404 outside demo builds).
+// Register добавляет GET /api/flags и PUT /api/flags/{key} (нужна авторизация; вне демо-сборок PUT отвечает 404).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/flags", h.get)
 	mux.HandleFunc("PUT /api/flags/{key}", h.put)

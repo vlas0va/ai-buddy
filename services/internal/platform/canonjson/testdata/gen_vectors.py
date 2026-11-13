@@ -1,8 +1,8 @@
-"""Regenerate vectors.json: canonical JSON and SHA-256 computed by Python, checked byte-for-byte by Go tests.
+"""Пересобрать vectors.json: канонический JSON и SHA-256 считает Python, Go-тесты проверяют байт в байт.
 
-Run from the repository root: python3 -I services/internal/platform/canonjson/testdata/gen_vectors.py
-The agent (Python) must produce exactly these bytes: json.dumps(obj, sort_keys=True, separators=(",", ":"),
-ensure_ascii=False).encode("utf-8"). Floats are excluded on purpose (see the package doc of canonjson).
+Запускать из корня репозитория: python3 -I services/internal/platform/canonjson/testdata/gen_vectors.py
+Агент (Python) должен выдавать ровно эти байты: json.dumps(obj, sort_keys=True, separators=(",", ":"),
+ensure_ascii=False).encode("utf-8"). Числа с плавающей точкой исключены намеренно (см. документацию пакета canonjson).
 """
 
 import hashlib
@@ -10,33 +10,34 @@ import json
 import pathlib
 
 INPUTS = [
-    # S3 draft args from contracts/agent-stream.md
+    # args черновика S3 из contracts/agent-stream.md
     '{"type":"day_off","start_date":"2026-11-14","end_date":"2026-11-14","comment":""}',
-    # S4 draft args
+    # args черновика S4
     '{"resource_id":"space-delivery","reason":""}',
-    # approvals.decide args issued by core
+    # args approvals.decide, которые выпускает ядро
     '{"approval_id":"0b9a3f6e-2c1d-4e5f-8a7b-9c0d1e2f3a4b","decision":"approve","comment":"Ок, хорошего отдыха"}',
-    # whitespace, nesting, empty containers, array order
+    # пробелы, вложенность, пустые контейнеры, порядок массивов
     ' { "b" : 1 , "a" : [ 3 , 2 , { "z" : null , "y" : true , "x" : false } ] , "c" : { } , "d" : [ ] } ',
-    # key order by code point: ASCII, Latin-1, Cyrillic, BMP private use, astral (UTF-16 order would differ)
+    # порядок ключей по кодовым точкам: ASCII, Latin-1, кириллица, частная область BMP, астральные (порядок UTF-16 был
+    # бы другим)
     '{"я":1,"а":2,"z":3,"Z":4,"\\u00e9":5,"\\ue000":6,"\\ud83d\\ude00":7,"":8,"aa":9,"a":10}',
-    # string escapes
+    # экранирование строк
     (
         '{"s":"quote\\" backslash\\\\ slash/ nl\\n cr\\r tab\\t bs\\b ff\\f nul\\u0000 us\\u001f del\\u007f'
         ' ls\\u2028 ps\\u2029 html<>& emoji😀 кириллица"}'
     ),
-    # escaped input is decoded, then re-encoded canonically
+    # экранированный вход декодируется, затем кодируется заново канонически
     '{"k":"\\u0041\\/\\u00e9\\u0430"}',
-    # integers of any size, -0
+    # целые любого размера, -0
     "[0,-0,-1,10,9007199254740993,-123456789012345678901234567890]",
-    # duplicate keys keep the last value
+    # при дубликатах ключей остаётся последнее значение
     '{"a":1,"a":2}',
-    # top-level scalars
+    # скаляры верхнего уровня
     '"строка"',
     "true",
     "null",
     "42",
-    # deep nesting
+    # глубокая вложенность
     '{"outer":{"inner":{"list":[{"b":[],"a":{}},[[]],"x"]}}}',
 ]
 

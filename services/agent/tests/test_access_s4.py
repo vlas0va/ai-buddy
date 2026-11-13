@@ -12,11 +12,12 @@ def test_S4_01_lists_required_accesses_with_statuses(anna):
         "| Confluence | — | чтение, редактирование | есть |" in t
         and "| Jira | — | чтение, редактирование | не запрошен |" in t
     )
-    assert "| Ресурс | Окружения | Права | Статус | Кто согласует |" in t  # checkpoint 11.11: a table
-    assert "согласование: руководитель команды" in t  # elevated resource is marked
+    assert "| Ресурс | Окружения | Права | Статус | Кто согласует |" in t  # чекпоинт 11.11: таблица
+    assert "согласование: руководитель команды" in t  # ресурс с повышенными правами помечен
     proposals = all_of(ev, "action_proposal")
     kinds = {p["draft"]["args"]["resource_id"] for p in proposals}
-    # every missing one, the elevated one too (one list with checkboxes); on-demand (database) is not offered
+    # все недостающие, с повышенными правами тоже (один список с галочками); ресурсы по запросу (база данных) не
+    # предлагаются
     assert kinds == {"jira", "bitbucket", "jira-dlv", "bb-delivery-api", "space-delivery", "space-delivery-incidents"}
     assert [
         p["requires_approval"] for p in proposals if p["draft"]["args"]["resource_id"] == "space-delivery-incidents"
@@ -45,7 +46,7 @@ def test_S4_03_elevated_access_goes_through_manager_approval(client, anna):
 def test_S4_04_channels_list_and_draft_to_mentor(anna):
     ev = anna.say("какие каналы есть в команде?")
     assert "#delivery-team" in text_of(ev) and "(закрытый)" in text_of(ev)
-    # checkpoint 11.11: chats are asked for in a personal message — advice, no draft
+    # чекпоинт 11.11: о чатах просят в личном сообщении — совет, без черновика
     assert first(ev, "escalation_draft") is None
     assert "личные сообщения" in text_of(ev) and "Олег Мартынов" in text_of(ev)
 
@@ -136,7 +137,7 @@ def test_S4_17_environment_for_a_resource_without_environments(anna):
 
 
 def test_S4_30_justification_and_asking_the_mentor_first(anna):
-    """Organizers 12.11: a request has a justification; before requesting the intern may ask the mentor if it is needed."""
+    """Организаторы 12.11: у заявки есть обоснование; до заявки стажёр может спросить наставника, нужен ли доступ."""
     ev = anna.say("доступ на редактирование в репозиторий delivery-api, обоснование: задача DLV-12 из плана")
     p = first(ev, "action_proposal")
     assert (

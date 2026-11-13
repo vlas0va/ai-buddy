@@ -82,7 +82,7 @@ func TestLogin_Success_R52(t *testing.T) {
 	if err != nil || c.Sub != "intern.anna" || c.Role != "intern" || c.TeamID != "delivery" || c.CohortStart != out.User.CohortStart {
 		t.Fatalf("claims: %+v err=%v", c, err)
 	}
-	// user without cohort: no cohort_start in the response or claims
+	// пользователь без когорты: в ответе и claims нет cohort_start
 	code, body = req(t, "POST", srv.URL+"/api/auth/login", "", `{"login":"lead.maria","password":"demo"}`)
 	if code != 200 || strings.Contains(string(body), "cohort_start") {
 		t.Fatalf("lead: %d %s", code, body)
@@ -135,14 +135,14 @@ func TestMe_UserAndFlags_R55(t *testing.T) {
 	if out.User["id"] != "mentor.oleg" || out.User["role"] != "mentor" || out.User["team_name"] != "Доставка" || len(out.Flags) != 6 || !out.Flags["scenario_s3"] {
 		t.Fatalf("me: %s", body)
 	}
-	// flags are per team
+	// флаги — у каждой команды свои
 	exec(`UPDATE core.feature_flags SET teams = ARRAY['search'] WHERE key = 'scenario_s4'`)
 	_, body = req(t, "GET", srv.URL+"/api/me", tok, "")
 	_ = json.Unmarshal(body, &out)
 	if out.Flags["scenario_s4"] {
 		t.Fatalf("delivery must not get s4: %v", out.Flags)
 	}
-	// token of an unknown user and of a user who cannot log in
+	// токен неизвестного пользователя и пользователя, которому вход запрещён
 	for _, sub := range []string{"ghost", "curator.irina"} {
 		bad, _ := authn.Issue(secret, authn.Claims{Sub: sub, Role: "mentor", TeamID: "delivery"}, time.Hour)
 		if code, _ := req(t, "GET", srv.URL+"/api/me", bad, ""); code != 401 {
@@ -157,7 +157,7 @@ func TestMe_UserAndFlags_R55(t *testing.T) {
 func TestLogin_SessionStartedEvent_R24(t *testing.T) {
 	pool := pgtest.New(t)
 	h := authapi.New(pool, secret, 0, flags.NewService(pool, nil, nil, nil), analytics.NewEmitter(false), nil)
-	h.Now = func() time.Time { return time.Now().AddDate(0, 0, 5) } // anna: 10 days + 5 = 15 days -> month_1
+	h.Now = func() time.Time { return time.Now().AddDate(0, 0, 5) } // anna: 10 дней + 5 = 15 дней -> month_1
 	mux := http.NewServeMux()
 	h.RegisterPublic(mux)
 	for _, u := range []string{"intern.anna", "lead.maria"} {

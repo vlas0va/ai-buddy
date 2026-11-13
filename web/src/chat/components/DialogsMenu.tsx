@@ -9,7 +9,7 @@ const when = (iso: string) => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-/** Feedback 12.11: earlier dialogs stay and can be opened again to look up old answers and requests. */
+/** Отзыв 12.11: прежние диалоги сохраняются, их можно открыть снова, чтобы найти старые ответы и заявки. */
 export function DialogsMenu({ current, onOpen }: { current?: string; onOpen: (sessionId: string) => void }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)

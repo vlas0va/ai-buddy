@@ -187,7 +187,7 @@ func TestSave_S4_AccessLinksChecklistTask_R66(t *testing.T) {
 		t.Fatalf("repeat decision: %v %v", changed, err)
 	}
 
-	// A second request for the same checklist item does not reopen the done task.
+	// Вторая заявка на тот же пункт чек-листа не переоткрывает выполненную задачу.
 	second, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000006", Kind: KindAccess,
 		Result: accessResult("ACC-000042", "space-delivery", "", "pending_approval", "CL-05", nil)})
 	if err != nil {
@@ -426,10 +426,10 @@ func TestApplyDecision_S3_ScopedToRequesterAndApprover_R71(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, scope := range []Scope{
-		{RequesterID: "intern.ivan", ApproverID: "lead.maria"},  // another intern
-		{RequesterID: "intern.anna", ApproverID: "lead.dmitry"}, // a lead who is not the approver
-		{RequesterID: "intern.anna"},                            // no approver
-		{},                                                      // no scope at all
+		{RequesterID: "intern.ivan", ApproverID: "lead.maria"},  // другой стажёр
+		{RequesterID: "intern.anna", ApproverID: "lead.dmitry"}, // руководитель, который не согласующий
+		{RequesterID: "intern.anna"},                            // без согласующего
+		{},                                                      // scope вообще нет
 	} {
 		if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000141", "approved", scope); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("%+v: %v", scope, err)
@@ -579,8 +579,8 @@ func TestApplyDecision_S3_ApprovedDayOffNotifiesHRBP(t *testing.T) {
 	}
 }
 
-// Checkpoint 11.11: until the HR admin approves, the intern moves the request; the same action and plan task follow
-// the new dates and the request goes back to the lead.
+// Чекпоинт 11.11: пока HR-администратор не согласовал, стажёр переносит заявку; то же действие и та же задача плана
+// получают новые даты, а заявка возвращается руководителю.
 func TestSave_Checkpoint_RescheduleMovesActionAndTask(t *testing.T) {
 	svc, pool := newSvc(t)
 	ctx := context.Background()
@@ -611,7 +611,7 @@ func TestSave_Checkpoint_RescheduleMovesActionAndTask(t *testing.T) {
 		Result: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("result without id")
 	}
-	// A replayed lead decision after the HR admin approved never undoes the approval.
+	// Повторённое решение руководителя после согласования HR-администратора никогда не отменяет согласование.
 	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000301", "approved", byMaria); err != nil {
 		t.Fatal(err)
 	}
@@ -631,7 +631,7 @@ func TestSave_Feedback1213_CancelAndReplace(t *testing.T) {
 	if err != nil || dayOff.TaskID == nil {
 		t.Fatalf("%+v %v", dayOff, err)
 	}
-	// a vacation that replaced the day off: the day off is cancelled and leaves the plan
+	// отпуск, заменивший отгул: отгул отменяется и уходит из плана
 	res := absenceResult("ABS-000402", "2026-11-23", "2026-11-27", "Мария Лебедева")
 	var m map[string]any
 	_ = json.Unmarshal(res, &m)
@@ -646,7 +646,7 @@ func TestSave_Feedback1213_CancelAndReplace(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.plan_tasks WHERE id = $1`, *dayOff.TaskID); n != 0 {
 		t.Fatal("its task must leave the plan")
 	}
-	// cancel the vacation itself; a repeated cancel keeps one «(отменена)»
+	// отменить сам отпуск; повторная отмена оставляет одно «(отменена)»
 	for i := 0; i < 2; i++ {
 		got, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000403", Kind: KindCancel,
 			Result: absenceResult("ABS-000402", "2026-11-23", "2026-11-27", "")})

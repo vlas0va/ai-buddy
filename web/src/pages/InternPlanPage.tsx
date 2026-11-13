@@ -5,7 +5,7 @@ import { listInterns } from '@/api/plan'
 import { PageHeader } from '@/components/PageHeader'
 import { PlanView } from '@/plan/PlanView'
 
-/** A mentor or lead looks at one intern's plan (read-only tasks) and sets adaptation goals. */
+/** Наставник или руководитель смотрит план одного стажёра (задачи только для чтения) и ставит цели адаптации. */
 export function InternPlanPage({ internId }: { internId: string }) {
   const interns = useQuery({ queryKey: keys.interns, queryFn: listInterns })
   const name = interns.data?.find((i) => i.user_id === internId)?.display_name ?? 'стажёра'

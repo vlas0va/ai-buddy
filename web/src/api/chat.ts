@@ -15,7 +15,8 @@ export async function cancelProposal(sessionId: string, proposalId: string) {
   await apiRequest(`/api/chat/sessions/${sessionId}/proposals/${proposalId}/cancel`, z.unknown(), { method: 'POST' })
 }
 
-// ChatMessage in contracts/openapi.yaml has no cards; proposal/result/proposal_state are optional extensions so a reload can restore them.
+// У ChatMessage в contracts/openapi.yaml нет карточек; proposal/result/proposal_state — необязательные расширения,
+// чтобы перезагрузка могла их восстановить.
 const historySchema = chatHistorySchema.extend({
   messages: z.array(
     chatMessageSchema.extend({
@@ -23,7 +24,7 @@ const historySchema = chatHistorySchema.extend({
       proposal_state: z.enum(['pending', 'confirmed', 'cancelled']).optional(),
       proposals: z.array(z.object({ proposal: proposalSchema, state: z.enum(['pending', 'confirmed', 'cancelled']) })).optional(),
       result: resultSchema.optional(),
-      // feedback 11.11: the draft to the mentor, a refusal and the next step survive leaving the chat
+      // отзыв 11.11: черновик наставнику, отказ и следующий шаг сохраняются после ухода из чата
       escalation: escalationDraftSchema.optional().catch(undefined),
       escalation_sent: z.boolean().optional(),
       refusal: refusalSchema.optional().catch(undefined),
@@ -34,7 +35,7 @@ const historySchema = chatHistorySchema.extend({
 })
 export type ChatHistory = z.infer<typeof historySchema>
 
-// feedback 12.11: a source chip opens the test document (core asks the agent, which checks the ACL)
+// отзыв 12.11: чип источника открывает тестовый документ (ядро спрашивает агента, который проверяет ACL)
 export const kbDocSchema = z.object({ doc_id: z.string(), title: z.string(), body: z.string(), badge: z.string().optional() })
 
 export function getKBDoc(docId: string) {

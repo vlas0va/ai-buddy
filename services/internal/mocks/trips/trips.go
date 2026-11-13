@@ -1,7 +1,7 @@
-// Package trips implements the mock "trips" MCP server: business trips between Avito offices (case «Пространство
-// решений»: командировки). Data is synthetic (R68). Identity comes only from the verified JWT (R71): a caller sees and
-// creates only own requests; the approver is the caller's lead, who decides through approvals.decide. Requests are
-// idempotent by key (R79).
+// Пакет trips реализует мок-сервер MCP «trips»: командировки между офисами Авито (кейс «Пространство решений»:
+// командировки). Данные синтетические (R68). Личность берётся только из проверенного JWT (R71): вызывающий видит и
+// создаёт только свои заявки; согласующий — руководитель вызывающего, который решает через approvals.decide. Заявки
+// идемпотентны по ключу (R79).
 package trips
 
 import (
@@ -21,18 +21,18 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// Offices where a trip can go (test data of the prototype).
+// Офисы, куда можно поехать (тестовые данные прототипа).
 var Offices = []string{"Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"}
 
 const (
-	minNoticeDays = 5  // a trip is requested at least this many days ahead
-	maxDays       = 14 // the longest trip in calendar days
+	minNoticeDays = 5  // командировка запрашивается не меньше чем за столько дней
+	maxDays       = 14 // самая длинная командировка в календарных днях
 )
 
-// moscow is the business time zone (UTC+3, no DST), as in the absence mock.
+// moscow — рабочий часовой пояс (UTC+3, без летнего времени), как в моке absence.
 var moscow = time.FixedZone("MSK", 3*60*60)
 
-// Register binds every tool of the trips contract to srv.
+// Register привязывает каждый инструмент контракта trips к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	return register(srv, pool, time.Now)
 }
@@ -175,8 +175,8 @@ func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.
 	return s.validate(ctx, s.pool, c, in)
 }
 
-// validate checks a new trip of c: a known office other than the employee's own city, dates, notice, length, no
-// overlap with another trip; the approver is the employee's lead.
+// validate проверяет новую командировку c: известный офис не в родном городе сотрудника, даты, срок подачи,
+// длительность, без пересечения с другой командировкой; согласующий — руководитель сотрудника.
 func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in tripIn) (validateOut, error) {
 	out := validateOut{Problems: []string{}}
 	start, errStart := time.Parse(time.DateOnly, in.StartDate)
@@ -244,8 +244,8 @@ type createIn struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead) and its
-// approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+// createRequest повторно проверяет и в одной транзакции вставляет заявку (pending_approval, согласующий = руководитель)
+// и её пункт согласования. Тот же idempotency_key возвращает сохранённую заявку с replayed=true (R79).
 func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in createIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {

@@ -1,4 +1,4 @@
-"""Tiny Prometheus-text metrics registry (no external dependency). Scraped at GET /metrics."""
+"""Крошечный реестр метрик в текстовом формате Prometheus (без внешних зависимостей). Снимается по GET /metrics."""
 
 from __future__ import annotations
 

@@ -5,7 +5,10 @@ export interface SuggestionGroup {
 
 export type SuggestionRole = 'intern' | 'mentor' | 'lead' | 'hrbp' | 'alumni' | 'hr_admin'
 
-/** Suggestions per role: only requests the agent handles for that role (checkpoint 11.11: lead and mentor differ from intern). */
+/**
+ * Подсказки по ролям: только запросы, которые агент обрабатывает для этой роли (чекпоинт 11.11: у руководителя и
+ * наставника они другие, чем у стажёра).
+ */
 export const SUGGESTIONS: Record<SuggestionRole, SuggestionGroup[]> = {
   intern: [
     { title: 'Отсутствия', items: ['Хочу взять отгул в пятницу', 'Как оформить отгул?'] },
@@ -32,10 +35,10 @@ export const SUGGESTIONS: Record<SuggestionRole, SuggestionGroup[]> = {
   ],
 }
 
-/** @deprecated kept for older imports: the intern list */
+/** @deprecated оставлено для старых импортов: список для стажёра */
 export const SUGGESTION_GROUPS = SUGGESTIONS.intern
 
-/** Case-insensitive filter by the typed text; empty groups are dropped. */
+/** Фильтр по введённому тексту без учёта регистра; пустые группы убираются. */
 export function filterSuggestions(query: string, role: string = 'intern'): SuggestionGroup[] {
   const q = query.trim().toLowerCase()
   const groups = SUGGESTIONS[role as SuggestionRole] ?? SUGGESTIONS.intern

@@ -1,5 +1,5 @@
-// Package kb implements the mock "kb" MCP server: the synthetic knowledge base with ACL applied before anything
-// reaches the LLM (R71). Every document is a test instruction of the prototype (R69).
+// Пакет kb реализует мок-сервер MCP «kb»: синтетическую базу знаний, где ACL применяется до того, как что-либо попадёт
+// в LLM (R71). Каждый документ — тестовая инструкция прототипа (R69).
 package kb
 
 import (
@@ -22,7 +22,7 @@ const (
 	maxSnippet = 300
 )
 
-// Register binds every tool of the kb contract to srv.
+// Register привязывает каждый инструмент контракта kb к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	if srv == nil || pool == nil {
 		return errors.New("kb: server and pool are required")
@@ -73,8 +73,8 @@ type hit struct {
 	Score      float64 `json:"score"`
 }
 
-// aclRole maps the HR admin to the HR BP audience of the test documents (the HR admin decides absence requests and
-// reads the same HR instructions).
+// aclRole сопоставляет HR-администратора аудитории HR BP тестовых документов (HR-администратор решает заявки на
+// отсутствие и читает те же HR-инструкции).
 func aclRole(role string) string {
 	if role == "hr_admin" {
 		return "hrbp"
@@ -82,7 +82,8 @@ func aclRole(role string) string {
 	return role
 }
 
-// search returns documents the caller may see: role and team ACL, and private notes of the caller only.
+// search возвращает документы, которые вызывающему можно видеть: ACL по роли и команде и личные заметки только самого
+// вызывающего.
 func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string, k int) (any, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT d.doc_id, d.title, d.source_type, coalesce(d.url, ''),
@@ -114,8 +115,9 @@ func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string
 	return map[string]any{"items": items}, nil
 }
 
-// get returns one document the caller may see (same ACL as search); a mentor answer added to the KB is found here, so
-// the source link under an answer opens it (feedback 12.11). Not visible and missing look the same: not_found.
+// get возвращает один документ, который вызывающему можно видеть (тот же ACL, что в search); ответ наставника,
+// добавленный в базу знаний, находится здесь, поэтому ссылка на источник под ответом его открывает (отзыв 12.11).
+// Недоступный и отсутствующий выглядят одинаково: not_found.
 func get(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, docID string) (any, error) {
 	if docID == "" {
 		return nil, apierr.Validation().WithMessage("Укажите doc_id")
@@ -155,9 +157,9 @@ type faqOut struct {
 	Replayed   bool   `json:"replayed"`
 }
 
-// addFAQ stores a mentor answer as an FAQ document of the mentor's team; idempotent by key (R79).
-// addFAQ stores a mentor's answer: for the mentor's team (scope "team", default) or, for a general answer, for every
-// team (scope "all", feedback 12.11). The doc id keeps the mentor's team either way.
+// addFAQ сохраняет ответ наставника как документ FAQ: для команды наставника (scope "team", по умолчанию) или, если
+// ответ общий, для всех команд (scope "all", отзыв 12.11). Идемпотентно по ключу (R79). В id документа в любом случае
+// остаётся команда наставника.
 func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key, scope string) (any, error) {
 	teams := []string{c.TeamID}
 	if scope == "all" {
@@ -181,7 +183,7 @@ func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body,
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("inserting faq: %w", err)
 	}
-	// The key was used before: replay the stored result when it is the same request, otherwise conflict.
+	// Ключ уже использовался: воспроизводим сохранённый результат, если это тот же запрос, иначе conflict.
 	var createdBy, storedBody string
 	err = pool.QueryRow(ctx, `SELECT doc_id, title, body, coalesce(created_by, '') FROM kb.documents WHERE idempotency_key = $1`, key).
 		Scan(&out.DocID, &out.Title, &storedBody, &createdBy)

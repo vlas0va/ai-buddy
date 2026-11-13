@@ -1,7 +1,7 @@
--- Business trips, employee consents and the HR steps of a day off (case «Пространство решений»: absences, trips,
--- consents; organizers' Q&A 10.11: a day off involves the lead, the HR admin and the HR BP). Synthetic data (R68).
+-- Командировки, согласия сотрудников и HR-шаги отгула (кейс «Пространство решений»: отсутствия, командировки, согласия;
+-- ответы организаторов 10.11: в отгуле участвуют руководитель, HR-администратор и HR BP). Синтетические данные (R68).
 
--- directory: the HR administrator who registers approved absences, and the office of every employee
+-- directory: HR-администратор, который оформляет согласованные отсутствия, и офис каждого сотрудника
 ALTER TABLE directory.employees DROP CONSTRAINT IF EXISTS employees_role_check;
 ALTER TABLE directory.employees ADD CONSTRAINT employees_role_check
     CHECK (role IN ('intern','mentor','lead','hrbp','alumni','curator','hr_admin'));
@@ -16,13 +16,13 @@ UPDATE directory.employees SET location = CASE
 END
 WHERE location IS NULL;
 
--- absence: lead approves → HR admin registers in the HR system → HR BP is notified
+-- absence: руководитель согласует → HR-администратор оформляет в HR-системе → HR BP получает уведомление
 ALTER TABLE absence.requests ADD COLUMN IF NOT EXISTS hr_admin_id text REFERENCES directory.employees(id);
 ALTER TABLE absence.requests ADD COLUMN IF NOT EXISTS registered_at timestamptz;
 ALTER TABLE absence.requests ADD COLUMN IF NOT EXISTS hrbp_id text REFERENCES directory.employees(id);
 ALTER TABLE absence.requests ADD COLUMN IF NOT EXISTS hrbp_notified_at timestamptz;
 
--- trips: business trip system imitation
+-- trips: имитация системы командировок
 CREATE SCHEMA IF NOT EXISTS trips;
 CREATE SEQUENCE IF NOT EXISTS trips.request_seq START 200;
 CREATE TABLE IF NOT EXISTS trips.requests (
@@ -41,13 +41,13 @@ CREATE TABLE IF NOT EXISTS trips.requests (
 );
 CREATE INDEX IF NOT EXISTS trips_requests_employee_idx ON trips.requests (employee_id, start_date);
 
--- consents: what an employee agreed to; some are signed only in the HR portal at hire
+-- consents: на что согласился сотрудник; некоторые согласия подписываются только в HR-портале при найме
 CREATE SCHEMA IF NOT EXISTS consents;
 CREATE TABLE IF NOT EXISTS consents.types (
     id          text PRIMARY KEY,
     title       text NOT NULL,
     description text NOT NULL,
-    signable    boolean NOT NULL,   -- false: signed in the HR portal, buddy only shows the status
+    signable    boolean NOT NULL,   -- false: подписывается в HR-портале, buddy только показывает статус
     required    boolean NOT NULL,
     position    int NOT NULL
 );
@@ -73,7 +73,7 @@ FROM directory.employees e CROSS JOIN consents.types t
 WHERE t.signable = false AND e.role IN ('intern','mentor','lead','hrbp','alumni','curator','hr_admin')
 ON CONFLICT DO NOTHING;
 
--- approvals and core: new kinds
+-- approvals и core: новые виды
 ALTER TABLE approvals.items DROP CONSTRAINT IF EXISTS items_kind_check;
 ALTER TABLE approvals.items ADD CONSTRAINT items_kind_check
     CHECK (kind IN ('absence_request','access_request','trip_request'));
@@ -87,5 +87,5 @@ ALTER TABLE core.proposals DROP CONSTRAINT IF EXISTS proposals_kind_check;
 ALTER TABLE core.proposals ADD CONSTRAINT proposals_kind_check
     CHECK (kind IN ('absence_request','access_request','approval_decision','trip_request','consent'));
 
--- core: attachments of a user message (metadata; text files also keep their text, images and documents never do)
+-- core: вложения сообщения пользователя (метаданные; текстовые файлы хранят и текст, картинки и документы — никогда)
 ALTER TABLE core.chat_messages ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]';

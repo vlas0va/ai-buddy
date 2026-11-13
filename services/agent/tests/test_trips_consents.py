@@ -1,4 +1,4 @@
-"""Business trips (TP-xx) and consents (CN-xx) — openspec/specs/trips-consents/spec.md."""
+"""Командировки (TP-xx) и согласия (CN-xx) — openspec/specs/trips-consents/spec.md."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-// Package pg opens PostgreSQL connection pools (pgx/v5) for core and mcp-mocks.
+// Пакет pg открывает пулы соединений PostgreSQL (pgx/v5) для ядра и mcp-mocks.
 package pg
 
 import (
@@ -9,15 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Options tune Open. Zero values mean defaults.
+// Options настраивают Open. Нулевые значения — значения по умолчанию.
 type Options struct {
-	MaxConns     int32         // default 10
-	StartupWait  time.Duration // how long to retry while Postgres is still starting; default 30s
-	RetryBackoff time.Duration // pause between attempts; default 1s
+	MaxConns     int32         // по умолчанию 10
+	StartupWait  time.Duration // сколько повторять, пока Postgres ещё стартует; по умолчанию 30 с
+	RetryBackoff time.Duration // пауза между попытками; по умолчанию 1 с
 }
 
-// Open connects to url and pings it, retrying until opts.StartupWait elapses (Postgres may still be
-// running init scripts when the service starts).
+// Open подключается к url и пингует его, повторяя, пока не истечёт opts.StartupWait (при старте сервиса Postgres может
+// ещё выполнять init-скрипты).
 func Open(ctx context.Context, url string, opts Options) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {

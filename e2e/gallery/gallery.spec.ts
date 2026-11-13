@@ -1,7 +1,7 @@
 import { expect, type Browser, type Page, test } from '@playwright/test'
 import { ask, ddmmyyyy, futureTuesday, lastTurn, login, newDialog, waitAnswer } from '../tests/helpers'
 
-// Screenshots for the README gallery, one flow per role on a fresh stack (stub LLM).
+// Скриншоты для галереи README, по одному сценарию на роль на свежем стеке (stub-LLM).
 const OUT = '../docs/screenshots'
 const shot = (page: Page, name: string) => page.screenshot({ path: `${OUT}/${name}.png` })
 
@@ -17,7 +17,7 @@ test('gallery', async ({ browser }) => {
   await expect(anon.getByRole('button', { name: 'Войти' })).toBeVisible()
   await shot(anon, '01-login')
 
-  // Intern: a question with sources, a «Полезно» mark, a day off through the draft.
+  // Стажёр: вопрос с источниками, отметка «Полезно», отгул через черновик.
   const day = ddmmyyyy(futureTuesday())
   const anna = await as(browser, 'intern.anna')
   await newDialog(anna)
@@ -49,7 +49,8 @@ test('gallery', async ({ browser }) => {
   await expect(anna.getByRole('progressbar', { name: 'Прогресс плана' })).toBeVisible()
   await shot(anna, '04-intern-plan')
 
-  // Mentor: a day off the same day (the lead sees who of the team is away), the team with «Польза buddy», the questions, the report.
+  // Наставник: отгул в тот же день (руководитель видит, кого из команды не будет), команда с «Польза buddy», вопросы,
+  // отчёт.
   const oleg = await as(browser, 'mentor.oleg')
   await newDialog(oleg)
   await ask(oleg, `хочу отгул ${day}`)
@@ -66,7 +67,7 @@ test('gallery', async ({ browser }) => {
   await expect(oleg.getByRole('heading', { name: /Отчёт за стажировку/ })).toBeVisible()
   await shot(oleg, '07-mentor-report')
 
-  // Lead: approvals with the team absences of those days.
+  // Руководитель: согласования с отсутствиями команды в эти дни.
   const maria = await as(browser, 'lead.maria')
   await maria.getByRole('link', { name: 'Согласования', exact: true }).click()
   await expect(maria.getByLabel(/Заявка: Анна Котова/).first()).toBeVisible()

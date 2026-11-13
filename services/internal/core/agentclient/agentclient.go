@@ -1,5 +1,5 @@
-// Package agentclient calls the agent service: POST {AGENT_URL}/v1/turn answering text/event-stream
-// (contracts/agent-stream.md). Core relays the events to the browser and persists what it must on the way.
+// Пакет agentclient вызывает сервис агента: POST {AGENT_URL}/v1/turn с ответом text/event-stream
+// (contracts/agent-stream.md). Ядро пересылает события в браузер и по пути сохраняет то, что нужно.
 package agentclient
 
 import (
@@ -17,7 +17,7 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// Event names of the agent stream contract.
+// Имена событий по контракту потока агента.
 const (
 	EventStatus          = "status"
 	EventToken           = "token"
@@ -27,43 +27,43 @@ const (
 	EventEscalationDraft = "escalation_draft"
 	EventNextStep        = "next_step"
 	EventRefusal         = "refusal"
-	EventToolResult      = "tool_result" // internal agent → core event of a confirm turn, never relayed to web
+	EventToolResult      = "tool_result" // внутреннее событие агент → ядро в ходе подтверждения, в веб не пересылается
 	EventError           = "error"
 	EventDone            = "done"
 )
 
-// Turn kinds.
+// Виды хода.
 const (
 	KindMessage = "message"
 	KindConfirm = "confirm"
 )
 
-// TimeoutMargin is added to LLM_TIMEOUT_S for the overall agent call timeout (contracts/agent-stream.md).
+// TimeoutMargin добавляется к LLM_TIMEOUT_S для общего таймаута вызова агента (contracts/agent-stream.md).
 const TimeoutMargin = 10 * time.Second
 
-// Size limits of an agent stream (defaults of Client.MaxEventBytes and Client.MaxStreamBytes).
+// Ограничения размера потока агента (значения по умолчанию для Client.MaxEventBytes и Client.MaxStreamBytes).
 const (
 	DefaultMaxEventBytes  = 256 << 10
 	DefaultMaxStreamBytes = 4 << 20
 )
 
-// ErrTooLarge is matched (errors.Is) by the error of a stream whose event or total size exceeds the client's
-// limits; such an error is also an *UnavailableError.
+// ErrTooLarge совпадает (errors.Is) с ошибкой потока, у которого событие или общий размер превышает лимиты клиента;
+// такая ошибка также *UnavailableError.
 var ErrTooLarge = errors.New("agentclient: agent stream too large")
 
-// TurnRequest is the body of POST /v1/turn.
+// TurnRequest — тело POST /v1/turn.
 type TurnRequest struct {
 	SessionID   string          `json:"session_id"`
-	MessageID   string          `json:"message_id,omitempty"` // id core will give the assistant message (optional)
+	MessageID   string          `json:"message_id,omitempty"` // id, который ядро присвоит сообщению ассистента (необязательно)
 	Turn        Turn            `json:"turn"`
 	UserContext UserContext     `json:"user_context"`
 	History     []HistoryItem   `json:"history"`
-	Flags       map[string]bool `json:"flags,omitempty"` // runtime flags of the caller's team (R55)
+	Flags       map[string]bool `json:"flags,omitempty"` // runtime-флаги команды вызывающего (R55)
 }
 
-// Turn is a user message (Kind = message, Text) or the confirmation of a stored proposal (Kind = confirm,
-// ProposalID, Draft exactly as stored, ConfirmationToken signed by core): the agent then calls draft.tool and
-// answers with a tool_result event.
+// Ход — сообщение пользователя (Kind = message, Text) или подтверждение сохранённого черновика (Kind = confirm,
+// ProposalID, Draft ровно как сохранён, ConfirmationToken, подписанный ядром): тогда агент вызывает draft.tool и
+// отвечает событием tool_result.
 type Turn struct {
 	Kind              string          `json:"kind"`
 	Text              string          `json:"text,omitempty"`
@@ -73,8 +73,8 @@ type Turn struct {
 	Attachments       []Attachment    `json:"attachments,omitempty"`
 }
 
-// Attachment is a file attached to a user message (contracts/agent-stream.md): text files carry their text, images
-// and documents only their metadata.
+// Attachment — файл, приложенный к сообщению пользователя (contracts/agent-stream.md): у текстовых файлов передаётся
+// текст, у картинок и документов — только метаданные.
 type Attachment struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"` // text | image | document
@@ -83,22 +83,22 @@ type Attachment struct {
 	Text string `json:"text,omitempty"`
 }
 
-// UserContext is what the agent knows about the caller; it is built from verified JWT claims and core's DB (R71).
+// UserContext — то, что агент знает о вызывающем; собирается из проверенных claims JWT и базы ядра (R71).
 type UserContext struct {
 	UserID        string     `json:"user_id"`
 	Role          string     `json:"role"`
 	TeamID        string     `json:"team_id"`
 	CurrentPeriod string     `json:"current_period"`
 	DisplayName   string     `json:"display_name,omitempty"`
-	Location      string     `json:"location,omitempty"` // office city or «Удалённо» (migration 0005)
+	Location      string     `json:"location,omitempty"` // город офиса или «Удалённо» (миграция 0005)
 	OpenTasks     []OpenTask `json:"open_tasks"`
-	Mentees       any        `json:"mentees,omitempty"` // mentor and lead: GET /api/team/interns items
+	Mentees       any        `json:"mentees,omitempty"` // наставник и руководитель: элементы GET /api/team/interns
 }
 
-// OpenTask is an open top-level task of the caller's own plan (status as GET /api/plan reports it).
+// OpenTask — открытая задача верхнего уровня из собственного плана вызывающего (статус как в GET /api/plan).
 type OpenTask struct {
 	TaskID          string  `json:"task_id"`
-	ChecklistItemID *string `json:"checklist_item_id,omitempty"` // nil for source = action
+	ChecklistItemID *string `json:"checklist_item_id,omitempty"` // nil для source = action
 	Title           string  `json:"title"`
 	Status          string  `json:"status"`
 	Period          string  `json:"period"`
@@ -106,35 +106,35 @@ type OpenTask struct {
 	HumanOnly       bool    `json:"human_only"`
 }
 
-// HistoryItem is one earlier message of the session.
+// HistoryItem — одно из прежних сообщений сессии.
 type HistoryItem struct {
 	Author string `json:"author"`
 	Text   string `json:"text"`
 }
 
-// Event is one event of the agent stream; Data is the JSON object of its data line, relayed unchanged.
+// Event — одно событие потока агента; Data — JSON-объект из его строки data, пересылается без изменений.
 type Event struct {
 	Name string
 	Data json.RawMessage
 }
 
-// ErrUnavailable is matched (errors.Is) by every error meaning the agent could not be reached, answered with a
-// non-200 status, broke the stream or ran past the timeout.
+// ErrUnavailable совпадает (errors.Is) с любой ошибкой, означающей, что агент недоступен, ответил не 200, оборвал поток
+// или превысил таймаут.
 var ErrUnavailable = errors.New("agentclient: agent unavailable")
 
-// UnavailableError is the typed error for an unreachable or failing agent.
+// UnavailableError — типизированная ошибка недоступного или сбоящего агента.
 type UnavailableError struct {
 	Op     string // connect, status 503, read
-	Err    error  // cause, may be nil
-	Status int    // HTTP status of a non-200 answer, 0 otherwise
-	// Code, Message and Retryable come from the agent's JSON error body {"error": {code, message, retryable}}
-	// of a non-200 answer, when it sent one.
+	Err    error  // причина, может быть nil
+	Status int    // HTTP-статус ответа не 200, иначе 0
+	// Code, Message и Retryable берутся из JSON-тела ошибки агента {"error": {code, message, retryable}} в ответе не
+	// 200, если агент его прислал.
 	Code      string
 	Message   string
 	Retryable bool
 }
 
-// Error implements error.
+// Error реализует error.
 func (e *UnavailableError) Error() string {
 	if e.Err == nil {
 		return fmt.Sprintf("agentclient: %s: agent unavailable", e.Op)
@@ -142,31 +142,31 @@ func (e *UnavailableError) Error() string {
 	return fmt.Sprintf("agentclient: %s: agent unavailable: %v", e.Op, e.Err)
 }
 
-// Unwrap returns the cause.
+// Unwrap возвращает причину.
 func (e *UnavailableError) Unwrap() error { return e.Err }
 
-// Is makes errors.Is(err, ErrUnavailable) true.
+// Is делает errors.Is(err, ErrUnavailable) истинным.
 func (e *UnavailableError) Is(target error) bool { return target == ErrUnavailable }
 
-// Client calls the agent. Fields may be changed before first use.
+// Client вызывает агента. Поля можно менять до первого использования.
 type Client struct {
 	BaseURL      string        // AGENT_URL, e.g. http://agent:8090
-	HTTPClient   *http.Client  // nil means http.DefaultClient (no client timeout: Timeout bounds the call)
-	Timeout      time.Duration // whole call including the stream; <= 0 means none
-	ServiceToken string        // AGENT_SERVICE_TOKEN, sent as X-Service-Token when set
-	// MaxEventBytes bounds one event, MaxStreamBytes the whole answer; <= 0 means the defaults.
+	HTTPClient   *http.Client  // nil означает http.DefaultClient (без таймаута клиента: вызов ограничивает Timeout)
+	Timeout      time.Duration // весь вызов вместе с потоком; <= 0 — без ограничения
+	ServiceToken string        // AGENT_SERVICE_TOKEN, передаётся как X-Service-Token, если задан
+	// MaxEventBytes ограничивает одно событие, MaxStreamBytes — весь ответ; <= 0 — значения по умолчанию.
 	MaxEventBytes  int
 	MaxStreamBytes int64
 }
 
-// New returns a client for baseURL whose calls are cancelled after llmTimeout + TimeoutMargin.
+// New возвращает клиента для baseURL, вызовы которого отменяются через llmTimeout + TimeoutMargin.
 func New(baseURL string, llmTimeout time.Duration) *Client {
 	return &Client{BaseURL: strings.TrimRight(baseURL, "/"), Timeout: llmTimeout + TimeoutMargin}
 }
 
-// Turn posts req with `Authorization: Bearer userToken` and X-Request-Id (from ctx) and returns the open event
-// stream. Cancelling ctx (client disconnect) or reaching Timeout aborts the call. Connection failures and
-// non-200 answers are *UnavailableError. The caller must Close the stream.
+// Turn отправляет req с `Authorization: Bearer userToken` и X-Request-Id (из ctx) и возвращает открытый поток событий.
+// Отмена ctx (клиент отключился) или достижение Timeout прерывает вызов. Ошибки соединения и ответы не 200 —
+// *UnavailableError. Вызывающий должен закрыть поток (Close).
 func (c *Client) Turn(ctx context.Context, userToken string, req TurnRequest) (*Stream, error) {
 	if req.History == nil {
 		req.History = []HistoryItem{}
@@ -232,7 +232,7 @@ func (c *Client) Turn(ctx context.Context, userToken string, req TurnRequest) (*
 	return &Stream{body: resp.Body, r: httpx.NewSSEReaderLimit(limited, maxEvent), cancel: cancel}, nil
 }
 
-// limitedBody fails with ErrTooLarge once more than left bytes were read.
+// limitedBody падает с ErrTooLarge, как только прочитано больше left байт.
 type limitedBody struct {
 	r    io.Reader
 	left int64
@@ -250,15 +250,15 @@ func (l *limitedBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Stream is an open agent event stream. It is not safe for concurrent use.
+// Stream — открытый поток событий агента. Не безопасен для конкурентного использования.
 type Stream struct {
 	body   io.ReadCloser
 	r      *httpx.SSEReader
 	cancel context.CancelFunc
 }
 
-// Next returns the next event, io.EOF when the agent closed the stream normally, or an *UnavailableError when the
-// stream broke or timed out. Events whose data is not JSON are skipped.
+// Next возвращает следующее событие, io.EOF, если агент штатно закрыл поток, или *UnavailableError, если поток
+// оборвался или истёк таймаут. События, у которых data не JSON, пропускаются.
 func (s *Stream) Next() (Event, error) {
 	for {
 		ev, err := s.r.Next()
@@ -277,14 +277,15 @@ func (s *Stream) Next() (Event, error) {
 	}
 }
 
-// Close aborts the call and releases the connection; it is safe to call more than once.
+// Close прерывает вызов и освобождает соединение; вызывать можно больше одного раза.
 func (s *Stream) Close() error {
 	s.cancel()
 	return s.body.Close()
 }
 
-// KBDoc returns a test KB document the user may read (GET /v1/kb/{doc_id}: the agent checks the JWT and the ACL).
-// found is false for a missing or unreadable document; other failures are *UnavailableError.
+// KBDoc возвращает тестовый документ базы знаний, который пользователю можно читать (GET /v1/kb/{doc_id}: агент
+// проверяет JWT и ACL). found = false для отсутствующего или недоступного документа; остальные сбои —
+// *UnavailableError.
 func (c *Client) KBDoc(ctx context.Context, userToken, docID string) (doc json.RawMessage, found bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

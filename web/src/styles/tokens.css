@@ -1,20 +1,20 @@
 :root {
   color-scheme: light;
 
-  /* colors */
+  /* цвета */
   --color-bg: #f2f2f0;
   --color-surface: #ffffff;
   --color-text: #1a1a1a;
   --color-text-muted: #62625c;
   --color-border: #e4e4e0;
-  --color-border-strong: #8a8a84; /* field outlines: 3:1 on white */
-  --color-tile: #f7f7f5; /* fields and steps inside a white card */
+  --color-border-strong: #8a8a84; /* контуры полей: 3:1 на белом */
+  --color-tile: #f7f7f5; /* поля и шаги внутри белой карточки */
   --color-accent: #006fdb;
   --color-accent-hover: #005bb5;
-  --color-accent-ink: #004a99; /* accent text on the soft accent */
+  --color-accent-ink: #004a99; /* акцентный текст на мягком акценте */
   --color-accent-soft: #e8f2ff;
   --color-success: #1f7a3e;
-  --color-success-strong: #00843a; /* filled approve button, white text 4.5:1 */
+  --color-success-strong: #00843a; /* заполненная кнопка согласования, белый текст 4.5:1 */
   --color-success-soft: #e3f5e9;
   --color-warning: #8a4300;
   --color-warning-soft: #fff1de;
@@ -23,7 +23,7 @@
   --color-neutral: #4d4d48;
   --color-neutral-soft: #ededea;
 
-  /* task statuses (fg on soft bg, AA) */
+  /* статусы задач (текст на мягком фоне, AA) */
   --status-not_started: var(--color-neutral);
   --status-not_started-bg: var(--color-neutral-soft);
   --status-in_progress: var(--color-accent-ink);
@@ -35,7 +35,7 @@
   --status-overdue: var(--color-danger);
   --status-overdue-bg: var(--color-danger-soft);
 
-  /* type */
+  /* типографика */
   --font-sans: 'Manrope Variable', Manrope, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --text-xs: 12px;
   --text-sm: 14px;
@@ -43,7 +43,7 @@
   --text-lg: 20px;
   --text-xl: 32px;
 
-  /* spacing */
+  /* отступы */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -51,19 +51,19 @@
   --space-6: 24px;
   --space-8: 32px;
 
-  /* radius */
+  /* скругления */
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 20px;
   --radius-pill: 999px;
 
-  /* shadows */
+  /* тени */
   --shadow-sm: 0 1px 2px rgba(26, 26, 26, 0.05);
   --shadow-md: 0 1px 2px rgba(26, 26, 26, 0.06), 0 8px 24px rgba(26, 26, 26, 0.07);
 
   --transition: 150ms ease;
-  /* Avito palette (organizers 12.13: the palette may be used, no brandbook — look of Avito Start). Decorative only:
-     text and buttons keep the AA tokens above. */
+  /* Палитра Авито (организаторы 12.13: палитру можно использовать, брендбука нет — стиль Авито Старт). Только для
+     декора: текст и кнопки используют AA-токены выше. */
   --avito-blue: #00aaff;
   --avito-green: #97cf26;
   --avito-red: #ff6163;
@@ -74,7 +74,7 @@
     radial-gradient(circle at 80% 86%, rgba(150, 94, 235, 0.18) 0 120px, transparent 121px),
     radial-gradient(circle at 10% 96%, rgba(255, 97, 99, 0.18) 0 70px, transparent 71px),
     #eef6ff;
-  /* login page (Rita 13.11): one Avito-style background with circles behind both halves */
+  /* страница входа (Рита 13.11): один фон в стиле Авито с кружочками за обеими половинами */
   --gradient-login:
     radial-gradient(circle at 37% 11%, rgba(0, 170, 255, 0.22) 0 110px, transparent 111px),
     radial-gradient(circle at 44% 50%, rgba(151, 207, 38, 0.24) 0 60px, transparent 61px),

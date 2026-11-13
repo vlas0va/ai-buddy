@@ -1,4 +1,5 @@
-// Command mcp-mocks hosts the six mock Avito MCP servers (owner B). Wiring lives in services/internal/mocks/app.
+// Команда mcp-mocks поднимает шесть мок-серверов MCP Авито (владелец B). Сборка зависимостей — в
+// services/internal/mocks/app.
 package main
 
 import (

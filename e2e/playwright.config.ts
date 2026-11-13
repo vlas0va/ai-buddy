@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// Runs against a stack that is already up: `make up` (compose) or the local stack. No LLM key needed (stub).
-// WEB_URL — the SPA, API_URL — core (used only for health and for test setup through the public API).
+// Запускается на уже поднятом стеке: `make up` (compose) или локальный стек. Ключ LLM не нужен (stub). WEB_URL — SPA,
+// API_URL — ядро (только для проверки здоровья и подготовки тестов через публичный API).
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,

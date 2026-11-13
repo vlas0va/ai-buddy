@@ -1,11 +1,11 @@
-"""End-to-end smoke of the declared scenarios through core, exactly as the web client calls it (R80).
+"""Сквозная дымовая проверка заявленных сценариев через ядро, ровно как его вызывает веб-клиент (R80).
 
-Usage: python scripts/smoke.py [CORE_URL]   (default http://localhost:8080; stack started with `make up`, stub LLM)
+Запуск: python scripts/smoke.py [CORE_URL]   (по умолчанию http://localhost:8080; стек поднят через `make up`, stub-LLM)
 
-S3: intern.anna asks for a day off → draft → confirm → ABS-… with status pending_approval, saved in /api/actions and
-linked to a plan task → lead.maria approves in /api/approvals → the intern's action turns approved.
-S4: intern.anna requests Jira → confirm → access action saved with a status.
-Standard library only, so it runs on a bare runner and on Windows. Exit code 0 = all checks passed.
+S3: intern.anna просит отгул → черновик → подтверждение → ABS-… со статусом pending_approval, сохранено в /api/actions и
+связано с задачей плана → lead.maria согласует в /api/approvals → действие стажёра становится approved. S4: intern.anna
+запрашивает Jira → подтверждение → действие доступа сохранено со статусом. Только стандартная библиотека, поэтому
+работает на голом раннере и в Windows. Код выхода 0 — все проверки прошли.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def call(method: str, path: str, token: str | None = None, body: dict | None = N
 
 
 def stream(path: str, token: str, body: dict | None = None) -> list[tuple[str, dict]]:
-    """POST an SSE endpoint and return [(event, data)] until done/error."""
+    """Отправляет POST на SSE-эндпоинт и возвращает [(event, data)] до done/error."""
     req = urllib.request.Request(BASE + path, method="POST", data=json.dumps(body or {}).encode())
     req.add_header("Content-Type", "application/json")
     req.add_header("Accept", "text/event-stream")
@@ -88,7 +88,7 @@ def login(user: str) -> str:
 
 
 def day_off_date(today: dt.date) -> dt.date:
-    """A Wednesday 8-14 days ahead: a working day, far from today (no short-notice question), never a weekend."""
+    """Среда через 8-14 дней: рабочий день, далеко от сегодня (без вопроса о коротком сроке), никогда не выходной."""
     d = today + dt.timedelta(days=8)
     while d.weekday() != 2:
         d += dt.timedelta(days=1)
@@ -112,7 +112,7 @@ def main() -> None:
     _, sess = call("POST", "/api/chat/sessions", anna)
     sid = sess["session_id"]
 
-    # --- S3: day off ---------------------------------------------------------------------------------------------
+    # --- S3: отгул ---------------------------------------------------------------------------------------------
     day = day_off_date(dt.date.today())
     ev = stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": f"хочу отгул {day:%d.%m.%Y}"})
     proposal = first(ev, "action_proposal")
@@ -170,7 +170,7 @@ def main() -> None:
         fail(f"S3 status after approval: {saved}")
     ok("S3 HR admin approved, intern's action is approved")
 
-    # --- S4: access ----------------------------------------------------------------------------------------------
+    # --- S4: доступ ----------------------------------------------------------------------------------------------
     ev = stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": "запроси доступ в jira"})
     proposal = first(ev, "action_proposal")
     if proposal.get("kind") != "access_request":
@@ -181,7 +181,7 @@ def main() -> None:
         fail(f"S4 result: {result}")
     ok(f"S4 access request {result.get('external_id')} {result['status']}, task {result['task_id']}")
 
-    # --- HR steps of the approved day off: the HR BP got a notice (Q&A 10.11) -------------------------------------
+    # --- HR-шаги согласованного отгула: HR BP получил уведомление (ответы 10.11) -------------------------------------
     elena = login("hrbp.elena")
     _, notes = call("GET", "/api/notifications", elena)
     items = notes.get("items", notes) if isinstance(notes, dict) else notes
@@ -189,7 +189,7 @@ def main() -> None:
         fail(f"HR BP notice after approval: {items}")
     ok("S3 approved day off registered by the HR admin, HR BP notified")
 
-    # --- trip: draft → confirm → TRP-… → lead approves ------------------------------------------------------------
+    # --- командировка: черновик → подтверждение → TRP-… → руководитель согласует ------------------------------------
     start = dt.date.today() + dt.timedelta(days=12)
     end = start + dt.timedelta(days=2)
     text = f"оформи командировку в Казань с {start:%d.%m.%Y} по {end:%d.%m.%Y}, цель — встреча с командой"
@@ -211,14 +211,14 @@ def main() -> None:
         fail(f"trip status after approval: {saved}")
     ok(f"trip {result['external_id']} approved by the lead")
 
-    # --- consent: voluntary consent signed after confirmation -----------------------------------------------------
+    # --- согласие: добровольное согласие подписано после подтверждения ---------------------------------------------
     proposal = first(stream(f"/api/chat/sessions/{sid}/messages", anna, {"text": "подпиши согласие на фото"}), "action_proposal")
     result = first(stream(f"/api/chat/sessions/{sid}/proposals/{proposal['proposal_id']}/confirm", anna), "action_result")
     if result.get("kind") != "consent" or result.get("status") != "signed":
         fail(f"consent result: {result}")
     ok(f"consent {result.get('external_id')} signed")
 
-    # --- attachments: a log with a secret is masked ---------------------------------------------------------------
+    # --- вложения: лог с секретом маскируется ---------------------------------------------------------------
     log = "ERROR connect postgres://buddy:hunter2@db:5432/app\nconnection refused\n"
     ev = stream(f"/api/chat/sessions/{sid}/messages", anna,
                 {"text": "", "attachments": [{"name": "app.log", "kind": "text", "size": len(log), "text": log}]})

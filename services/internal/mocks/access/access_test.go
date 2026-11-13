@@ -59,7 +59,7 @@ func TestListRequired_S4_TeamScope_R71(t *testing.T) {
 		m["jira"].Kind != "tool" || m["space-delivery"].Kind != "space" {
 		t.Fatalf("items %+v", m)
 	}
-	e.wantCode(maria, "list_required", nil, apierr.CodeForbidden) // role allow-list: intern, mentor
+	e.wantCode(maria, "list_required", nil, apierr.CodeForbidden) // белый список ролей: стажёр, наставник
 }
 
 func TestListRequired_S4_LatestStatusWins(t *testing.T) {
@@ -69,7 +69,7 @@ func TestListRequired_S4_LatestStatusWins(t *testing.T) {
 	e.addRequest("intern.anna", "jira", "granted", 10)
 	e.addRequest("intern.anna", "jira", "rejected", 1)
 	e.addRequest("intern.anna", "space-delivery-incidents", "pending_approval", 1)
-	e.addRequest("intern.ivan", "bitbucket", "granted", 1) // other people's requests do not count
+	e.addRequest("intern.ivan", "bitbucket", "granted", 1) // чужие заявки не считаются
 	m := mustCall[statusList](e, anna, "list_required", nil).byID()
 	want := map[string]string{"confluence": "granted", "jira": "rejected", "space-delivery-incidents": "pending_approval",
 		"bitbucket": "not_requested", "space-delivery": "not_requested"}
@@ -217,7 +217,7 @@ func TestRequestAccess_S4_OtherTeamForbidden_R71(t *testing.T) {
 		t.Fatalf("messages differ: %q vs %q", foreign.Message, unknown.Message)
 	}
 	e.wantCode(ivan, "request_access", confirmed(t, ivan, newKey(t), resource("ch-delivery-oncall")), apierr.CodeForbidden)
-	e.wantCode(maria, "request_access", confirmed(t, maria, newKey(t), resource("confluence")), apierr.CodeForbidden) // role
+	e.wantCode(maria, "request_access", confirmed(t, maria, newKey(t), resource("confluence")), apierr.CodeForbidden) // роль
 	if n := e.count(`SELECT count(*) FROM access.requests`); n != 0 {
 		t.Fatalf("requests = %d", n)
 	}
@@ -243,7 +243,7 @@ func TestRequestAccess_S4_DuplicateConflict(t *testing.T) {
 	if m := mustCall[statusList](e, anna, "list_required", nil).byID(); m["space-delivery-incidents"].Status != "pending_approval" {
 		t.Fatalf("latest status %+v", m["space-delivery-incidents"])
 	}
-	// Another employee may request the same resource.
+	// Другой сотрудник может запросить тот же ресурс.
 	mustCall[result](e, oleg, "request_access", confirmed(t, oleg, newKey(t), resource("confluence")))
 }
 
@@ -356,7 +356,7 @@ CREATE TRIGGER fail BEFORE INSERT ON approvals.items FOR EACH ROW EXECUTE FUNCTI
 	}
 	e.exec(`CREATE TRIGGER fail BEFORE INSERT ON access.requests FOR EACH ROW EXECUTE FUNCTION approvals.fail()`)
 	e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), resource("confluence")), apierr.CodeUnavailable)
-	e.exec(`ALTER TABLE directory.employees RENAME TO employees_gone`) // the directory lookup fails mid-transaction
+	e.exec(`ALTER TABLE directory.employees RENAME TO employees_gone`) // поиск в справочнике падает посреди транзакции
 	e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), resource("confluence")), apierr.CodeUnavailable)
 }
 
@@ -396,7 +396,7 @@ func TestRegister_Errors(t *testing.T) {
 	}
 }
 
-// TestRoundTrip_S4_HTTP_R71 runs S4 steps 1-4 over the real transport with JWTs and confirmation tokens.
+// TestRoundTrip_S4_HTTP_R71 прогоняет шаги 1-4 S4 через настоящий транспорт с JWT и токенами подтверждения.
 func TestRoundTrip_S4_HTTP_R71(t *testing.T) {
 	e := newEnv(t)
 	mux := http.NewServeMux()
@@ -456,8 +456,8 @@ func TestRoundTrip_S4_HTTP_R71(t *testing.T) {
 	}
 }
 
-// Checkpoint 11.11: a request names a concrete resource, the environment and the rights; reading dev/stage is granted
-// at once, write/admin rights and prod go to the lead; the table shows who approves.
+// Чекпоинт 11.11: заявка называет конкретный ресурс, окружение и права; чтение dev/stage выдаётся сразу, права на
+// запись и администрирование и prod уходят руководителю; в таблице видно, кто согласует.
 func TestRequestAccess_Checkpoint_EnvironmentAndLevel_R71(t *testing.T) {
 	e := newEnv(t)
 	with := func(id, env, level string) map[string]any {
@@ -489,15 +489,15 @@ func TestRequestAccess_Checkpoint_EnvironmentAndLevel_R71(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND summary LIKE '%(prod, чтение)'`, prod.ID); n != 1 {
 		t.Fatal("approval summary without the environment")
 	}
-	// the same read on stage again is a duplicate; another environment is a new request
+	// то же чтение на stage ещё раз — дубликат; другое окружение — новая заявка
 	e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "stage", "read")), apierr.CodeConflict)
 	if got := mustCall[result](e, anna, "request_access", confirmed(t, anna, newKey(t), with("db-delivery-orders", "dev", ""))); got.Status != "granted" {
 		t.Fatalf("dev %+v", got)
 	}
 	for _, bad := range []map[string]any{
-		with("db-delivery-orders", "", "read"), // a database needs an environment
-		with("jira-dlv", "dev", "read"),        // a project has none
-		with("confluence", "", "admin"),        // a level the resource does not offer
+		with("db-delivery-orders", "", "read"), // базе данных нужно окружение
+		with("jira-dlv", "dev", "read"),        // у проекта его нет
+		with("confluence", "", "admin"),        // уровень, которого у ресурса нет
 	} {
 		e.wantCode(anna, "request_access", confirmed(t, anna, newKey(t), bad), apierr.CodeValidation)
 	}

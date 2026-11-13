@@ -17,9 +17,9 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// proposeGoals: POST /api/plan/goals/propose — after the first-week meeting with the lead the intern writes the agreed
-// goals down; they wait as «proposed» until the mentor or the lead approves them (organizers 12.11: the lead approves
-// the goals of the adaptation and follows their progress; buddy helps to write them down and track them).
+// proposeGoals: POST /api/plan/goals/propose — после встречи с руководителем в первую неделю стажёр записывает
+// согласованные цели; они ждут в статусе «proposed», пока наставник или руководитель их не утвердит (организаторы
+// 12.11: руководитель согласует цели адаптации и следит за их выполнением; buddy помогает их записать и отслеживать).
 func (h *Handler) proposeGoals(w http.ResponseWriter, r *http.Request) {
 	c, ok := claims(w, r)
 	if !ok {
@@ -87,7 +87,7 @@ func (h *Handler) proposeGoals(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, saved)
 	}
-	// the mentor and the lead of the team learn that goals wait for them
+	// наставник и руководитель команды узнают, что их ждут цели
 	var name string
 	if err := tx.QueryRow(ctx, `SELECT display_name FROM core.users WHERE id = $1`, c.Sub).Scan(&name); err != nil {
 		apierr.WriteJSON(w, fmt.Errorf("select intern: %w", err))
@@ -129,7 +129,7 @@ func (h *Handler) proposeGoals(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, out)
 }
 
-// reviewerOf: the caller is the mentor or the lead of the intern's team.
+// reviewerOf: вызывающий — наставник или руководитель команды стажёра.
 func (h *Handler) reviewerOf(ctx context.Context, c authn.Claims, internID string) (bool, error) {
 	if c.Role != "mentor" && c.Role != "lead" {
 		return false, nil
@@ -137,7 +137,7 @@ func (h *Handler) reviewerOf(ctx context.Context, c authn.Claims, internID strin
 	return h.internInTeam(ctx, internID, c.TeamID)
 }
 
-// askReviewers tells the mentor and the lead of the team that a task waits for their confirmation.
+// askReviewers сообщает наставнику и руководителю команды, что задача ждёт их подтверждения.
 func (h *Handler) askReviewers(ctx context.Context, tx pgx.Tx, t taskRow) error {
 	var name, team, title string
 	if err := tx.QueryRow(ctx, `SELECT u.display_name, u.team_id, pt.title FROM core.users u, core.plan_tasks pt

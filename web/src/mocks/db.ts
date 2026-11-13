@@ -1,6 +1,6 @@
 import type { Action, Plan, User } from '@/api/schemas'
 
-// In-memory mock state (dev mock mode and tests). Shapes follow contracts/openapi.yaml.
+// Состояние мока в памяти (мок-режим разработки и тесты). Формы следуют contracts/openapi.yaml.
 
 export const MOCK_PASSWORD = 'demo'
 
@@ -50,9 +50,9 @@ export interface MockState {
   sessions: Map<string, StoredMessage[]>
   extraTasks: Map<string, Plan['periods'][number]['tasks']>
   failedOnce: Set<string>
-  /** Idempotency-Key -> decision already applied (replay of POST /api/approvals/{id}/decision) */
+  /** Idempotency-Key -> уже применённое решение (повтор POST /api/approvals/{id}/decision) */
   decisions: Map<string, { actionId: string; decision: 'approved' | 'rejected' }>
-  /** `${userId}:${taskId}` -> status set from the plan page */
+  /** `${userId}:${taskId}` -> статус, выставленный на странице плана */
   taskStatus: Map<string, string>
   goals: Map<string, { id: string; created_by: string; title: string; criteria?: string; status: 'proposed' | 'active' | 'achieved' | 'missed' }[]>
   escalations: MockEscalation[]
@@ -110,7 +110,7 @@ export function resetMockState(): void {
   state = freshState()
 }
 
-// Browser mock mode keeps the whole db under one localStorage key so it survives F5 (R66).
+// Мок-режим в браузере хранит всю базу под одним ключом localStorage, чтобы она переживала F5 (R66).
 export const MOCK_STORAGE_KEY = 'ai-buddy-mock-db'
 let persistEnabled = false
 
@@ -166,7 +166,7 @@ export function saveState(): void {
   try {
     localStorage.setItem(MOCK_STORAGE_KEY, serializeState(state))
   } catch {
-    /* storage unavailable: the mock db lives in memory only */
+    /* хранилище недоступно: мок-база живёт только в памяти */
   }
 }
 
@@ -174,7 +174,7 @@ export function clearMockStorage(): void {
   try {
     localStorage.removeItem(MOCK_STORAGE_KEY)
   } catch {
-    /* ignore */
+    /* игнорируем */
   }
 }
 

@@ -1,5 +1,7 @@
-"""S2 «Спроси buddy» and conversational guard rails: grounded answers with sources and the test badge, «к кому идти»,
-escalation drafts, «remind, don't replace the mentor», refusals. Specs: ask-buddy (S2-xx), rights-guardrails (RG-xx)."""
+"""S2 «Спроси buddy» и разговорные ограничения: обоснованные ответы с источниками и тестовой плашкой, «к кому идти»,
+черновики обращений, «напоминай, а не заменяй наставника», отказы. Спецификации: ask-buddy (S2-xx), rights-guardrails
+(RG-xx).
+"""
 
 from __future__ import annotations
 
@@ -41,8 +43,8 @@ def _addressee(text: str, default: str = "mentor") -> str:
     return default
 
 
-# Questions buddy could not answer go to the mentor's stack (organizers 13.11): the mentor answers them in a batch when
-# convenient and the answer lands in the knowledge base. The intern writes the person directly, buddy only gives the text.
+# Вопросы, на которые buddy не ответил, попадают в список наставника (организаторы 13.11): наставник отвечает на них
+# пачкой, когда удобно, и ответ попадает в базу знаний. Стажёр пишет человеку сам, buddy только даёт текст.
 QUEUE_ROLES = ("mentor", "lead", "hrbp")
 
 
@@ -74,12 +76,12 @@ def escalation_event(
 
 
 def queues(turn: Turn, role: str) -> bool:
-    """The question goes to the addressee's stack: interns' questions to the mentor, the lead or HR BP."""
+    """Вопрос попадает в список адресата: вопросы стажёров к наставнику, руководителю или HR BP."""
     return turn.user.role == "intern" and role in QUEUE_ROLES
 
 
 def write_directly(turn: Turn, role: str) -> str:
-    """«Спроси наставника в личных сообщениях или в канале #… — ниже готовый текст» (+ the stack, for interns)."""
+    """«Спроси наставника в личных сообщениях или в канале #… — ниже готовый текст» (+ список, для стажёров)."""
     gen = GENITIVE.get(role, "наставника")
     person = turn.contact(role)
     name = f" ({person_name(person)})" if person else ""
@@ -95,12 +97,12 @@ def write_directly(turn: Turn, role: str) -> str:
 
 
 ASK_MENTOR = re.compile(r"(уточни|спроси|обратись|напиши)\w*\s+(\w+\s+){0,2}(у\s+|к\s+)?наставник", re.I)
-# a polite sign-off («Если что-то не учтено — уточни у наставника») is not a gap in the answer (Rita 12.13)
+# вежливое завершение («Если что-то не учтено — уточни у наставника») — не пробел в ответе (Рита 12.13)
 SIGN_OFF = re.compile(r"^\s*(если|при\s+необходимости|в\s+случае)\b", re.I)
 
 
 def sends_to_mentor(answer: str) -> bool:
-    """The answer tells the intern to ask the mentor something concrete, not just «if anything — ask the mentor»."""
+    """Ответ отправляет стажёра спросить у наставника что-то конкретное, а не просто «если что — спроси наставника»."""
     for sentence in re.split(r"(?<=[.!?])\s+|\n+", answer):
         if ASK_MENTOR.search(sentence) and not SIGN_OFF.search(sentence):
             return True
@@ -117,8 +119,10 @@ def _location_hint(turn: Turn, query: str) -> str:
 
 
 def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict[str, Any]]:
-    """Defense in depth + context (ADR-003 layer 1, R02, R15): drop results the user may not read according to the
-    agent's own copy of the KB ACL, then boost documents of the user's team and of open plan tasks."""
+    """Эшелонированная защита + контекст (ADR-003, слой 1, R02, R15): отбросить результаты, которые пользователю нельзя
+    читать по собственной копии ACL базы знаний у агента, затем поднять документы команды пользователя и открытых задач
+    плана.
+    """
     kb = turn.kb
     open_items = {t.checklist_item_id for t in turn.user.tasks if t.status != "done" and t.checklist_item_id}
     team_boost = float(turn.config.retrieval.get("team_boost", 1.25))
@@ -143,13 +147,13 @@ def _rerank(turn: Turn, raw: list[dict[str, Any]], query: str = "") -> list[dict
                 score *= stage_boost
         snippet = h.get("snippet", "")
         if doc is not None and query:
-            # the local copy gives clean paragraphs (no ts_headline fragments or markdown) and lets the user's office
-            # city pick the right section («Москва» / «Санкт-Петербург» / «Удалённо») when the question has none
+            # локальная копия даёт чистые абзацы (без фрагментов ts_headline и markdown) и позволяет городу офиса
+            # пользователя выбрать нужный раздел («Москва» / «Санкт-Петербург» / «Удалённо»), если в вопросе города нет
             snippet = kb.snippet(doc, stems(f"{query} {_location_hint(turn, query)}"))
-        # the LLM gets the whole readable document (not only the snippet), so A-Vibe answers with its details
+        # LLM получает весь читаемый документ (а не только фрагмент), чтобы A-Vibe отвечала с подробностями
         body = sanitize_snippet(doc.body[:2500]) if doc is not None else ""
         if doc is None and str(h.get("doc_id", "")).startswith("faq-"):
-            # a mentor's answer (mcp-kb only): the search snippet is a cut fragment — read the document and show the answer
+            # ответ наставника (только в mcp-kb): фрагмент из поиска обрезан — читаем документ и показываем ответ
             try:
                 full = turn.gateway.read("kb.get", doc_id=h["doc_id"])
             except AgentError:
@@ -178,7 +182,7 @@ def _remote_kb(turn: Turn) -> bool:
 
 
 def _or_query(text: str) -> str:
-    """mcp-kb uses websearch_to_tsquery (all words must match): the fallback asks for any meaningful word."""
+    """mcp-kb использует websearch_to_tsquery (должны совпасть все слова): запасной вариант ищет по любому значимому слову."""
     return " or ".join(w for w in words(text) if len(w) > 2 and w not in STOPWORDS)[:500]
 
 
@@ -186,8 +190,10 @@ CYRILLIC_WORD = re.compile(r"^[а-яё]+$")
 
 
 def _unknown_terms(turn: Turn, text: str) -> list[str]:
-    """Question words that no KB document and no training question has (e.g. «собака», «стейдж»): the KB says nothing
-    about that topic, so a document matching only the other words is not an answer."""
+    """Слова вопроса, которых нет ни в одном документе базы знаний и ни в одном обучающем вопросе (например, «собака»,
+    «стейдж»): база знаний ничего не говорит на эту тему, поэтому документ, совпадающий только по остальным словам, — не
+    ответ.
+    """
     kb = turn.kb
     if kb is None or getattr(kb, "_bm25", None) is None:
         return []
@@ -196,9 +202,10 @@ def _unknown_terms(turn: Turn, text: str) -> list[str]:
 
 
 def _faq_matches(turn: Turn, text: str, hit: dict[str, Any]) -> bool:
-    """A mentor's answer is for the question it was written for: mcp-kb's «any word» fallback finds it for other
-    questions too («в офис с ноутбуком?» → the answer about dogs). It counts when the question's words are in it (85%)
-    and every word the KB does not know (a dog breed, a service name) is there."""
+    """Ответ наставника — для того вопроса, для которого он написан: запасной поиск mcp-kb «по любому слову» находит его и
+    для других вопросов («в офис с ноутбуком?» → ответ про собак). Он засчитывается, если в нём есть слова вопроса (85%)
+    и каждое слово, которого не знает база знаний (порода собаки, название сервиса).
+    """
     q = [t for t in stems(text) if t not in STOPWORDS and len(t) >= 3]
     if not q:
         return False
@@ -212,8 +219,9 @@ def _weak(turn: Turn, hits: list[dict[str, Any]], text: str) -> bool:
 
 
 def _nearby(turn: Turn, text: str) -> list[Any]:
-    """Documents that share some meaningful words with the question but fail the answer threshold: offered as «maybe
-    this», never quoted as an answer. Same ACL as search (readable_by before ranking)."""
+    """Документы, у которых есть общие значимые слова с вопросом, но не набран порог ответа: предлагаются как «возможно,
+    поможет», никогда не цитируются как ответ. Тот же ACL, что в поиске (readable_by до ранжирования).
+    """
     if turn.kb is None:
         return []
     found = turn.kb.search(text, turn.user.role, turn.user.team_id, k=2)
@@ -226,15 +234,16 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
     min_score = float(turn.config.retrieval.get("min_score_remote" if remote else "min_score", 0.0 if remote else 1.2))
     k = int(turn.config.retrieval.get("k", 4))
     asked = text
-    text = canonical_query(text)  # «ноут», «репа», «пр» → the words the KB is written with
+    text = canonical_query(text)  # «ноут», «репа», «пр» → слова, которыми написана база знаний
     raw = items(turn.gateway.read("kb.search", query=text[:500], k=k))
     if remote and not raw and _or_query(text):
         raw = items(turn.gateway.read("kb.search", query=_or_query(text), k=k))
     hits = [h for h in _rerank(turn, raw, text) if h["score"] >= min_score]
     if remote and turn.kb is not None:
-        # Postgres FTS misses short terms (CI/CD), synonyms and loose wording («у меня будет свой ноутбук?»); the agent's
-        # own copy of the same test KB, filtered by the same ACL before ranking (ADR-003 layer 1), gives the BM25 ranking
-        # used in eval. The set whose best document covers more of the question wins.
+        # Полнотекстовый поиск Postgres пропускает короткие термины (CI/CD), синонимы и вольные формулировки («у меня
+        # будет свой ноутбук?»); собственная копия агентом той же тестовой базы знаний, отфильтрованная тем же ACL до
+        # ранжирования (ADR-003, слой 1), даёт ранжирование BM25, которое проверяет оценка. Побеждает набор, лучший
+        # документ которого покрывает больше вопроса.
         local = [
             {**hit.source(), "score": hit.score, "snippet": hit.snippet}
             for hit in turn.kb.search(text, turn.user.role, turn.user.team_id, k=k)
@@ -242,8 +251,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         local_hits = [
             h for h in _rerank(turn, local, text) if h["score"] >= float(turn.config.retrieval.get("min_score", 1.2))
         ]
-        # a mentor's answer added to the KB lives only in mcp-kb (faq-…): it answers the question it was written for, so
-        # it goes first; otherwise the local ranking (the one eval checks) wins
+        # ответ наставника, добавленный в базу знаний, живёт только в mcp-kb (faq-…): он отвечает на тот вопрос, для
+        # которого написан, поэтому идёт первым; иначе побеждает локальное ранжирование (то, которое проверяет оценка)
         faq = [
             h
             for h in hits
@@ -253,21 +262,23 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ]
         if faq:
             hits = faq + [h for h in local_hits if h["doc_id"] not in {f["doc_id"] for f in faq}]
-        elif local_hits:  # the ranking eval checks; mcp-kb stays the source when the local copy finds nothing
+        elif (
+            local_hits
+        ):  # ранжирование, которое проверяет оценка; mcp-kb остаётся источником, если локальная копия ничего не нашла
             hits = local_hits
-        else:  # a mentor's answer to another question is not an answer to this one
+        else:  # ответ наставника на другой вопрос — не ответ на этот
             hits = [h for h in hits if not str(h.get("doc_id", "")).startswith("faq-")]
-    if hits:  # secondary sources only when they are close to the best one — fewer irrelevant chips
+    if hits:  # дополнительные источники — только если они близки к лучшему, меньше нерелевантных чипов
         hits = [h for h in hits if h["score"] >= 0.5 * hits[0]["score"]]
     weak_kb = not hits or (turn.kb is not None and _weak(turn, hits, text))
     if weak_kb and turn.web is not None and turn.web.enabled and is_general_tech(asked):
-        found = turn.web.search(mask_secrets(asked)[0][:300])  # only the masked question leaves the agent
+        found = turn.web.search(mask_secrets(asked)[0][:300])  # из агента уходит только замаскированный вопрос
         if found:
             yield from _web_answer(turn, asked, found)
             return
     is_faq = bool(hits) and str(hits[0].get("doc_id", "")).startswith("faq-")
     if hits and not is_faq and _unknown_terms(turn, text) and float(hits[0].get("coverage", 1) or 0) < 0.6:
-        hits = []  # the documents match only the generic words of the question
+        hits = []  # документы совпадают только по общим словам вопроса
     if not hits:
         ranking = turn.meta.get("ranking", [])
         work_words = re.search(
@@ -280,7 +291,7 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         ):
             yield from handle_offtopic(turn, text)
             return
-        # a mentor or a lead asks the curator of the internship, not «the mentor» (QA 12.11)
+        # наставник или руководитель спрашивает куратора стажировки, а не «наставника» (QA 12.11)
         role = _addressee(asked, "curator" if turn.user.role in ("mentor", "lead") else "mentor")
         near = _nearby(turn, text)
         if near:
@@ -330,8 +341,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         answer.append(chunk)
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
     if turn.user.role == "intern" and sends_to_mentor("".join(answer)):
-        # the answer sends the intern to the mentor: the message to copy, and the question to the mentor's stack so the
-        # answer reaches the knowledge base for the next interns (organizers 13.11)
+        # ответ отправляет стажёра к наставнику: текст для копирования, а вопрос — в список наставника, чтобы ответ
+        # попал в базу знаний для следующих стажёров (организаторы 13.11)
         ask = write_directly(turn, "mentor")
         yield from say(f"\n\nЕсли нужно уточнение — {ask[0].lower()}{ask[1:]}")
         yield escalation_event(turn, asked, "mentor", kb_found=True, queue=True)
@@ -342,7 +353,7 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
 
 
 def _web_answer(turn: Turn, asked: str, found: list[Any]) -> Iterator[Event]:
-    """General technical question outside the KB: public documentation, clearly marked as an external source (WS-01)."""
+    """Общий технический вопрос вне базы знаний: публичная документация, явно помеченная как внешний источник (WS-01)."""
     yield status("searching_web", "Ищу в открытых источниках")
     yield Event("sources", {"items": [r.source() for r in found]})
     lines = [
@@ -398,7 +409,7 @@ def handle_human_only(turn: Turn, text: str) -> Iterator[Event]:
     if turn.user.role in (
         "mentor",
         "lead",
-    ):  # «дай обратную связь стажёру» from a mentor: prepare the 1:1, not a draft to oneself
+    ):  # «дай обратную связь стажёру» от наставника: подготовить 1:1, а не черновик самому себе
         from .team import handle_one_on_one
 
         yield from handle_one_on_one(turn, text)
@@ -461,7 +472,8 @@ def handle_refusal(turn: Turn, reason: str, redirect_role: str = "", topic: str 
     elif redirect_role:
         redirect = f" С этим поможет {CONTACT_LABELS.get(redirect_role, redirect_role)}."
     text = base + redirect
-    # contract enum: reason ∈ {no_rights, out_of_scope}; the precise category goes to `detail` (for analytics and eval)
+    # перечисление контракта: reason ∈ {no_rights, out_of_scope}; точная категория идёт в `detail` (для аналитики и
+    # оценки)
     yield Event(
         "refusal",
         {

@@ -1,4 +1,6 @@
-"""Knowledge base: loading, ACL filter BEFORE ranking, BM25 (+ optional embeddings, RRF) and snippet extraction (ADR-008)."""
+"""База знаний: загрузка, фильтр ACL ДО ранжирования, BM25 (+ необязательные эмбеддинги, RRF) и извлечение фрагментов
+(ADR-008).
+"""
 
 from __future__ import annotations
 
@@ -35,7 +37,7 @@ class Doc:
     meta: dict[str, Any] = field(default_factory=dict)
 
     def readable_by(self, role: str, team_id: str) -> bool:
-        role = "hrbp" if role == "hr_admin" else role  # = B's kb.aclRole: the HR admin reads the HR BP documents
+        role = "hrbp" if role == "hr_admin" else role  # = kb.aclRole у B: HR-администратор читает документы HR BP
         return role in self.roles and ("*" in self.teams or team_id in self.teams)
 
     @property
@@ -43,7 +45,7 @@ class Doc:
         return "*" if "*" in self.teams else (self.teams[0] if self.teams else "*")
 
     def blocks(self) -> list[str]:
-        """Paragraph-level blocks: a heading line is merged into the block that follows it."""
+        """Блоки по абзацам: строка-заголовок сливается со следующим за ней блоком."""
         raw = [b.strip() for b in re.split(r"\n\s*\n", self.body) if b.strip()]
         merged: list[str] = []
         carry = ""
@@ -114,7 +116,7 @@ def load_docs(kb_dir: Path) -> list[Doc]:
 
 
 def sanitize_snippet(text: str) -> str:
-    """Drop lines that look like instructions to the model (indirect prompt injection in documents)."""
+    """Убрать строки, похожие на инструкции модели (косвенная промпт-инъекция в документах)."""
     return "\n".join(line for line in text.splitlines() if not _INJECTION_LINE.search(line)).strip()
 
 
@@ -151,13 +153,14 @@ def _cosine(a: list[float], b: list[float]) -> float:
 
 
 class KnowledgeBase:
-    """In-process KB index. In compose, mcp-kb does the same search over PostgreSQL FTS; this class backs the
-    in-process mock of `kb.search` and the agent-side ACL re-check."""
+    """Индекс базы знаний в процессе. В compose mcp-kb делает тот же поиск через полнотекстовый поиск PostgreSQL; этот
+    класс обслуживает мок `kb.search` в процессе и перепроверку ACL на стороне агента.
+    """
 
     def __init__(self, docs: Iterable[Doc], embedder: Embedder | None = None) -> None:
         self.docs = list(docs)
         self.by_id = {d.doc_id: d for d in self.docs}
-        # Title and tags are weighted x3 — they describe what the document is about.
+        # Заголовок и теги весят x3 — они описывают, о чём документ.
         self._tokens = [
             stems(f"{d.title} {d.title} {d.title} {(' '.join(d.tags) + ' ') * 2} {d.body}") for d in self.docs
         ]
@@ -179,8 +182,9 @@ class KnowledgeBase:
         return self._vectors is not None
 
     def coverage(self, query: str, doc_id: str) -> float:
-        """IDF-weighted share of query terms present in the document: protects against answers that match only
-        generic words («работа», «команда»). Unknown terms get the maximum IDF."""
+        """Взвешенная по IDF доля слов запроса, которые есть в документе: защищает от ответов, совпадающих только по общим
+        словам («работа», «команда»). Неизвестные слова получают максимальный IDF.
+        """
         idx = next((i for i, d in enumerate(self.docs) if d.doc_id == doc_id), None)
         q = set(stems(query))
         if idx is None or not q:
@@ -205,7 +209,7 @@ class KnowledgeBase:
         stage_boost: float = 1.15,
     ) -> list[Hit]:
         q = stems(query)
-        allowed = [i for i, d in enumerate(self.docs) if d.readable_by(role, team_id)]  # ACL BEFORE ranking
+        allowed = [i for i, d in enumerate(self.docs) if d.readable_by(role, team_id)]  # ACL ДО ранжирования
         if not q or not allowed:
             return []
         boost = set(boost_checklist)
@@ -250,7 +254,8 @@ class KnowledgeBase:
         scored = sorted(((len(qs.intersection(stems(b))), -n, b) for n, b in enumerate(blocks)), reverse=True)
         top = [b for score, _, b in scored[:max_blocks] if score > 0] or [blocks[0]]
         if len(top) == 1 and len(top[0]) < 160:
-            # a short note («все цифры — тестовые») alone answers nothing: add the block after it (a table, a list)
+            # короткая заметка («все цифры — тестовые») сама по себе ни на что не отвечает: добавить блок после неё
+            # (таблицу, список)
             i = blocks.index(top[0])
             top += blocks[i + 1 : i + 2]
         ordered = [b for b in blocks if b in top]

@@ -11,7 +11,8 @@ import (
 	"aibuddy/services/internal/platform/authn"
 )
 
-// ask stores a chat turn of u and queues its question like core's chat does after an answer without a KB hit.
+// ask сохраняет ход чата пользователя u и кладёт его вопрос в список, как это делает чат ядра после ответа без
+// попадания в базу знаний.
 func (e *env) ask(u user, n int, question string) (bool, error) {
 	e.t.Helper()
 	sid := fmt.Sprintf("00000000-0000-0000-0000-%012d", 100+n)
@@ -47,13 +48,14 @@ func TestQueue_GroupsSimilarQuestions_Organizers1311(t *testing.T) {
 			t.Fatalf("enqueue %d: %v %v", i, ok, err)
 		}
 	}
-	// the same assistant message is queued once; a manual escalation with a greeting joins the group
+	// одно и то же сообщение ассистента попадает в список один раз; ручное обращение с приветствием присоединяется к
+	// группе
 	if ok, _ := e.ask(anna, 0, "Можно ли приходить в офис с собакой?"); ok {
 		t.Fatal("the same message must be queued once")
 	}
 	e.send(anna, "mentor", "Олег, привет! Подскажи, пожалуйста: можно ли в офис с собакой приходить? В базе знаний команды ответа не нашёл.")
 	if n := e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'mentor.oleg' AND dedupe_key LIKE 'escalation:%'`); n != 1 {
-		t.Fatalf("queued questions notify nobody one by one, got %d notifications", n) // only the manual one
+		t.Fatalf("queued questions notify nobody one by one, got %d notifications", n) // только ручное
 	}
 
 	code, groups := e.queue(oleg)
@@ -68,7 +70,7 @@ func TestQueue_GroupsSimilarQuestions_Organizers1311(t *testing.T) {
 		t.Fatalf("questions are shown without greetings: %+v", groups)
 	}
 
-	// one answer closes the whole group, notifies the asker for each question and goes to the KB once
+	// один ответ закрывает всю группу, уведомляет спросившего по каждому вопросу и один раз уходит в базу знаний
 	body := fmt.Sprintf(`{"text":"Нет, только собаки-поводыри.","add_to_kb":true,"also_ids":["%s","%s","not-a-uuid"]}`, dog.IDs[1], dog.IDs[2])
 	if code, b := e.do(oleg, "POST", "/api/escalations/"+dog.IDs[0]+"/answer", body); code != 200 {
 		t.Fatalf("answer: %d %s", code, b)
@@ -96,7 +98,7 @@ func TestQueue_Rights_R71(t *testing.T) {
 	if !ivanQ {
 		t.Fatal("ivan's question goes to his mentor")
 	}
-	// another mentor, the asker and HR BP do not see Oleg's stack
+	// другой наставник, сам спросивший и HR BP не видят список Олега
 	for _, u := range []user{sergey, anna, elena} {
 		_, groups := e.queue(u)
 		for _, g := range groups {
@@ -110,7 +112,7 @@ func TestQueue_Rights_R71(t *testing.T) {
 	if _, groups := e.queue(sergey); len(groups) != 1 || groups[0].Askers[0] != "Иван Белов" {
 		t.Fatalf("sergey: %+v", groups)
 	}
-	// a foreign question in also_ids is skipped
+	// чужой вопрос в also_ids пропускается
 	_, mine := e.queue(oleg)
 	_, theirs := e.queue(sergey)
 	body := fmt.Sprintf(`{"text":"В календаре команды.","also_ids":["%s"]}`, theirs[0].IDs[0])
@@ -123,7 +125,7 @@ func TestQueue_Rights_R71(t *testing.T) {
 	if code, _ := e.do(user{}, "GET", "/api/escalations/queue", ""); code != 401 {
 		t.Fatal("anonymous")
 	}
-	// only interns' questions to the mentor, the lead or HR BP are queued; bad ids are ignored
+	// в список попадают только вопросы стажёров к наставнику, руководителю или HR BP; некорректные id игнорируются
 	ctx := context.Background()
 	for _, c := range []struct {
 		claims authn.Claims
@@ -133,7 +135,7 @@ func TestQueue_Rights_R71(t *testing.T) {
 		{authn.Claims{Sub: "mentor.oleg", Role: "mentor", TeamID: "delivery"}, "mentor", "00000000-0000-0000-0000-000000000101"},
 		{authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}, "curator", "00000000-0000-0000-0000-000000000101"},
 		{authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}, "mentor", "bad"},
-		{authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}, "mentor", "00000000-0000-0000-0000-000000000102"}, // Ivan's session
+		{authn.Claims{Sub: "intern.anna", Role: "intern", TeamID: "delivery"}, "mentor", "00000000-0000-0000-0000-000000000102"}, // сессия Ивана
 	} {
 		if ok, err := escalations.Enqueue(ctx, e.pool, c.claims, c.role, "вопрос", c.sid, "00000000-0000-0000-0001-000000000102"); ok || err != nil {
 			t.Fatalf("%+v: %v %v", c, ok, err)

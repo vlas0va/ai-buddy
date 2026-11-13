@@ -1,4 +1,4 @@
-// Package checklist implements the mock "checklist" MCP server: the Avito intern checklist template (S1).
+// Пакет checklist реализует мок-сервер MCP «checklist»: шаблон чек-листа стажёра Авито (S1).
 package checklist
 
 import (
@@ -13,7 +13,7 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// Register binds every tool of the checklist contract to srv.
+// Register привязывает каждый инструмент контракта checklist к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	if srv == nil || pool == nil {
 		return errors.New("checklist: server and pool are required")

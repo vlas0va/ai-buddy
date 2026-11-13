@@ -2,7 +2,7 @@ package escalations
 
 import "testing"
 
-// Checkpoint 11.11: the FAQ added from a mentor's answer has no names and no dates, so it is valid for every intern.
+// Чекпоинт 11.11: в FAQ из ответа наставника нет имён и дат, поэтому он подходит любому стажёру.
 func TestGeneralize_Checkpoint_NoNamesNoDates(t *testing.T) {
 	names := []string{"Анна Котова", "Олег Смирнов", "Мария Лебедева"}
 	for _, tc := range []struct{ in, want string }{

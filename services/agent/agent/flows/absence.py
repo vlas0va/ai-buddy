@@ -1,8 +1,10 @@
-"""S3 «Оформить отсутствие»: explain → collect dates → validate → draft (action_proposal) → confirm turn → MCP write.
+"""S3 «Оформить отсутствие»: объяснить → собрать даты → проверить → черновик (action_proposal) → ход подтверждения → запись
+в MCP.
 
-One request with a type (отгул, отпуск, отсутствие, декрет), optional documents from the chat attachments, approval by
-the lead and then by the HR admin; until the HR admin approves, the dates can be moved (checkpoint 11.11).
-Spec: openspec/specs/absence-request/spec.md (S3-01 … S3-29). Tool shapes: contracts/schemas/absence.json.
+Одна заявка с видом (отгул, отпуск, отсутствие, декрет), необязательные документы из вложений чата, согласование
+руководителем, а затем HR-администратором; пока HR-администратор не согласовал, даты можно перенести (чекпоинт 11.11).
+Спецификация: openspec/specs/absence-request/spec.md (S3-01 … S3-29). Формы инструментов:
+contracts/schemas/absence.json.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ from ..text import normalize
 from .common import CANCEL, CONFIRM, Turn, first_name, items, say
 
 OTHER_TYPES = re.compile(r"больничн")
-TYPE_PATTERNS = [  # order matters: «отпуск за свой счёт» is an absence, not a vacation
+TYPE_PATTERNS = [  # порядок важен: «отпуск за свой счёт» — это отсутствие, а не отпуск
     ("parental_leave", re.compile(r"\bдекрет|по\s+уходу\s+за\s+реб|по\s+беременност|по\s+родам")),
     ("absence", re.compile(r"\bотсутстви|за\s+свой\s+сч[её]т|без\s+сохранени|\bучеб|\bсесси|экзамен|семейн")),
     ("vacation", re.compile(r"\bотпуск")),
@@ -50,7 +52,7 @@ STATUS_LABELS = {
 
 
 def bare_day(text: str) -> DateRange | None:
-    """«13» → the nearest 13th from tomorrow on (this month or the next)."""
+    """«13» → ближайшее 13-е число начиная с завтра (в этом месяце или следующем)."""
     m = BARE_DAY.match(text)
     if not m or not 1 <= int(m.group(1)) <= 31:
         return None
@@ -67,7 +69,7 @@ def bare_day(text: str) -> DateRange | None:
 
 
 def busy_ranges(turn: Turn) -> list[dict[str, str]]:
-    """The user's open and approved requests: the calendar marks those days (feedback 12.13)."""
+    """Открытые и согласованные заявки пользователя: календарь отмечает эти дни (отзыв 12.13)."""
     try:
         reqs = items(turn.gateway.read("absence.list_my_requests"))
     except Exception:  # noqa: BLE001 - the calendar works without them
@@ -82,7 +84,7 @@ def busy_ranges(turn: Turn) -> list[dict[str, str]]:
 def date_picker(
     kind: str, purpose: str = "absence", ref_id: str = "", busy: list[dict[str, str]] | None = None, label: str = ""
 ) -> Event:
-    """A calendar under the answer (feedback 12.11): the user picks the dates instead of typing them."""
+    """Календарь под ответом (отзыв 12.11): пользователь выбирает даты, а не вводит их."""
     today = clock.today()
     earliest = {"vacation": today + timedelta(days=14), "parental_leave": today}.get(kind, today + timedelta(days=1))
     labels = {"day_off": "отгула", "vacation": "отпуска", "absence": "отсутствия", "parental_leave": "декрета"}
@@ -121,7 +123,9 @@ def type_label(kind: str) -> str:
 
 
 def documents_of(turn: Turn) -> list[dict[str, Any]]:
-    """Documents attached to this message (metadata only, never read), as absence.create_request takes them."""
+    """Документы, приложенные к этому сообщению (только метаданные, никогда не читаются), в том виде, как их принимает
+    absence.create_request.
+    """
     docs = []
     for a in turn.meta.get("documents") or []:
         name = str(a.get("name") or "документ")[:200]
@@ -245,7 +249,9 @@ STEP_STATUS = {
 
 
 def steps_line(steps: list[dict[str, Any]]) -> str:
-    """lead → HR admin → HR BP (organizers' Q&A 10.11), e.g. «руководитель (Мария Лебедева): согласовал → …»."""
+    """руководитель → HR-администратор → HR BP (ответы организаторов 10.11), например «руководитель (Мария Лебедева):
+    согласовал → …».
+    """
     parts = []
     for s in steps or []:
         who = STEP_ROLES.get(s.get("role", ""), s.get("role", ""))
@@ -266,7 +272,7 @@ def handle_status(turn: Turn, text: str) -> Iterator[Event]:
                     f"- {r['id']}: командировка {r['city']}, {human_range(rng)} — {STATUS_LABELS.get(r['status'], r['status'])}"
                 )
         except ToolError:
-            pass  # the trip service is optional for a day-off status
+            pass  # сервис командировок необязателен для статуса отгула
     if not reqs and not trip_lines:
         yield from say(
             "У тебя пока нет заявок на отсутствие. Хочешь оформить отгул или отпуск? Напиши даты, например «в пятницу»."
@@ -323,7 +329,7 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
         )
         return
     if rng is None and documents_of(turn) and st.get("slots"):
-        s0 = st["slots"]  # a document sent after the dates: build the draft with it
+        s0 = st["slots"]  # документ прислан после дат: собрать черновик с ним
         rng = DateRange(date.fromisoformat(s0["start_date"]), date.fromisoformat(s0["end_date"]))
     if rng is None:
         explain_again = not st.get("explained") or type_changed or INFO_QUESTION.search(t)
@@ -364,7 +370,7 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
             )
             longer = other is not None and (other.get("type", "day_off") != kind or (rng.end - rng.start).days > o_days)
             if other is not None and other.get("status") in OPEN and inside and longer:
-                # feedback 12.13: a longer absence covers a pending request — it replaces that request in one step
+                # отзыв 12.13: более длинное отсутствие накрывает несогласованную заявку — заменяет её за один шаг
                 check2 = turn.gateway.read("absence.validate_request", **args, exclude_id=ref)
                 o_label = f"{type_label(other.get('type', 'day_off')).lower()} {_period(other)}"
                 if check2.get("valid"):
@@ -388,7 +394,7 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
                 )
                 yield date_picker(kind, busy=busy_ranges(turn))
                 return
-            else:  # a partial overlap with an open request: move that request, or pick other dates
+            else:  # частичное пересечение с открытой заявкой: перенести её или выбрать другие даты
                 o_kind = (other or {}).get("type", "day_off")
                 yield from say(
                     f"{label} {human_range(rng)} оформить не получится: {problems} Можно перенести заявку {ref} "
@@ -472,13 +478,13 @@ def handle(turn: Turn, text: str) -> Iterator[Event]:
 
 
 def _sentences(problems: list[str]) -> str:
-    """«a; b» → «A. B.»: problems from the service read as sentences (feedback 12.13)."""
+    """«a; b» → «A. B.»: проблемы от сервиса читаются как предложения (отзыв 12.13)."""
     out = [p.strip().rstrip(".") for p in problems if p.strip()]
     return " ".join(f"{p[0].upper()}{p[1:]}." for p in out)
 
 
 def _plan_clashes(turn: Turn, rng: DateRange) -> str:
-    """Feedback 12.13: plan tasks due within the absence — say so before the request goes out."""
+    """Отзыв 12.13: задачи плана со сроком в дни отсутствия — сказать об этом до отправки заявки."""
     hit = [
         t
         for t in turn.user.tasks
@@ -494,7 +500,7 @@ def _plan_clashes(turn: Turn, rng: DateRange) -> str:
 
 
 def handle_withdraw(turn: Turn, text: str) -> Iterator[Event]:
-    """«отмени заявку на отгул» (feedback 12.13): a request the HR admin has not approved can be withdrawn."""
+    """«отмени заявку на отгул» (отзыв 12.13): заявку, которую HR-администратор ещё не согласовал, можно отозвать."""
     yield status("calling_service", "Смотрю заявки в сервисе отсутствий")
     reqs = items(turn.gateway.read("absence.list_my_requests"))
     m = ABS_ID.search(text)
@@ -546,7 +552,9 @@ def handle_withdraw(turn: Turn, text: str) -> Iterator[Event]:
 
 
 def handle_reschedule(turn: Turn, text: str) -> Iterator[Event]:
-    """«перенеси отпуск на 8–21 декабря»: a request not yet approved by the HR admin gets new dates (checkpoint 11.11)."""
+    """«перенеси отпуск на 8–21 декабря»: заявка, ещё не согласованная HR-администратором, получает новые даты (чекпоинт
+    11.11).
+    """
     yield status("calling_service", "Смотрю заявки в сервисе отсутствий")
     reqs = items(turn.gateway.read("absence.list_my_requests"))
     open_reqs = [r for r in reqs if r["status"] in ("pending_approval", "pending_hr")]

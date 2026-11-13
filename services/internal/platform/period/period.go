@@ -1,5 +1,5 @@
-// Package period maps an intern's cohort start date to the periods of the Avito checklist
-// (data/checklist/checklist.yaml: week_1 … after_3_months) and gives each period its due offset and Russian label.
+// Пакет period сопоставляет дату начала когорты стажёра этапам чек-листа Авито (data/checklist/checklist.yaml: week_1 …
+// after_3_months) и даёт каждому этапу смещение срока и русскую подпись.
 package period
 
 import (
@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-// Period is a checklist period id (openapi Period).
+// Period — id этапа чек-листа (openapi Period).
 type Period string
 
-// The checklist periods in order.
+// Этапы чек-листа по порядку.
 const (
 	Week1        Period = "week_1"
 	Week2        Period = "week_2"
@@ -22,12 +22,12 @@ const (
 
 type info struct {
 	p       Period
-	before  int // Current returns p while days since cohort start < before
+	before  int // Current возвращает p, пока дней с начала когорты < before
 	dueDays int
 	label   string
 }
 
-// Same table as data/checklist/checklist.yaml (labels) and migrations/0003_seed_demo.sql (due offsets).
+// Та же таблица, что в data/checklist/checklist.yaml (подписи) и migrations/0003_seed_demo.sql (смещения сроков).
 var table = []info{
 	{Week1, 7, 7, "1 неделя"},
 	{Week2, 14, 14, "2 неделя"},
@@ -36,7 +36,7 @@ var table = []info{
 	{After3Months, -1, 100, "После 3-х месяцев"},
 }
 
-// All returns the periods in checklist order (a fresh slice).
+// All возвращает этапы в порядке чек-листа (новый срез).
 func All() []Period {
 	out := make([]Period, len(table))
 	for i, t := range table {
@@ -45,7 +45,7 @@ func All() []Period {
 	return out
 }
 
-// Parse returns s as a Period, or an error for an unknown id.
+// Parse возвращает s как Period или ошибку для неизвестного id.
 func Parse(s string) (Period, error) {
 	p := Period(s)
 	if Order(p) < 0 {
@@ -54,12 +54,12 @@ func Parse(s string) (Period, error) {
 	return p, nil
 }
 
-// Order returns the 0-based position of p in checklist order, or -1 for an unknown period.
+// Order возвращает позицию p в порядке чек-листа (с 0) или -1 для неизвестного этапа.
 func Order(p Period) int {
 	return slices.IndexFunc(table, func(t info) bool { return t.p == p })
 }
 
-// Label returns the Russian label («1 неделя» … «После 3-х месяцев»), or string(p) for an unknown period.
+// Label возвращает русскую подпись («1 неделя» … «После 3-х месяцев») или string(p) для неизвестного этапа.
 func Label(p Period) string {
 	if i := Order(p); i >= 0 {
 		return table[i].label
@@ -67,7 +67,7 @@ func Label(p Period) string {
 	return string(p)
 }
 
-// DueOffsetDays returns the due date offset from the cohort start: 7, 14, 30, 60, 100; 0 for an unknown period.
+// DueOffsetDays возвращает смещение срока от начала когорты: 7, 14, 30, 60, 100; 0 для неизвестного этапа.
 func DueOffsetDays(p Period) int {
 	if i := Order(p); i >= 0 {
 		return table[i].dueDays
@@ -75,14 +75,14 @@ func DueOffsetDays(p Period) int {
 	return 0
 }
 
-// DaysSince returns the number of calendar days from cohortStart to today (negative before the start).
-// Each value is reduced to its calendar date in its own location; the time of day is ignored.
+// DaysSince возвращает число календарных дней от cohortStart до today (отрицательное до начала). Каждое значение
+// приводится к календарной дате в своём часовом поясе; время суток игнорируется.
 func DaysSince(cohortStart, today time.Time) int {
 	return int(date(today).Sub(date(cohortStart)).Hours() / 24)
 }
 
-// Current returns the period of an intern on today: week_1 for days < 7 (also before the start), week_2 < 14,
-// month_1 < 30, month_2 < 90, after_3_months otherwise. Days are counted by DaysSince.
+// Current возвращает этап стажёра на today: week_1 при днях < 7 (и до начала), week_2 < 14, month_1 < 30, month_2 < 90,
+// иначе after_3_months. Дни считаются через DaysSince.
 func Current(cohortStart, today time.Time) Period {
 	days := DaysSince(cohortStart, today)
 	for _, t := range table {
@@ -90,15 +90,15 @@ func Current(cohortStart, today time.Time) Period {
 			return t.p
 		}
 	}
-	return After3Months // unreachable: the last row has no bound
+	return After3Months // недостижимо: у последней строки нет границы
 }
 
-// DueDate returns cohortStart + DueOffsetDays(p) as a date (midnight UTC), like the seed's cohort_start + days.
+// DueDate возвращает cohortStart + DueOffsetDays(p) как дату (полночь UTC), как cohort_start + days в демо-данных.
 func DueDate(cohortStart time.Time, p Period) time.Time {
 	return date(cohortStart).AddDate(0, 0, DueOffsetDays(p))
 }
 
-// ParseDate parses a YYYY-MM-DD date (JWT claim cohort_start, DB dates) as midnight UTC.
+// ParseDate разбирает дату YYYY-MM-DD (claim JWT cohort_start, даты из БД) как полночь UTC.
 func ParseDate(s string) (time.Time, error) {
 	t, err := time.Parse(time.DateOnly, s)
 	if err != nil {

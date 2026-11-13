@@ -149,7 +149,7 @@ func TestAccessLog(t *testing.T) {
 	if second["status"] != float64(200) || second["level"] != "DEBUG" {
 		t.Fatalf("second %v", second)
 	}
-	// Implicit 200 without any write, and the default logger.
+	// Неявный 200 без единой записи и логгер по умолчанию.
 	rec := httptest.NewRecorder()
 	AccessLog(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != http.StatusOK {
@@ -169,7 +169,7 @@ func TestStatusWriter_FlushAndUnwrap(t *testing.T) {
 	if wrap(sw) != sw {
 		t.Fatal("wrap must not double-wrap")
 	}
-	sw.WriteHeader(http.StatusContinue) // informational codes are not the final status
+	sw.WriteHeader(http.StatusContinue) // информационные коды — не окончательный статус
 	sw.Flush()
 	if !rec.Flushed || sw.statusCode() != http.StatusOK || sw.Unwrap() != rec {
 		t.Fatalf("flushed %v status %d", rec.Flushed, sw.statusCode())

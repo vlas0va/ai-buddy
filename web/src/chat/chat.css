@@ -1,7 +1,8 @@
 .chat-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .chat-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 .chat-main { display: flex; flex-direction: column; min-height: 0; }
-/* position: relative keeps visually-hidden and absolute children inside the scroller, so the page itself never scrolls */
+/* position: relative держит визуально скрытые и абсолютно позиционированные дочерние элементы внутри прокручиваемой
+   области, поэтому сама страница никогда не прокручивается */
 .chat-list { position: relative; flex: 1; overflow-y: auto; display: grid; align-content: start; gap: var(--space-4); padding-bottom: var(--space-3); }
 .chat-turn { display: grid; gap: var(--space-3); }
 .chat-row { display: flex; gap: var(--space-2); align-items: flex-start; }
@@ -96,7 +97,7 @@
 }
 .chat-page > .page-header { flex-shrink: 0; }
 
-/* rich text inside buddy bubbles */
+/* форматированный текст внутри пузырей buddy */
 .rich { display: grid; gap: var(--space-2); }
 .rich p, .rich ul, .rich ol { margin: 0; }
 .rich ul, .rich ol { padding-left: 1.25em; display: grid; gap: 2px; }
@@ -106,7 +107,7 @@
 .rich-table th, .rich-table td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
 .rich-table th { background: var(--color-neutral-soft); font-weight: 600; }
 
-/* next step card */
+/* карточка следующего шага */
 .next-step, .plan-next { display: grid; gap: var(--space-2); background: var(--color-accent); color: #fff; border: 0; }
 .next-step-label { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, 0.9); }
 .next-step-title { font-weight: 800; font-size: 20px; letter-spacing: -0.01em; }
@@ -115,7 +116,7 @@
 .next-step .ui-btn-primary:hover:not(:disabled), .plan-next .ui-btn-primary:hover:not(:disabled) { background: var(--color-accent-soft); }
 .next-step .chat-link, .plan-next .chat-link { color: #fff; align-self: center; }
 
-/* feedback */
+/* обратная связь */
 .chat-feedback { margin-left: 44px; display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--color-text-muted); }
 .chat-feedback button { border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 999px; padding: 4px 12px; font-weight: 600; cursor: pointer; font-size: var(--text-xs); color: var(--color-text-muted); }
 .chat-feedback button:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent); }
@@ -123,7 +124,7 @@
 .chat-feedback button:disabled { cursor: default; }
 .chat-bubble .rich { white-space: normal; }
 
-/* feedback 12.11: the missing accesses as one list with checkboxes */
+/* отзыв 12.11: недостающие доступы одним списком с галочками */
 .bundle-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .bundle-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
   padding: 10px 12px; border-radius: 12px; background: var(--color-tile); }
@@ -132,7 +133,7 @@
 .bundle-name { font-weight: 600; overflow-wrap: anywhere; }
 .bundle-approval { color: var(--color-warning); }
 
-/* feedback 12.11: a source chip opens the test document in a side panel */
+/* отзыв 12.11: чип источника открывает тестовый документ в боковой панели */
 .chat-chip-doc { border: 0; cursor: pointer; font-family: inherit; color: var(--color-text); }
 .chat-chip-doc:hover, .chat-chip-doc:focus-visible { box-shadow: inset 0 0 0 1px var(--color-accent); color: var(--color-accent-ink); }
 .doc-backdrop { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.4); display: flex; justify-content: flex-end; z-index: 40; }
@@ -147,7 +148,7 @@
 .date-pick label { display: grid; gap: 4px; }
 @media (max-width: 600px) { .date-pick { grid-template-columns: 1fr; } }
 
-/* feedback 12.11: earlier dialogs */
+/* отзыв 12.11: прежние диалоги */
 .dialogs { position: relative; }
 .dialogs-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 25; width: min(360px, 90vw); max-height: 60vh; overflow-y: auto;
   display: grid; gap: 4px; padding: var(--space-2); border-radius: 16px; background: var(--color-surface); box-shadow: var(--shadow-md); }
@@ -156,12 +157,12 @@
 .dialogs-item.is-current { background: var(--color-accent-soft); }
 .dialogs-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* organizers 12.11: justification and «нужен ли?» under an access with approval */
+/* организаторы 12.11: обоснование и «нужен ли?» под доступом с согласованием */
 .bundle-extras { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 2px 0 6px 28px; font-size: 13px; }
 .bundle-why { display: flex; gap: 8px; flex: 1; min-width: 0; }
 .bundle-why .ui-input { flex: 1; min-width: 0; }
 
-/* feedback 12.13: a small pop-up range calendar, as when booking a flight */
+/* отзыв 12.13: маленький всплывающий календарь диапазона, как при покупке авиабилетов */
 .date-pop { position: relative; max-width: 320px; }
 .date-pop-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; }
 .date-pop-panel { position: relative; margin-top: 6px; width: max-content; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 10px; }

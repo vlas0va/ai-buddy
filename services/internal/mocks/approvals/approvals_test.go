@@ -47,7 +47,8 @@ func TestListPending_S3_S4_OnlyCallerAsApprover_R71(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, first.CreatedAt); err != nil {
 		t.Fatalf("created_at %q", first.CreatedAt)
 	}
-	// feedback 12.13: the lead sees that Олег (same team) is away on the same day; another team's people are not listed
+	// отзыв 12.13: руководитель видит, что Олег (та же команда) отсутствует в тот же день; люди другой команды не
+	// показываются
 	if len(first.TeamAbsent) != 1 || first.TeamAbsent[0] != "Олег Мартынов: отгул 10.11" {
 		t.Fatalf("team absent %v", first.TeamAbsent)
 	}
@@ -143,7 +144,7 @@ func TestDecide_NonLeadRoles_R71(t *testing.T) {
 			e.wantCode(c, "decide", confirmed(t, c, newKey(t), decision(itemID, "approved")), apierr.CodeForbidden)
 		})
 	}
-	// A JWT claiming the approver's id with the intern role is still refused by the role allow-list.
+	// JWT с id согласующего, но с ролью стажёра всё равно отклоняется белым списком ролей.
 	spoof := caller("lead.maria", "intern", "delivery")
 	e.wantCode(spoof, "decide", confirmed(t, spoof, newKey(t), decision(itemID, "approved")), apierr.CodeForbidden)
 	if n := e.count(`SELECT count(*) FROM approvals.items WHERE status = 'pending'`); n != 1 {
@@ -320,7 +321,7 @@ func TestRegister_Errors(t *testing.T) {
 	}
 }
 
-// bearer adds a JWT to every request of a raw go-sdk client session.
+// bearer добавляет JWT к каждому запросу «сырой» клиентской сессии go-sdk.
 type bearer struct{ token string }
 
 func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -329,7 +330,7 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(r)
 }
 
-// nextWorkday is a weekday at least two days ahead in Moscow time (the absence server runs on the real clock here).
+// nextWorkday — будний день не меньше чем через два дня по Москве (сервер absence здесь работает на настоящих часах).
 func nextWorkday() string {
 	y, m, d := time.Now().In(time.FixedZone("MSK", 3*60*60)).Date()
 	day := time.Date(y, m, d+2, 0, 0, 0, 0, time.UTC)
@@ -339,8 +340,9 @@ func nextWorkday() string {
 	return day.Format(time.DateOnly)
 }
 
-// TestRoundTrip_S3_S4_HTTP_R66_R71 runs S3 step 8 and S4 over HTTP: an intern creates a day-off request and an
-// elevated access request, the lead lists and decides them with confirmation tokens, the intern sees the result.
+// TestRoundTrip_S3_S4_HTTP_R66_R71 прогоняет шаг 8 S3 и S4 через HTTP: стажёр создаёт заявку на отгул и заявку на
+// доступ с повышенными правами, руководитель получает их список и решает с токенами подтверждения, стажёр видит
+// результат.
 func TestRoundTrip_S3_S4_HTTP_R66_R71(t *testing.T) {
 	pool := pgtest.New(t)
 	mux := http.NewServeMux()
@@ -388,7 +390,7 @@ func TestRoundTrip_S3_S4_HTTP_R66_R71(t *testing.T) {
 		t.Fatalf("pending %s", raw)
 	}
 	for _, it := range pending.Items {
-		// Dmitry (another team) cannot decide, and the token minted for Maria does not work for him.
+		// Дмитрий (другая команда) решить не может, и токен, выпущенный для Марии, у него не работает.
 		args := confirmed(t, maria, newKey(t), decision(it.ID, "approved"))
 		if _, terr, err := client.Call(ctx, jwt(dmitry), "approvals", "decide", args); err != nil || terr == nil ||
 			terr.Code != apierr.CodeInvalidConfirmation {

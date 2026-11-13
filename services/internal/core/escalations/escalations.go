@@ -1,8 +1,8 @@
-// Package escalations lets an intern send a question drafted by buddy to a person (mentor, lead, HR BP, curator),
-// lets the addressee answer it and optionally publishes the answer to the team knowledge base (S2, R10).
+// Пакет escalations позволяет стажёру отправить человеку (наставнику, руководителю, HR BP, куратору) вопрос,
+// подготовленный buddy, позволяет адресату ответить и при желании публикует ответ в базу знаний команды (S2, R10).
 //
-// Rights (R71): an escalation is visible only to its sender and its addressee; only the addressee can answer.
-// Foreign or unknown ids answer 403.
+// Права (R71): обращение видят только отправитель и адресат; ответить может только адресат. Чужие или неизвестные id
+// отвечают 403.
 package escalations
 
 import (
@@ -27,19 +27,18 @@ import (
 	"aibuddy/services/internal/platform/httpx"
 )
 
-// FAQWriter publishes an answered question to the team knowledge base (kb.add_faq). Core's MCP client implements it
-// and issues the confirmation token itself; mentorToken is the raw JWT of the answering user and idempotencyKey is
-// the escalation id.
+// FAQWriter публикует отвеченный вопрос в базу знаний команды (kb.add_faq). Реализован в MCP-клиенте ядра, который сам
+// выпускает токен подтверждения; mentorToken — исходный JWT отвечающего пользователя, idempotencyKey — id обращения.
 type FAQWriter interface {
 	AddFAQ(ctx context.Context, mentorToken, title, body, scope, idempotencyKey string) error
 }
 
-// FlagChecker tells whether a runtime flag is on for a team (flags.Service implements it).
+// FlagChecker сообщает, включён ли runtime-флаг для команды (реализован в flags.Service).
 type FlagChecker interface {
 	Enabled(ctx context.Context, key, team string) bool
 }
 
-// Handler serves the escalation endpoints.
+// Handler обслуживает эндпоинты обращений.
 type Handler struct {
 	pool    *pgxpool.Pool
 	notify  notify.Store
@@ -49,7 +48,8 @@ type Handler struct {
 	log     *slog.Logger
 }
 
-// New returns the escalation HTTP handler. emitter, faq and log may be nil (nil faq = KB publishing off).
+// New возвращает HTTP-обработчик обращений. emitter, faq и log могут быть nil (nil faq — публикация в базу знаний
+// выключена).
 func New(pool *pgxpool.Pool, emitter *analytics.Emitter, flags FlagChecker, faq FAQWriter, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -57,7 +57,7 @@ func New(pool *pgxpool.Pool, emitter *analytics.Emitter, flags FlagChecker, faq 
 	return &Handler{pool: pool, emitter: emitter, flags: flags, faq: faq, log: log}
 }
 
-// Register adds the escalation routes (auth required).
+// Register добавляет маршруты обращений (нужна авторизация).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/escalations", h.create)
 	mux.HandleFunc("GET /api/escalations", h.list)
@@ -69,7 +69,7 @@ var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 
 const maxText = 4000
 
-// Escalation is the openapi Escalation.
+// Escalation — это openapi Escalation.
 type Escalation struct {
 	ID              string  `json:"id"`
 	FromDisplayName string  `json:"from_display_name"`
@@ -98,7 +98,8 @@ func claims(w http.ResponseWriter, r *http.Request) (authn.Claims, bool) {
 	return c, ok
 }
 
-// target finds the addressee: the mentor of the sender, the lead of the sender's team, or the first user of the role.
+// target находит адресата: наставника отправителя, руководителя команды отправителя или первого пользователя с этой
+// ролью.
 func (h *Handler) target(ctx context.Context, c authn.Claims, role string) (string, error) {
 	var id string
 	var err error
@@ -132,7 +133,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		ToRole    string  `json:"to_role"`
 		Text      string  `json:"text"`
 		SessionID *string `json:"session_id"`
-		MessageID *string `json:"message_id"` // the assistant message whose draft is sent (feedback 12.11)
+		MessageID *string `json:"message_id"` // сообщение ассистента, черновик из которого отправляется (отзыв 12.11)
 	}
 	if err := httpx.ReadJSON(w, r, &body); err != nil {
 		apierr.WriteJSON(w, err)
@@ -275,8 +276,8 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Text    string `json:"text"`
 		AddToKB bool   `json:"add_to_kb"`
-		KBScope string `json:"kb_scope"` // team (default) | all: a general answer for every team
-		// the other questions of the same stack group (organizers 13.11): one answer closes them all
+		KBScope string `json:"kb_scope"` // team (по умолчанию) | all: общий ответ для всех команд
+		// остальные вопросы той же группы списка (организаторы 13.11): один ответ закрывает их все
 		AlsoIDs []string `json:"also_ids"`
 	}
 	if err := httpx.ReadJSON(w, r, &body); err != nil {
@@ -302,7 +303,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 		if other == id || !uuidRE.MatchString(other) || contains(answered, other) {
 			continue
 		}
-		// a question of another addressee or one answered meanwhile is skipped, the rest of the group is answered
+		// вопрос другого адресата или уже отвеченный за это время пропускается, остальная группа получает ответ
 		if _, err := h.saveAnswer(ctx, c, other, text); err == nil {
 			answered = append(answered, other)
 		}
@@ -310,11 +311,12 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 	added := false
 	if body.AddToKB && h.faq != nil && h.flags != nil && h.flags.Enabled(ctx, flags.EscalationToKB, c.TeamID) {
 		token, _ := authn.TokenFromContext(ctx)
-		// The FAQ is for every intern: no names, no dates (checkpoint 11.11).
+		// FAQ — для любого стажёра: без имён и дат (чекпоинт 11.11).
 		names := h.userNames(ctx)
 		q, a := generalize(question, names), generalize(text, names)
 		title := faqTitle(q)
-		// The answer is already saved; a KB failure must not lose it, so it is logged and reported as added_to_kb=false.
+		// Ответ уже сохранён; сбой базы знаний не должен его потерять, поэтому он логируется и отражается как
+		// added_to_kb=false.
 		scope := "team"
 		if body.KBScope == "all" {
 			scope = "all"
@@ -342,7 +344,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
-// saveAnswer stores the answer and notifies the sender; it returns the question text.
+// saveAnswer сохраняет ответ и уведомляет отправителя; возвращает текст вопроса.
 func (h *Handler) saveAnswer(ctx context.Context, c authn.Claims, id, text string) (string, error) {
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
@@ -353,7 +355,7 @@ func (h *Handler) saveAnswer(ctx context.Context, c authn.Claims, id, text strin
 	err = tx.QueryRow(ctx, `SELECT from_user_id, to_user_id, status, text FROM core.escalations WHERE id = $1 FOR UPDATE`, id).
 		Scan(&from, &to, &status, &question)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && to != c.Sub) {
-		return "", apierr.Forbidden() // only the addressee may answer; unknown ids look the same
+		return "", apierr.Forbidden() // ответить может только адресат; неизвестные id выглядят так же
 	}
 	if err != nil {
 		return "", fmt.Errorf("select escalation: %w", err)
@@ -374,8 +376,8 @@ func (h *Handler) saveAnswer(ctx context.Context, c authn.Claims, id, text strin
 	return question, nil
 }
 
-// faqTitle is the first line of the question, shortened to 80 characters.
-// userNames lists the display names of all users, to strip them from an FAQ; on error the FAQ keeps only date masking.
+// faqTitle — первая строка вопроса, сокращённая до 80 символов. userNames перечисляет отображаемые имена всех
+// пользователей, чтобы убрать их из FAQ; при ошибке FAQ получает только маскирование дат.
 func (h *Handler) userNames(ctx context.Context) []string {
 	rows, err := h.pool.Query(ctx, `SELECT display_name FROM core.users`)
 	if err != nil {

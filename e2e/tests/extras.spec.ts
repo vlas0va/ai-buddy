@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test'
 import { ask, ddmmyyyy, lastTurn, login, newDialog, waitAnswer } from './helpers'
 
-// Organizers' Q&A 10.11 and «Пространство решений»: business trips, consents, HR steps of a day off, files in chat and
-// web search for general technical questions (openspec trips-consents, attachments-websearch).
+// Ответы организаторов 10.11 и «Пространство решений»: командировки, согласия, HR-шаги отгула, файлы в чате и веб-поиск
+// по общим техническим вопросам (openspec trips-consents, attachments-websearch).
 
 test('Trip: one message → draft → TRP-… → the lead approves it in «Согласования»', async ({ browser }) => {
   const intern = await (await browser.newContext()).newPage()
@@ -10,7 +10,7 @@ test('Trip: one message → draft → TRP-… → the lead approves it in «Со
   await newDialog(intern)
   const start = new Date()
   start.setHours(12, 0, 0, 0)
-  start.setDate(start.getDate() + 30 + (Math.floor(Date.now() / 1000) % 200)) // a fresh date on every run
+  start.setDate(start.getDate() + 30 + (Math.floor(Date.now() / 1000) % 200)) // новая дата при каждом запуске
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
   await ask(intern, `оформи командировку в Казань с ${ddmmyyyy(start)} по ${ddmmyyyy(end)}, цель — встреча с командой`)
@@ -38,7 +38,8 @@ test('Trip: one message → draft → TRP-… → the lead approves it in «Со
   await expect(panel.locator('li, .ui-card').filter({ hasText: id }).first()).toContainText('Согласовано')
 })
 
-// Other accounts than intern.anna: the chat rate limit (20 messages a minute per user) is shared with other specs.
+// Другие учётные записи, не intern.anna: лимит частоты чата (20 сообщений в минуту на пользователя) общий с другими
+// спеками.
 test('Trip: own city is explained, booking a hotel is refused', async ({ page }) => {
   await login(page, 'mentor.oleg')
   await newDialog(page)
@@ -59,7 +60,7 @@ test('Consents: statuses are listed, a voluntary consent is signed after «От�
   await ask(page, 'подпиши согласие на опросы')
   await waitAnswer(page)
   const draft = page.getByLabel('Черновик заявки').last()
-  // the answer arrives before its card: wait for one of the two outcomes, then branch (first run vs a repeated one)
+  // ответ приходит раньше своей карточки: ждём одного из двух исходов, затем ветвимся (первый запуск или повторный)
   await expect(lastTurn(page)).toContainText(/Подготовил подпись|уже подписано/)
   if (!(await lastTurn(page).textContent())?.includes('уже подписано')) {
     await expect(draft).toContainText('Подпись согласия')
@@ -68,7 +69,7 @@ test('Consents: statuses are listed, a voluntary consent is signed after «От�
     await expect(result).toContainText(/CNS-\d+/)
     await expect(result).toContainText('Подписано')
   } else {
-    await expect(lastTurn(page)).toContainText('уже подписано') // a repeated run
+    await expect(lastTurn(page)).toContainText('уже подписано') // повторный запуск
   }
 })
 

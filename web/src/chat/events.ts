@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ACTION_KINDS, ACTION_STATUSES, contactRoleSchema, sourceSchema } from '@/api/schemas'
 
-// Event payloads from contracts/agent-stream.md. Every payload is parsed; a bad one becomes a local error event.
+// Данные событий из contracts/agent-stream.md. Каждое разбирается; некорректное становится локальным событием error.
 
 export const stageSchema = z.enum(['thinking', 'searching_kb', 'calling_service', 'saving'])
 export type Stage = z.infer<typeof stageSchema>
@@ -38,7 +38,7 @@ export const escalationDraftSchema = z.object({
   text: z.string(),
   to_name: z.string().nullable().optional(),
   channel: z.string().nullable().optional(),
-  // organizers 13.11: the question is in the addressee's stack (core stored it with the assistant message)
+  // организаторы 13.11: вопрос в списке адресата (ядро сохранило его вместе с сообщением ассистента)
   queue: z.boolean().optional(),
 })
 export type EscalationDraftData = z.infer<typeof escalationDraftSchema>
@@ -60,7 +60,7 @@ export const nextStepSchema = z.object({
 })
 export type NextStep = z.infer<typeof nextStepSchema>
 
-/** feedback 12.11: a calendar under an absence answer; the chosen dates go back as a message */
+/** отзыв 12.11: календарь под ответом про отсутствие; выбранные даты возвращаются сообщением */
 export const datePickerSchema = z.object({
   purpose: z.enum(['absence', 'reschedule']),
   kind: z.string(),
@@ -68,7 +68,7 @@ export const datePickerSchema = z.object({
   min: z.string(),
   max: z.string(),
   label: z.string(),
-  /** feedback 12.13: the user's open and approved requests, marked in the calendar */
+  /** отзыв 12.13: открытые и согласованные заявки пользователя, отмеченные в календаре */
   busy: z.array(z.object({ start: z.string(), end: z.string(), label: z.string() })).optional(),
 })
 export type DatePicker = z.infer<typeof datePickerSchema>
@@ -93,7 +93,10 @@ export type StreamEvent =
   | { type: 'date_picker'; data: DatePicker }
   | { type: 'quiz_passed'; data: { checklist_item_id: string } }
   | { type: 'done'; data: { message_id?: string } }
-  /** an event this client does not know: contracts/agent-stream.md says new events are additive and must be skipped */
+  /**
+   * событие, неизвестное этому клиенту: по contracts/agent-stream.md новые события только добавляются, и их нужно
+   * пропускать
+   */
   | { type: 'ignored'; data: { name: string } }
 
 const payloads = {

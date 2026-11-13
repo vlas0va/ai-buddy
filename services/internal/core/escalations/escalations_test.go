@@ -131,7 +131,7 @@ func TestCreate_Targets_S2_R10(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM core.analytics_events WHERE name='escalation.sent'`); n != len(cases) {
 		t.Errorf("escalation.sent events: %d", n)
 	}
-	// addressee is told, without the question text
+	// адресату сообщается, без текста вопроса
 	if n := e.count(`SELECT count(*) FROM core.notifications WHERE user_id='mentor.oleg' AND kind='reminder' AND body NOT LIKE '%доступ%'`); n != 1 {
 		t.Errorf("addressee notification: %d", n)
 	}
@@ -156,7 +156,8 @@ func TestCreate_Validation_R71(t *testing.T) {
 		{"foreign session", anna, `{"to_role":"mentor","text":"q","session_id":"` + foreignSid + `"}`, 403},
 		{"unknown session", anna, `{"to_role":"mentor","text":"q","session_id":"00000000-0000-4000-8000-000000000000"}`, 403},
 		{"malformed session", anna, `{"to_role":"mentor","text":"q","session_id":"x"}`, 400},
-		// feedback 12.11: the draft of one message is sent once; the message must be the user's own
+		// отзыв 12.11: черновик одного сообщения отправляется один раз; сообщение должно принадлежать самому
+		// пользователю
 		{"from a draft", anna, `{"to_role":"mentor","text":"q","message_id":"` + mid + `"}`, 201},
 		{"the same draft again", anna, `{"to_role":"mentor","text":"q","message_id":"` + mid + `"}`, 409},
 		{"a foreign draft", anna, `{"to_role":"mentor","text":"q","message_id":"` + foreignMid + `"}`, 403},
@@ -173,7 +174,7 @@ func TestCreate_Validation_R71(t *testing.T) {
 			t.Errorf("%s: %d, want %d (%s)", c.name, code, c.want, b)
 		}
 	}
-	// no mentor assigned -> addressee not found
+	// наставник не назначен -> адресат не найден
 	e.pool.Exec(context.Background(), `INSERT INTO core.users (id, display_name, role, team_id, cohort_start, password_hash) VALUES ('intern.solo','Соло','intern','delivery',current_date,'x')`)
 	if code, _ := e.do(user{"intern.solo", "intern", "delivery"}, "POST", "/api/escalations", `{"to_role":"mentor","text":"q"}`); code != 404 {
 		t.Errorf("no mentor: %d", code)
@@ -261,7 +262,7 @@ func TestAnswer_NotifiesSender_S2_R10(t *testing.T) {
 	if len(e.faq.calls) != 0 {
 		t.Errorf("KB must not be called without add_to_kb")
 	}
-	// the sender sees the answer
+	// отправитель видит ответ
 	_, b = e.do(anna, "GET", "/api/escalations", "")
 	if !strings.Contains(string(b), `"status":"answered"`) {
 		t.Errorf("sender list: %s", b)
@@ -358,7 +359,7 @@ func TestHandlers_NoClaims(t *testing.T) {
 	}
 }
 
-// Checkpoint 11.11: the FAQ that goes to the knowledge base is general — no names and no dates of this intern.
+// Чекпоинт 11.11: FAQ, который уходит в базу знаний, общий — без имён и дат этого стажёра.
 func TestAnswer_Checkpoint_FAQIsGeneral_R10(t *testing.T) {
 	e := setup(t, true)
 	esc := e.send(anna, "mentor", "Олег, привет! Можно ли Анне Котовой взять отгул 13 ноября перед релизом?")
@@ -385,7 +386,7 @@ func TestAnswer_Checkpoint_FAQIsGeneral_R10(t *testing.T) {
 	}
 }
 
-// Feedback 12.11: a general answer can go to the KB of every team, not only the mentor's one.
+// Отзыв 12.11: общий ответ может попасть в базу знаний всех команд, а не только команды наставника.
 func TestAnswer_KBScopeAll_Feedback1211(t *testing.T) {
 	e := setup(t, true)
 	answer := func(text, body string) {

@@ -62,7 +62,7 @@ func TestWhoami_S2_Period_R02(t *testing.T) {
 	pool := pgtest.New(t)
 	for _, tc := range []struct {
 		name, sub, role, team string
-		start                 string // override cohort_start, "" = keep
+		start                 string // переопределить cohort_start, "" — оставить
 		wantPeriod            string
 		wantTeam              string
 	}{
@@ -108,7 +108,7 @@ func TestWhoami_S2_NoCohortAndJWTFallback_R02(t *testing.T) {
 	if _, ok := out["current_period"]; ok {
 		t.Fatalf("mentor without cohort must not have a period: %v", out)
 	}
-	// cohort_start absent in DB: the JWT claim is used.
+	// cohort_start нет в БД: используется claim из JWT.
 	c := caller("mentor.oleg", "mentor", "delivery")
 	c.CohortStart = "2026-11-01"
 	out, aerr = e.call(t, c, "whoami")
@@ -136,7 +136,7 @@ func TestGetMyContacts_S2_Roles_R71(t *testing.T) {
 	e := newEnv(t, time.Now())
 	for _, tc := range []struct {
 		sub, role, team string
-		want            []string // contact roles in order
+		want            []string // роли контактов по порядку
 		ids             []string
 	}{
 		{"intern.anna", "intern", "delivery", []string{"mentor", "lead", "hrbp", "curator"}, []string{"mentor.oleg", "lead.maria", "hrbp.elena", "curator.irina"}},

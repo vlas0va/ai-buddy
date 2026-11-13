@@ -1,7 +1,7 @@
 //go:build tools
 
-// Package tools pins third-party dependencies so `go mod tidy` and `go mod vendor`
-// keep them before every package imports them. Never built into binaries.
+// Пакет tools закрепляет сторонние зависимости, чтобы `go mod tidy` и `go mod vendor` сохраняли их, пока ни один пакет
+// их ещё не импортирует. В бинарники никогда не собирается.
 package tools
 
 import (

@@ -1,7 +1,7 @@
-// Package consents implements the mock "consents" MCP server: an employee's consents with their statuses (case
-// «Пространство решений»: согласия). Data is synthetic (R68). Consents signed in the HR portal at hire (personal data,
-// NDA) are only shown; voluntary ones (photo and video, surveys) can be signed by the employee from the JWT after
-// explicit confirmation (R71). Signing is idempotent by key (R79).
+// Пакет consents реализует мок-сервер MCP «consents»: согласия сотрудника с их статусами (кейс «Пространство решений»:
+// согласия). Данные синтетические (R68). Согласия, подписанные в HR-портале при найме (персональные данные, NDA),
+// только показываются; добровольные (фото и видео, опросы) сотрудник из JWT может подписать после явного подтверждения
+// (R71). Подписание идемпотентно по ключу (R79).
 package consents
 
 import (
@@ -19,7 +19,7 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the consents contract to srv.
+// Register привязывает каждый инструмент контракта consents к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	if srv == nil || pool == nil {
 		return errors.New("consents: server and pool are required")
@@ -52,7 +52,7 @@ type listOut struct {
 	Items []consent `json:"items"`
 }
 
-// list returns every consent type with the caller's status.
+// list возвращает все виды согласий со статусом вызывающего.
 func (s *service) list(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) {
 	rows, err := s.pool.Query(ctx, `
 SELECT t.id, t.title, t.description, t.signable, t.required, g.via, g.signed_at
@@ -120,8 +120,8 @@ WHERE `+where, args...).Scan(&g.ID, &g.ConsentID, &g.Title, &at, &g.employeeID, 
 	return g, true, nil
 }
 
-// sign records the caller's voluntary consent. Consents signed only in the HR portal are refused; a consent signed
-// before is a conflict; the same key returns the stored signature with replayed=true.
+// sign записывает добровольное согласие вызывающего. Согласия, которые подписываются только в HR-портале, отклоняются;
+// уже подписанное согласие — conflict; тот же ключ возвращает сохранённую подпись с replayed=true.
 func (s *service) sign(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) {
 	var in signIn
 	if err := mcpx.DecodeArgs(args, &in); err != nil {

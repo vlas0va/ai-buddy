@@ -1,4 +1,4 @@
-"""Tool backend protocol and the role-enforcing gateway the agent uses for every call (ADR-003, layer 2)."""
+"""Протокол бэкенда инструментов и шлюз с проверкой ролей, через который агент делает каждый вызов (ADR-003, слой 2)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class ToolBackend(Protocol):
 
 
 class ToolGateway:
-    """Every tool call of the agent goes through here: role allowlist from agent.yaml, write guard, call log."""
+    """Каждый вызов инструмента агентом проходит здесь: белый список ролей из agent.yaml, защита записи, журнал вызовов."""
 
     def __init__(self, config: AgentConfig, backends: dict[str, ToolBackend], user: User) -> None:
         self.config = config

@@ -74,7 +74,7 @@ describe('Idea 13.11: the buddy pair mark', () => {
     rerender(<Logo size={28} />)
     expect(container.querySelectorAll('path').length).toBeLessThan(big)
     rerender(<Logo size={40} variant="E7" />)
-    expect(container.querySelectorAll('rect').length).toBe(3) // background + headset ear pads
+    expect(container.querySelectorAll('rect').length).toBe(3) // фон + амбушюры гарнитуры
     rerender(<Logo size={40} variant="nope" />)
     expect(container.querySelector('svg')).toBeInTheDocument()
   })

@@ -58,7 +58,7 @@ describe('Idea 12.11: internship report', () => {
     expect(screen.getByText(/Промежуточный отчёт: день 10 из 90/)).toHaveTextContent('Отчёт видят только наставник и руководитель.')
     expect(screen.getByText('ответов добавлено в базу знаний').previousSibling).toHaveTextContent('1')
     expect(screen.getByText(/что мешает и чем помочь/)).toBeInTheDocument()
-    // organizers 12.11: a mentor spends 40–48 hours per internship; the report shows what buddy saved
+    // организаторы 12.11: наставник тратит 40–48 часов за стажировку; отчёт показывает, сколько сэкономил buddy
     expect(screen.getByLabelText('Время наставника')).toHaveTextContent('≈ 1 ч 40 мин сэкономил buddy: 10 вопросов стажёр закрыл сам')
   })
 

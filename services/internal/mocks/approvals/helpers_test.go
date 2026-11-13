@@ -22,11 +22,11 @@ var (
 	confSecret = []byte("test-confirm-secret")
 )
 
-// Demo seed people (migrations/0003_seed_demo.sql).
+// Люди из демо-данных (migrations/0003_seed_demo.sql).
 var (
-	anna   = caller("intern.anna", "intern", "delivery") // lead: lead.maria
-	ivan   = caller("intern.ivan", "intern", "search")   // lead: lead.dmitry
-	oleg   = caller("mentor.oleg", "mentor", "delivery") // lead: lead.maria
+	anna   = caller("intern.anna", "intern", "delivery") // руководитель: lead.maria
+	ivan   = caller("intern.ivan", "intern", "search")   // руководитель: lead.dmitry
+	oleg   = caller("mentor.oleg", "mentor", "delivery") // руководитель: lead.maria
 	maria  = caller("lead.maria", "lead", "delivery")
 	dmitry = caller("lead.dmitry", "lead", "search")
 )
@@ -142,7 +142,7 @@ func (e *env) exec(sql string, args ...any) {
 	}
 }
 
-// seedAbsence inserts a pending day-off request of employee and its approval item for approver.
+// seedAbsence вставляет несогласованную заявку на отгул employee и её пункт согласования для approver.
 func (e *env) seedAbsence(employee, approver string) (requestID, itemID string) {
 	e.t.Helper()
 	requestID = e.str(`INSERT INTO absence.requests (employee_id, type, start_date, end_date, approver_id, idempotency_key)
@@ -152,7 +152,7 @@ VALUES ('absence_request', $1, $2, $3, 'Отгул 10.11.2026') RETURNING id`, r
 	return requestID, itemID
 }
 
-// seedAccess inserts a pending access request of employee and its approval item for approver.
+// seedAccess вставляет несогласованную заявку на доступ employee и её пункт согласования для approver.
 func (e *env) seedAccess(employee, approver, resource string) (requestID, itemID string) {
 	e.t.Helper()
 	requestID = e.str(`INSERT INTO access.requests (employee_id, resource_id, status, approver_id, idempotency_key)

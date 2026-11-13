@@ -1,7 +1,8 @@
-"""Consents: show statuses, prepare the signature of a voluntary consent (photo and video, surveys) for confirmation.
+"""Согласия: показать статусы, подготовить подпись добровольного согласия (фото и видео, опросы) к подтверждению.
 
-Spec: openspec/specs/trips-consents/spec.md (CN-xx). Tool shapes: contracts/schemas/consents.json. Personal data and
-NDA consents are signed in the HR portal at hire: buddy only shows their status. Revoking goes through the HR BP.
+Спецификация: openspec/specs/trips-consents/spec.md (CN-xx). Формы инструментов: contracts/schemas/consents.json.
+Согласия на персональные данные и NDA подписываются в HR-портале при найме: buddy только показывает их статус. Отзыв
+согласия — через HR BP.
 """
 
 from __future__ import annotations

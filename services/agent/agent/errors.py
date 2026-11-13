@@ -1,4 +1,4 @@
-"""Error types mapped to contract error codes (contracts/agent-stream.md, section 7)."""
+"""Типы ошибок, сопоставленные кодам ошибок контракта (contracts/agent-stream.md, раздел 7)."""
 
 from __future__ import annotations
 

@@ -13,7 +13,7 @@ import (
 	"aibuddy/contracts"
 )
 
-// ToolDef is one tool of contracts/schemas/<server>.json.
+// ToolDef — один инструмент из contracts/schemas/<server>.json.
 type ToolDef struct {
 	Name         string          `json:"name"`
 	Description  string          `json:"description"`
@@ -28,7 +28,7 @@ type schemaFile struct {
 	Tools  []ToolDef `json:"tools"`
 }
 
-// LoadTools reads the tool definitions of server from contracts.Schemas (schemas/<server>.json).
+// LoadTools читает определения инструментов server из contracts.Schemas (schemas/<server>.json).
 func LoadTools(server string) ([]ToolDef, error) {
 	return loadTools(contracts.Schemas, server)
 }
@@ -48,12 +48,12 @@ func loadTools(fsys fs.FS, server string) ([]ToolDef, error) {
 	return f.Tools, nil
 }
 
-// tool is a compiled ToolDef.
+// tool — скомпилированный ToolDef.
 type tool struct {
 	def     ToolDef
 	input   *jsonschema.Resolved
-	output  *jsonschema.Resolved // nil when the contract has no output schema
-	formats map[string]string    // top-level argument -> format (date, date-time, uuid)
+	output  *jsonschema.Resolved // nil, если в контракте нет выходной схемы
+	formats map[string]string    // аргумент верхнего уровня -> формат (date, date-time, uuid)
 }
 
 func compile(def ToolDef) (*tool, error) {
@@ -107,7 +107,8 @@ func (t *tool) allows(role string) bool { return slices.Contains(t.def.Roles, ro
 
 var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// formatCheckers enforce the "format" keywords the contracts use (jsonschema-go treats format as annotation only).
+// formatCheckers проверяют ключевые слова "format", которые используют контракты (jsonschema-go считает format только
+// аннотацией).
 var formatCheckers = map[string]func(string) bool{
 	"date":      func(s string) bool { _, err := time.Parse(time.DateOnly, s); return err == nil },
 	"date-time": func(s string) bool { _, err := time.Parse(time.RFC3339, s); return err == nil },
@@ -120,7 +121,7 @@ var formatNames = map[string]string{
 	"uuid":      "UUID",
 }
 
-// checkFormats validates the format of top-level string arguments.
+// checkFormats проверяет формат строковых аргументов верхнего уровня.
 func (t *tool) checkFormats(args map[string]any) error {
 	for name, format := range t.formats {
 		s, ok := args[name].(string)

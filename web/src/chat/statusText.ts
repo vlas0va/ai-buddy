@@ -38,7 +38,10 @@ export const ROLE_TEXT: Record<string, string> = {
   curator: 'куратору',
 }
 
-/** The summary may end with ", согласующий — Имя"; the approver is shown on its own line, so drop it here. */
+/**
+ * Сводка может заканчиваться на «, согласующий — Имя»; согласующий показывается отдельной строкой, поэтому здесь
+ * убираем.
+ */
 export function withoutApprover(summary: string): string {
   return summary.replace(/,?\s*согласующий\s*[—-].*$/i, '').trim()
 }
@@ -50,8 +53,9 @@ export interface Step {
 }
 
 /**
- * An absence request goes lead → HR admin → HR BP (organizers' Q&A 10.11, checkpoint 11.11): the lead approves, then
- * the HR admin approves and registers it, the HR BP is notified. The chain follows from the action status.
+ * Заявка на отсутствие идёт руководитель → HR-администратор → HR BP (ответы организаторов 10.11, чекпоинт 11.11):
+ * руководитель согласует, затем HR-администратор согласует и оформляет, HR BP получает уведомление. Цепочка следует из
+ * статуса действия.
  */
 export function absenceSteps(status: string): Step[] {
   if (status === 'approved') {

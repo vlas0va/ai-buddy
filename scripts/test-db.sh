@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Disposable Postgres for Go tests.  Usage: scripts/test-db.sh up|down|url
-#   up   - start postgres:16 on 127.0.0.1:55432 and wait until it is healthy
-#   down - stop it and drop its (tmpfs) data
-#   url  - print TEST_DATABASE_URL
+# Одноразовый Postgres для Go-тестов.  Запуск: scripts/test-db.sh up|down|url
+#   up   - поднять postgres:16 на 127.0.0.1:55432 и дождаться, пока он станет здоровым
+#   down - остановить его и удалить его данные (tmpfs)
+#   url  - напечатать TEST_DATABASE_URL
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

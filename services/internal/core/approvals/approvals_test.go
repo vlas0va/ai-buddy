@@ -62,8 +62,8 @@ func tok(t *testing.T, sub, role, team string) string {
 	return agenttest.Token(t, jwtSecret, sub, role, team, "")
 }
 
-// write performs an MCP write as the agent would after a chat confirmation; with save the result is also saved
-// as the intern's action (what chat does on tool_result).
+// write выполняет запись через MCP, как агент после подтверждения в чате; с save результат ещё и сохраняется как
+// действие стажёра (то, что делает чат на tool_result).
 func (e *env) write(sub, role, team, tool string, args map[string]any, kind string, save bool) string {
 	e.t.Helper()
 	key := agenttest.NewID()
@@ -186,7 +186,7 @@ func TestApprovals_S3_LeadQueueAndDecision_R66(t *testing.T) {
 	if status != http.StatusOK || decided["status"] != "approved" || decided["comment"] != "Хорошего отдыха" || decided["id"] != absApproval {
 		t.Fatalf("%d %s", status, body)
 	}
-	// Lead approved: the request waits for the HR admin (second stage), then is approved.
+	// Руководитель согласовал: заявка ждёт HR-администратора (второй этап), затем согласована.
 	if e.mcp.AbsenceStatus(absID) != "pending_hr" || e.count(`SELECT count(*) FROM core.actions WHERE external_id = $1 AND status = 'pending_hr'`, absID) != 1 {
 		t.Fatal("absence not waiting for the HR admin")
 	}
@@ -237,7 +237,7 @@ func TestApprovals_S3_LeadQueueAndDecision_R66(t *testing.T) {
 	})
 }
 
-// stubMCP returns fixed results, for shapes the fake servers never produce.
+// stubMCP возвращает фиксированные результаты для форм, которые поддельные серверы никогда не выдают.
 type stubMCP struct {
 	list   []mcpclient.Approval
 	decide mcpclient.Approval

@@ -6,7 +6,7 @@ import { Card } from './ui/Card'
 import { BellIcon } from './ui/icons'
 import '@/plan/plan.css'
 
-/** AI-cron reminders and status changes (R54). Polls once a minute; marking read is optimistic. */
+/** Напоминания AI-cron и смена статусов (R54). Опрашивает раз в минуту; отметка о прочтении — оптимистичная. */
 export function NotificationsBell() {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -24,7 +24,8 @@ export function NotificationsBell() {
     },
   })
 
-  // QA 12.11: opening the panel reads everything in it; what was new stays highlighted until the panel closes
+  // QA 12.11: открытие панели помечает прочитанным всё, что в ней; новое остаётся подсвеченным, пока панель не
+  // закроется
   const [fresh, setFresh] = useState<Set<string>>(() => new Set())
   function toggle() {
     if (open) {

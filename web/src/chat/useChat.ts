@@ -31,7 +31,7 @@ export function useChat() {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
-  // restore the previous conversation; a missing session (404) or any failure falls back to a new one
+  // восстанавливаем прежний разговор; если сессии нет (404) или любой сбой — начинаем новый
   useEffect(() => {
     const stored = useChatStore.getState().sessions[userId]
     if (!stored) return
@@ -72,7 +72,7 @@ export function useChat() {
     (event: StreamEvent) => {
       setState((s) => reduce(s, event))
       if (event.type === 'quiz_passed') {
-        void qc.invalidateQueries({ queryKey: ['plan'] }) // organizers 12.13: the study task is done now
+        void qc.invalidateQueries({ queryKey: ['plan'] }) // организаторы 12.13: учебная задача теперь выполнена
         void qc.invalidateQueries({ queryKey: ['report'] })
       }
       if (event.type === 'action_result') {
@@ -140,7 +140,8 @@ export function useChat() {
 
   const confirmOne = useCallback(
     async (proposalId: string) => {
-      // idempotency on the client: one in-flight confirm per proposal_id; the server replays a stored result (R66, R79)
+      // идемпотентность на клиенте: одно подтверждение в полёте на каждый proposal_id; сервер воспроизводит сохранённый
+      // результат (R66, R79)
       if (inflight.current.has(proposalId) || streamingRef.current) return
       inflight.current.add(proposalId)
       streamingRef.current = true
@@ -154,7 +155,7 @@ export function useChat() {
 
   const confirm = useCallback((proposalId: string) => void confirmOne(proposalId), [confirmOne])
 
-  // the checked drafts of a list, one after another (each is its own request with its own result card)
+  // отмеченные черновики списка, один за другим (каждый — отдельная заявка со своей карточкой результата)
   const confirmMany = useCallback(
     async (proposalIds: string[]) => {
       for (const id of proposalIds) await confirmOne(id)
@@ -198,7 +199,7 @@ export function useChat() {
     setState(initialState)
   }, [userId])
 
-  // feedback 12.11: an earlier dialog opens again from the list; «Новый диалог» never deletes the old one
+  // отзыв 12.11: прежний диалог снова открывается из списка; «Новый диалог» никогда не удаляет старый
   const openSession = useCallback(
     async (sessionId: string) => {
       abortRef.current?.abort()

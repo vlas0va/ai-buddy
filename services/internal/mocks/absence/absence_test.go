@@ -31,7 +31,7 @@ func TestGetPolicy_S3_TeamDocFirst_R69_R71(t *testing.T) {
 
 	e.addDoc("absence-policy", "{intern,mentor,lead}", "{*}", "")
 	e.addDoc("absence-policy-delivery", "{intern,mentor,lead}", "{delivery}", "https://wiki.example.test/absence")
-	e.addDoc("absence-policy-search", "{mentor}", "{search}", "") // not readable by interns
+	e.addDoc("absence-policy-search", "{mentor}", "{search}", "") // стажёрам не читается
 	tests := []struct {
 		name    string
 		c       mcpx.Caller
@@ -64,7 +64,7 @@ func TestValidateRequest_S3_Rules(t *testing.T) {
 		name  string
 		start string
 		end   string
-		want  []string // substrings, one per expected problem, in order
+		want  []string // подстроки, по одной на каждую ожидаемую проблему, по порядку
 	}{
 		{"tomorrow, one weekday", "2026-11-10", "2026-11-10", nil},
 		{"three weekdays", "2026-11-10", "2026-11-12", nil},
@@ -112,7 +112,7 @@ func TestValidateRequest_S3_Rules(t *testing.T) {
 		}
 	})
 	t.Run("tomorrow is computed in Moscow time", func(t *testing.T) {
-		e.clock.Set(time.Date(2026, 11, 9, 22, 30, 0, 0, time.UTC)) // 01:30 on 10 Nov in Moscow
+		e.clock.Set(time.Date(2026, 11, 9, 22, 30, 0, 0, time.UTC)) // 01:30 10 ноября по Москве
 		defer e.clock.Set(monday)
 		got := mustCall[validateResult](e, anna, "validate_request", dayOff("2026-11-10", "2026-11-10"))
 		if got.Valid || !strings.Contains(got.Problems[0], "(11.11.2026)") {
@@ -181,7 +181,7 @@ func TestCreateRequest_S3_Idempotent_R79(t *testing.T) {
 	key := newKey(t)
 	args := confirmed(t, anna, key, dayOff("2026-11-10", "2026-11-10"))
 	first := mustCall[requestOut](e, anna, "create_request", args)
-	e.clock.Set(monday.AddDate(0, 0, 3)) // the stored result is returned even when the dates are no longer valid
+	e.clock.Set(monday.AddDate(0, 0, 3)) // сохранённый результат возвращается, даже если даты уже не проходят проверку
 	second := mustCall[requestOut](e, anna, "create_request", args)
 	if second.ID != first.ID || second.Replayed == nil || !*second.Replayed || second.CreatedAt != first.CreatedAt {
 		t.Fatalf("first %+v, second %+v", first, second)
@@ -206,7 +206,7 @@ func TestCreateRequest_S3_SameKeyDifferentArgs_R79(t *testing.T) {
 	withComment := dayOff("2026-11-10", "2026-11-10")
 	withComment["comment"] = "другое"
 	e.wantCode(anna, "create_request", confirmed(t, anna, key, withComment), apierr.CodeConflict)
-	// Another employee reusing the key learns nothing about the stored request.
+	// Другой сотрудник, повторно использующий ключ, ничего не узнаёт о сохранённой заявке.
 	terr = e.wantCode(ivan, "create_request", confirmed(t, ivan, key, dayOff("2026-11-10", "2026-11-10")), apierr.CodeConflict)
 	if strings.Contains(terr.Message, "ABS-") || strings.Contains(terr.Message, "Анна") {
 		t.Fatalf("message leaks data: %q", terr.Message)
@@ -316,7 +316,7 @@ func TestGetRequest_S3_OwnOnly_R71(t *testing.T) {
 	if foreign.Message != missing.Message {
 		t.Fatalf("foreign %q and missing %q differ", foreign.Message, missing.Message)
 	}
-	e.wantCode(maria, "get_request", map[string]any{"id": own.ID}, apierr.CodeForbidden) // not even the approver
+	e.wantCode(maria, "get_request", map[string]any{"id": own.ID}, apierr.CodeForbidden) // даже согласующий
 	e.wantCode(anna, "get_request", map[string]any{"id": "42"}, apierr.CodeValidation)
 }
 
@@ -434,7 +434,8 @@ func TestFormatting(t *testing.T) {
 	}
 }
 
-// TestRoundTrip_S3_HTTP_R71 runs the main scenario over the real transport: JWT, MCP client, confirmation token.
+// TestRoundTrip_S3_HTTP_R71 прогоняет основной сценарий через настоящий транспорт: JWT, MCP-клиент, токен
+// подтверждения.
 func TestRoundTrip_S3_HTTP_R71(t *testing.T) {
 	e := newEnv(t)
 	e.addDoc("absence-policy", "{intern,mentor,lead}", "{*}", "")
@@ -489,7 +490,7 @@ func TestRoundTrip_S3_HTTP_R71(t *testing.T) {
 	if _, terr := call(ivanJWT, "get_request", map[string]any{"id": created.ID}); terr == nil || terr.Code != apierr.CodeForbidden {
 		t.Fatalf("foreign get: %v", terr)
 	}
-	// Ivan replays Anna's confirmed arguments with his own JWT: the token is bound to Anna.
+	// Иван повторяет подтверждённые аргументы Анны со своим JWT: токен привязан к Анне.
 	if _, terr := call(ivanJWT, "create_request", args); terr == nil || terr.Code != apierr.CodeInvalidConfirmation {
 		t.Fatalf("foreign confirmation: %v", terr)
 	}
@@ -560,7 +561,7 @@ func absenceArgs(kind, start, end string, docs ...string) map[string]any {
 }
 
 func TestValidateRequest_Checkpoint_TypesAndDocuments(t *testing.T) {
-	e := newEnv(t) // today is Monday 09.11.2026 in Moscow
+	e := newEnv(t) // сегодня понедельник 09.11.2026 по Москве
 	for _, tc := range []struct {
 		name, kind, start, end string
 		docs                   []string
@@ -640,13 +641,13 @@ func TestRescheduleRequest_Checkpoint_MoveUntilHRApproves(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND status = 'pending' AND summary LIKE '%(перенос)'`, own.ID); n != 1 {
 		t.Fatal("the lead must get a new item")
 	}
-	// waiting for the HR admin: still movable, approval restarts from the lead
+	// ждёт HR-администратора: ещё можно перенести, согласование начинается заново с руководителя
 	e.exec(`UPDATE absence.requests SET status = 'pending_hr', lead_decided_at = now() WHERE id = $1`, own.ID)
 	moved = mustCall[requestOut](e, anna, "reschedule_request", confirmed(t, anna, newKey(t), other))
 	if moved.Status != "pending_approval" || moved.StartDate != "2026-12-07" {
 		t.Fatalf("moved from pending_hr %+v", moved)
 	}
-	// invalid dates and approved requests are refused; other people's requests are invisible
+	// некорректные даты и согласованные заявки отклоняются; чужие заявки не видны
 	e.wantCode(anna, "reschedule_request", confirmed(t, anna, newKey(t),
 		map[string]any{"id": own.ID, "start_date": "2026-11-10", "end_date": "2026-11-11"}), apierr.CodeValidation)
 	e.exec(`UPDATE absence.requests SET status = 'approved' WHERE id = $1`, own.ID)
@@ -675,9 +676,9 @@ func TestGetRequest_Checkpoint_StepsWithHRAdminStage(t *testing.T) {
 func TestCancelAndReplace_Feedback1213(t *testing.T) {
 	e := newEnv(t)
 	dayOff := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-11-24", "2026-11-24")))
-	// a vacation over the pending day off replaces it in one step
+	// отпуск поверх несогласованного отгула заменяет его за один шаг
 	args := absenceArgs("vacation", "2026-11-23", "2026-11-27")
-	e.wantCode(anna, "create_request", confirmed(t, anna, newKey(t), args), apierr.CodeValidation) // overlap without replaces
+	e.wantCode(anna, "create_request", confirmed(t, anna, newKey(t), args), apierr.CodeValidation) // пересечение без replaces
 	args["replaces"] = dayOff.ID
 	vac := mustCall[map[string]any](e, anna, "create_request", confirmed(t, anna, newKey(t), args))
 	if vac["replaced_id"] != dayOff.ID || vac["status"] != "pending_approval" {
@@ -687,7 +688,7 @@ func TestCancelAndReplace_Feedback1213(t *testing.T) {
 		e.count(`SELECT count(*) FROM approvals.items WHERE ref_id = $1 AND status = 'pending'`, dayOff.ID) != 0 {
 		t.Fatal("the day off must be cancelled with its approval item")
 	}
-	// cancel: own pending only, idempotent by key, an approved one goes to the HR admin
+	// отмена: только своя несогласованная, идемпотентна по ключу, согласованная уходит HR-администратору
 	key := newKey(t)
 	id := vac["id"].(string)
 	out := mustCall[requestOut](e, anna, "cancel_request", confirmed(t, anna, key, map[string]any{"id": id}))
@@ -702,7 +703,7 @@ func TestCancelAndReplace_Feedback1213(t *testing.T) {
 	approved := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-12-08", "2026-12-08")))
 	e.exec(`UPDATE absence.requests SET status = 'approved' WHERE id = $1`, approved.ID)
 	e.wantCode(anna, "cancel_request", confirmed(t, anna, newKey(t), map[string]any{"id": approved.ID}), apierr.CodeConflict)
-	// replaces must be inside the new dates
+	// replaces должна быть внутри новых дат
 	pending := mustCall[requestOut](e, anna, "create_request", confirmed(t, anna, newKey(t), absenceArgs("day_off", "2026-12-15", "2026-12-15")))
 	bad := absenceArgs("vacation", "2026-12-16", "2026-12-20")
 	bad["replaces"] = pending.ID

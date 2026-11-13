@@ -1,4 +1,4 @@
-// Line-level parser for RichText: paragraphs, lists and tables; markdown headings become plain lines.
+// Построчный разбор для RichText: абзацы, списки и таблицы; заголовки markdown становятся простыми строками.
 
 export type Block =
   | { kind: 'p'; lines: string[] }
@@ -7,13 +7,14 @@ export type Block =
   | { kind: 'table'; rows: string[][] }
 
 /**
- * Numbered sections split by bullet lists («1. Кто ревьюит» → bullets → «2. Правила» → bullets) are one numbering: a list
- * that resumes after bullets or blank lines continues from the previous one, also when the model wrote «1.» every time
- * (Rita 12.13: every section showed «1.»). A paragraph or a table in between starts a new numbering.
+ * Нумерованные разделы, разбитые маркированными списками («1. Кто ревьюит» → пункты → «2. Правила» → пункты), — одна
+ * нумерация: список, который продолжается после пунктов или пустых строк, продолжает предыдущий, даже если модель
+ * каждый раз писала «1.» (Рита 12.13: у всех разделов было «1.»). Абзац или таблица между ними начинают новую
+ * нумерацию.
  */
 export function parseBlocks(text: string): Block[] {
   const blocks: Block[] = []
-  let lastNumber = 0 // the last number of the current numbering, 0 = none
+  let lastNumber = 0 // последний номер текущей нумерации, 0 — нет
   for (const raw of text.split('\n')) {
     const line = raw.replace(/^#{1,6}\s+/, '')
     const last = blocks.at(-1)
@@ -22,7 +23,7 @@ export function parseBlocks(text: string): Block[] {
     if (line.trim() === '') {
       blocks.push({ kind: 'p', lines: [] })
     } else if (/^\s*\|.*\|\s*$/.test(line)) {
-      if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue // separator row
+      if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) continue // строка-разделитель
       const cells = line.trim().slice(1, -1).split('|').map((c) => c.trim())
       lastNumber = 0
       if (last?.kind === 'table') last.rows.push(cells)

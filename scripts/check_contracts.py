@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Validate contracts: every MCP tool schema is valid JSON Schema 2020-12 and openapi.yaml parses.
+"""Проверка контрактов: каждая схема инструмента MCP — корректная JSON Schema 2020-12, а openapi.yaml разбирается.
 
-Usage: python3 scripts/check_contracts.py   (needs: pip install pyyaml jsonschema)
+Запуск: python3 scripts/check_contracts.py   (нужно: pip install pyyaml jsonschema)
 """
 import json
 import pathlib

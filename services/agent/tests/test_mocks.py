@@ -1,4 +1,4 @@
-"""Rights matrix of the in-process mocks (mirrors contracts/mcp-tools.md, which B's Go servers must also pass)."""
+"""Матрица прав моков в процессе (повторяет contracts/mcp-tools.md, который должны проходить и Go-серверы B)."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def test_MCP_06_elevated_access_creates_approval_and_other_team_forbidden(mocks)
             ),
             tok(*ANNA),
         )
-    with pytest.raises(ToolValidationError):  # already pending
+    with pytest.raises(ToolValidationError):  # уже ожидает
         mocks.call(
             "access.request_access",
             write_args(

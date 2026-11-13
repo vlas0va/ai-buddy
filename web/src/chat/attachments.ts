@@ -1,7 +1,7 @@
 import type { AttachmentMeta } from '@/api/schemas'
 
-// Files in chat (contracts/openapi.yaml MessageAttachment): text files (logs, configs, code) are read in the browser and
-// sent as text; screenshots and documents are sent as metadata only — their content never leaves the browser.
+// Файлы в чате (contracts/openapi.yaml MessageAttachment): текстовые файлы (логи, конфиги, код) читаются в браузере и
+// отправляются текстом; скриншоты и документы отправляются только метаданными — их содержимое не покидает браузер.
 
 export interface OutgoingAttachment extends AttachmentMeta {
   text?: string
@@ -26,7 +26,7 @@ export function attachmentKind(file: Pick<File, 'name' | 'type'>): AttachmentMet
   return null
 }
 
-/** Reads one file into an attachment or returns a user-facing reason why it cannot be attached. */
+/** Читает один файл во вложение или возвращает понятную пользователю причину, почему его нельзя приложить. */
 export async function readAttachment(file: File): Promise<OutgoingAttachment | string> {
   const kind = attachmentKind(file)
   if (!kind) return `«${file.name}»: такой тип файла не поддерживается. Можно приложить лог, конфиг, код, скриншот или документ.`
@@ -45,7 +45,7 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} МБ`
 }
 
-/** Only http(s) links of external sources are rendered as links. */
+/** Ссылками отображаются только http(s)-ссылки внешних источников. */
 export function safeUrl(url: string | undefined): string | undefined {
   return url && /^https?:\/\//i.test(url) ? url : undefined
 }

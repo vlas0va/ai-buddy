@@ -11,7 +11,8 @@ import './components/ui/ui.css'
 import './chat/chat.css'
 
 async function bootstrap() {
-  // Dev mock mode only. The constant is replaced at build time, so the dynamic import is removed from production bundles.
+  // Только для мок-режима разработки. Константа подставляется при сборке, поэтому динамический импорт убирается из
+  // продакшен-сборки.
   if (import.meta.env.VITE_USE_MOCKS === 'true') {
     const { startMocks } = await import('./mocks/browser')
     await startMocks()

@@ -1,5 +1,6 @@
-"""Coaching scenarios (openspec/specs/coaching/spec.md, CO-xx): learn instead of delegating, code review preparation,
-log troubleshooting with secret masking, knowledge checks, benefits without money operations, engineering onboarding."""
+"""Сценарии наставничества (openspec/specs/coaching/spec.md, CO-xx): учиться, а не перекладывать, подготовка к код-ревью,
+разбор логов с маскированием секретов, проверка знаний, бенефиты без денежных операций, инженерный онбординг.
+"""
 
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ def test_CO_01_delegation_is_coached_not_done(anna):
     assert "не могу" in text and "шаг" in text
     assert _sources(ev) == ["common-ai-usage"]
     assert first(ev, "action_proposal") is None
-    assert "Олег Мартынов" in text  # the mentor is named as the next step, buddy does not replace them
+    assert "Олег Мартынов" in text  # следующим шагом названа встреча с наставником, buddy его не заменяет
 
 
 def test_CO_02_code_review_preparation_names_reviewers_and_drafts(anna):
@@ -91,7 +92,7 @@ def test_CO_07_quiz_from_topic(anna):
 def test_CO_08_quiz_full_score_suggests_marking_task(anna):
     anna.say("проверь меня")
     state = _quiz_state(anna)
-    assert state["task"]  # no topic → the first open plan task with a matching document
+    assert state["task"]  # без темы → первая открытая задача плана с подходящим документом
     ev = anna.say(", ".join(state["answers"]))
     text = text_of(ev)
     n = len(state["answers"])
@@ -116,7 +117,7 @@ def test_CO_10_quiz_stops_on_cancel_or_new_scenario(anna):
     assert _quiz_state(anna) == {}
     assert "Результат" not in text_of(ev)
     anna.say("проверь меня по защите данных")
-    ev = anna.say("сколько я буду получать?")  # guardrails still win over the quiz
+    ev = anna.say("сколько я буду получать?")  # ограничения всё равно важнее теста
     assert first(ev, "refusal")["detail"] == "sensitive_data"
 
 
@@ -135,7 +136,7 @@ def test_CO_12_benefit_operation_refused_with_reference(anna):
     text = text_of(ev)
     assert "3 000 ₽" in text and "тестовые данные" in text and "HR BP" in text
     assert _sources(ev) == ["common-benefits-overview"]
-    # personal pay stays a sensitive-data refusal
+    # личная зарплата остаётся отказом по чувствительным данным
     assert first(anna.say("какая у меня будет зарплата?"), "refusal")["detail"] == "sensitive_data"
 
 
@@ -152,7 +153,7 @@ def test_CO_13_engineering_onboarding_answers_from_kb(anna):
         assert _sources(ev)[0] == doc, question
         src = first(ev, "sources")["items"][0]
         assert src["source_type"] == "test" and src["badge"] == "Тестовая инструкция прототипа"
-        assert "## " not in text_of(ev), question  # markdown headings are cleaned from snippets
+        assert "## " not in text_of(ev), question  # заголовки markdown вычищаются из фрагментов
 
 
 def test_CO_14_location_picks_office_section(anna, ivan):
@@ -161,7 +162,7 @@ def test_CO_14_location_picks_office_section(anna, ivan):
     ivan_text = text_of(ivan.say("где получить ноутбук?"))
     assert "московском офисе" in anna_text
     assert "петербургском офисе" in ivan_text
-    # an explicit city in the question wins over the profile
+    # явный город в вопросе важнее профиля
     assert "курьером" in text_of(ivan.say("как получить ноутбук, если я работаю удалённо?"))
 
 
@@ -175,7 +176,7 @@ def test_CO_15_help_lists_coaching_and_roles(client, anna):
 
 
 class _RemoteKb:
-    """Stands in for mcp-kb: ts_rank scores in 0..1 and websearch_to_tsquery AND semantics."""
+    """Подменяет mcp-kb: оценки ts_rank в 0..1 и семантика AND у websearch_to_tsquery."""
 
     def __init__(self, inner, answers):  # noqa: ANN001
         self.inner, self.answers, self.queries = inner, answers, []
@@ -200,9 +201,13 @@ def test_CO_13_remote_kb_scores_retry_and_local_fallback(client, anna):
     remote = _RemoteKb(inner, lambda q: [hit] if "команд" in q else [])
     agent.backends["kb"] = remote
     try:
-        ev = anna.say("кто есть кто в команде?")  # FTS score 0.72 < local min_score 1.2 must still answer
+        ev = anna.say(
+            "кто есть кто в команде?"
+        )  # оценка полнотекстового поиска 0.72 < локального min_score 1.2 всё равно должна давать ответ
         assert _sources(ev) == ["delivery-team-overview"]
-        ev = anna.say("как создать ветку для задачи?")  # AND query finds nothing → OR retry → local fallback
+        ev = anna.say(
+            "как создать ветку для задачи?"
+        )  # запрос AND ничего не находит → повтор с OR → локальный запасной вариант
         assert " or " in remote.queries[-1]
         assert _sources(ev)[0] == "eng-branches-pr"
     finally:
@@ -223,7 +228,7 @@ def test_CO_16_colloquial_words_find_the_document(anna):
         ev = anna.say(question)
         assert _sources(ev)[0] == doc, question
         assert first(ev, "escalation_draft") is None, question
-    assert canonical_query("когда у нас стендап?") == "когда у нас стендап?"  # not a dev stand
+    assert canonical_query("когда у нас стендап?") == "когда у нас стендап?"  # не dev-стенд
     assert "ноутбук" not in canonical_query("как работает квантовый компьютер?")
 
 
@@ -239,7 +244,7 @@ def test_CO_17_nearby_documents_before_escalation_and_kb_loop(anna, monkeypatch)
     assert "Возможно, поможет: «Ценности команды»" in text and "в базе знаний" in text
     assert _sources(ev) == ["common-team-values"]
     draft = first(ev, "escalation_draft")
-    # organizers 13.11: the intern writes the mentor directly; the question goes to the mentor's stack
+    # организаторы 13.11: стажёр пишет наставнику сам; вопрос попадает в список наставника
     assert draft["to_role"] == "mentor" and draft["queue"] is True and draft["channel"] == "#delivery-team"
     assert "в личных сообщениях или в канале #delivery-team" in text and "в список вопросов для наставника" in text
     monkeypatch.undo()
@@ -248,17 +253,17 @@ def test_CO_17_nearby_documents_before_escalation_and_kb_loop(anna, monkeypatch)
 
 
 def test_CO_22_unsure_classifier_but_the_kb_knows(anna, client):
-    """«расскажи про ноутбук» looked off-topic to the classifier; the KB document on laptops answers it."""
+    """«расскажи про ноутбук» классификатору казался не по теме; на него отвечает документ базы знаний о ноутбуках."""
     from tests.conftest import first
 
     ev = anna.say("расскажи про ноутбук")
     assert first(ev, "sources")["items"][0]["doc_id"] == "common-laptop"
     assert "Я помогаю с адаптацией" not in "".join(e.data["text"] for e in ev if e.name == "token")
-    assert first(anna.say("расскажи анекдот"), "sources") is None  # a real off-topic question stays off-topic
+    assert first(anna.say("расскажи анекдот"), "sources") is None  # настоящий вопрос не по теме остаётся не по теме
 
 
 def test_CO_23_unclear_task_gets_steps_not_a_summary(anna):
-    """QA 12.11: «не понимаю задачу» was routed to the equator summary."""
+    """QA 12.11: «не понимаю задачу» уходило в сводку для экватора."""
     from tests.conftest import first, text_of
 
     ev = anna.say("не понимаю задачу, помоги")
@@ -267,7 +272,7 @@ def test_CO_23_unclear_task_gets_steps_not_a_summary(anna):
 
 
 def test_CO_24_red_ci_question_gets_steps(anna):
-    """QA 12.11: a question about failed tests is not a log to parse."""
+    """QA 12.11: вопрос об упавших тестах — не лог для разбора."""
     from tests.conftest import first, text_of
 
     ev = anna.say("что делать если упали тесты в ci?")
@@ -277,7 +282,7 @@ def test_CO_24_red_ci_question_gets_steps(anna):
 
 
 def test_CO_25_trip_while_an_absence_draft_is_open(anna):
-    """QA 12.11: «оформи командировку с … по …» after an absence draft became a new absence."""
+    """QA 12.11: «оформи командировку с … по …» после черновика отсутствия становилось новым отсутствием."""
     from tests.conftest import first
 
     first(anna.say("мне нужно отсутствие на учёбу 20 ноября"), "action_proposal")
@@ -289,9 +294,12 @@ def test_CO_25_trip_while_an_absence_draft_is_open(anna):
 
 
 def test_CO_20_study_task_confirmed_by_the_quiz(anna):
-    """Organizers 12.13: «Проверить себя» on a study task of the plan → quiz on that task's documents → a full score
-    sends quiz_passed (core marks the task done); a partial score does not."""
-    title = "Изучи все необходимые документы и мануалы по работе в своей команде"  # CL-07, as the plan button sends it
+    """Организаторы 12.13: «Проверить себя» на учебной задаче плана → тест по документам этой задачи → полный балл
+    отправляет quiz_passed (ядро отмечает задачу выполненной); неполный — нет.
+    """
+    title = (
+        "Изучи все необходимые документы и мануалы по работе в своей команде"  # CL-07, как его отправляет кнопка плана
+    )
     anna.say(f"Проверь меня по задаче «{title}»")
     state = _quiz_state(anna)
     assert state["item"] == "CL-07" and state["doc_id"].startswith("delivery-"), state
@@ -305,7 +313,7 @@ def test_CO_20_study_task_confirmed_by_the_quiz(anna):
 
 
 def test_S2_23_only_interns_questions_go_to_the_stack(client):
-    """Organizers 13.11: a mentor's unknown question gives the text to the curator, nothing goes to a stack."""
+    """Организаторы 13.11: на неизвестный вопрос наставника даётся текст для куратора, в список ничего не попадает."""
     ev = client.login("mentor.oleg").say("Где посмотреть расписание командного митапа по архитектуре?")
     draft = first(ev, "escalation_draft")
     assert draft and "queue" not in draft and "в список вопросов" not in text_of(ev)

@@ -1,8 +1,8 @@
-"""Coaching scenarios from the organizers' Q&A (10.11): interns who delegate their work or paste LLM output without
-understanding it. Buddy teaches instead of doing: «учись, а не делегируй», code-review preparation, log troubleshooting
-with secret masking, knowledge checks (quiz) and benefits without money operations.
+"""Сценарии наставничества по ответам организаторов (10.11): стажёры, которые перекладывают работу или вставляют ответ LLM,
+не понимая его. Buddy учит, а не делает: «учись, а не делегируй», подготовка к код-ревью, разбор логов с маскированием
+секретов, проверка знаний (тест) и бенефиты без денежных операций.
 
-Spec: openspec/specs/coaching/spec.md (CO-01 … CO-14).
+Спецификация: openspec/specs/coaching/spec.md (CO-01 … CO-14).
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ def _team_doc(turn: Turn, suffix: str) -> dict[str, Any] | None:
 
 
 def _section(body: str, heading_word: str) -> str:
-    """Text of the markdown section whose heading contains heading_word."""
+    """Текст раздела markdown, в заголовке которого есть heading_word."""
     parts = re.split(r"(?m)^##\s+", body)
     for part in parts[1:]:
         title, _, rest = part.partition("\n")
@@ -134,7 +134,7 @@ def _mentor_draft(turn: Turn, topic: str, body: str) -> Event:
 
 # ----------------------------------------------------------------------------- «не понимаю задачу»
 def handle_task_help(turn: Turn, text: str) -> Iterator[Event]:
-    """How to get unstuck on a task without doing it for the intern; the first-task guide of the team as a source."""
+    """Как сдвинуться с места в задаче, не делая её за стажёра; источник — руководство команды по первой задаче."""
     hit = _doc_hit(turn, f"{turn.user.team_id}-first-task")
     if hit:
         yield _source_event([hit])
@@ -172,7 +172,7 @@ def handle_learning(turn: Turn, text: str) -> Iterator[Event]:
     turn.meta["coached"] = True
 
 
-# ----------------------------------------------------------------------------- code review
+# ----------------------------------------------------------------------------- код-ревью
 def handle_code_review(turn: Turn, text: str) -> Iterator[Event]:
     yield status("searching_kb", "Смотрю правила код-ревью команды")
     review = _team_doc(turn, "code-review")
@@ -207,7 +207,7 @@ def handle_code_review(turn: Turn, text: str) -> Iterator[Event]:
     )
 
 
-# ----------------------------------------------------------------------------- logs
+# ----------------------------------------------------------------------------- логи
 CI_STEPS = (
     "Что делать, если CI красный:\n"
     "1. Открой упавший шаг пайплайна в pull request и найди первую ошибку — дальше обычно последствия.\n"
@@ -223,7 +223,7 @@ CI_STEPS = (
 def handle_troubleshoot(turn: Turn, text: str) -> Iterator[Event]:
     masked, secrets = mask_secrets(text)
     if not ERROR_LINE.search(masked) and len(masked.strip().splitlines()) <= 2:
-        # a question about a failure («упали тесты в CI»), not a log: the steps, the CI/CD guide as a source
+        # вопрос о сбое («упали тесты в CI»), а не лог: шаги, а источник — руководство по CI/CD
         hit = _doc_hit(turn, "eng-cicd-gitops")
         if hit:
             yield _source_event([hit])
@@ -262,11 +262,12 @@ def handle_troubleshoot(turn: Turn, text: str) -> Iterator[Event]:
     turn.meta["secrets_masked"] = secrets
 
 
-# ----------------------------------------------------------------------------- benefits
+# ----------------------------------------------------------------------------- бенефиты
 def handle_benefit(turn: Turn, text: str) -> Iterator[Event]:
     hit = _doc_hit(turn, "common-benefits-overview")
     intro = "Оформить бенефит сам я не могу — денежных операций у меня нет."
-    # contract: an operation buddy may not do is still a refusal (reason out_of_scope, detail benefit, R72) …
+    # контракт: операция, которую buddy делать нельзя, всё равно остаётся отказом (reason out_of_scope, detail benefit,
+    # R72) …
     yield Event(
         "refusal",
         {"reason": "out_of_scope", "detail": "benefit", "redirect_role": None, "redirect_name": None, "text": intro},
@@ -274,7 +275,7 @@ def handle_benefit(turn: Turn, text: str) -> Iterator[Event]:
     if hit:
         yield _source_event([hit])
     table = _table(hit["body"]) if hit else ""
-    # … but the intern still gets the general reference with test figures and how to do it themselves (Q&A 10.11).
+    # … но стажёр всё равно получает общую справку с тестовыми цифрами и тем, как сделать самому (ответы 10.11).
     yield from say(
         intro
         + " Но подскажу, как сделать это самому (цифры — тестовые данные прототипа):\n\n"
@@ -287,20 +288,21 @@ def _table(body: str) -> str:
     return "\n".join(line for line in body.splitlines() if line.startswith("|") and "---" not in line)
 
 
-# ----------------------------------------------------------------------------- quiz
+# ----------------------------------------------------------------------------- тест
 QUIZ_TOPIC_NOISE = re.compile(
     r"(?i)провер\w*\s+(меня|мои\s+знания|себя|понимание)|квиз\w*|тест\w*\s+по|задай\s+(мне\s+)?(\d+\s+)?вопрос\w*"
     r"|закреп\w*|\bпо\b"
 )
 
 
-# plan tasks confirmed by a quiz (= core plan.confirmModes «quiz»): a full score marks them done (organizers 12.13)
+# задачи плана, подтверждаемые тестом (= «quiz» в core plan.confirmModes): полный балл отмечает их выполненными
+# (организаторы 12.13)
 QUIZ_ITEMS = {"CL-07", "CL-09"}
 TASK_TITLE = re.compile(r"«([^»]{8,})»")
 
 
 def _task_doc(turn: Turn, text: str) -> dict[str, Any] | None:
-    """«Проверь меня по задаче «…»» from the plan: the documents of that task's checklist item."""
+    """«Проверь меня по задаче «…»» из плана: документы пункта чек-листа этой задачи."""
     m = TASK_TITLE.search(text)
     if not m or turn.kb is None:
         return None
@@ -315,7 +317,7 @@ def _task_doc(turn: Turn, text: str) -> dict[str, Any] | None:
         and d.readable_by(turn.user.role, turn.user.team_id)
         and len(_candidates(d.body)) >= 2
     ]
-    docs.sort(key=lambda d: (turn.user.team_id not in d.teams, -len(_candidates(d.body))))  # own team first
+    docs.sort(key=lambda d: (turn.user.team_id not in d.teams, -len(_candidates(d.body))))  # сначала своя команда
     if not docs:
         return None
     d = docs[0]
@@ -349,7 +351,7 @@ def _quiz_doc(turn: Turn, text: str) -> dict[str, Any] | None:
                 "task": task.title if task else "",
                 "item": task.checklist_item_id if task else "",
             }
-    # no topic: the first open plan task that has a matching document
+    # без темы: первая открытая задача плана, для которой есть подходящий документ
     for t in turn.user.tasks:
         if t.status == "done" or not t.checklist_item_id:
             continue
@@ -387,7 +389,7 @@ def _candidates(body: str) -> list[str]:
 
 
 def _mask(line: str) -> tuple[str, str] | None:
-    """Hide the most informative word of a sentence: a number, else the longest non-stopword."""
+    """Скрыть самое информативное слово предложения: число, иначе самое длинное слово не из стоп-слов."""
     tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+(?:[-.][A-Za-zА-Яа-яЁё0-9]+)*", line)
     nums = [t for t in tokens if t.isdigit()]
     pool = nums or sorted((t for t in tokens if len(t) >= 6 and normalize(t) not in STOPWORDS), key=len, reverse=True)
@@ -482,4 +484,4 @@ def handle_quiz_answer(turn: Turn, text: str) -> Iterator[Event]:
     turn.meta["quiz_score"] = f"{score}/{len(answers)}"
     yield from say("\n".join(lines))
     if passed and quiz.get("item") in QUIZ_ITEMS and turn.user.role == "intern":
-        yield Event("quiz_passed", {"checklist_item_id": quiz["item"]})  # core marks the caller's task done
+        yield Event("quiz_passed", {"checklist_item_id": quiz["item"]})  # ядро отмечает задачу вызывающего выполненной

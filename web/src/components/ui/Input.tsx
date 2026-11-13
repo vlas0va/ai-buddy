@@ -14,7 +14,7 @@ interface FieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
   suffix?: ReactNode
 }
 
-// Label bound to its input; the error text is linked through aria-describedby.
+// Подпись связана со своим полем; текст ошибки привязан через aria-describedby.
 export function Field({ label, error, suffix, ...rest }: FieldProps) {
   const id = useId()
   const errId = `${id}-err`

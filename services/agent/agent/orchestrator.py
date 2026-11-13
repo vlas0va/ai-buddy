@@ -1,6 +1,7 @@
-"""Agent orchestrator: one chat turn → SSE events; confirmed proposal → MCP write; reminders, summaries, FAQ drafts.
+"""Оркестратор агента: один ход чата → события SSE; подтверждённый черновик → запись в MCP; напоминания, сводки, черновики
+FAQ.
 
-Spec: openspec/specs/agent-behavior/spec.md (AG-xx). Rights: ADR-003. Hybrid design: ADR-007.
+Спецификация: openspec/specs/agent-behavior/spec.md (AG-xx). Права: ADR-003. Гибридная схема: ADR-007.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ ROLE_DENIED = {
     "plan": "У этой роли нет плана адаптации.",
     "trip": "Командировки через меня оформляют стажёры, наставники и руководители.",
 }
-# A message that clearly starts another scenario ends the quiz instead of being scored as an answer.
+# Сообщение, которое явно начинает другой сценарий, завершает тест, а не оценивается как ответ.
 QUIZ_BREAK_INTENTS = {
     "absence",
     "absence_status",
@@ -76,7 +77,7 @@ INFO_ASK = re.compile(r"^(как|что|сколько|можно\s+ли|где|
 SLOT_INTENTS_BLOCKING = {
     "task_message",
     "task_help",
-    "trip",  # «оформи командировку с … по …» while an absence draft is open is a trip, not new absence dates
+    "trip",  # «оформи командировку с … по …», пока открыт черновик отсутствия, — это командировка, а не новые даты отсутствия
     "one_on_one",
     "absence_status",
     "trip_status",
@@ -117,7 +118,7 @@ class Agent:
         self.metrics = metrics or Metrics()
         self.web = web
 
-    # ------------------------------------------------------------------ chat
+    # ------------------------------------------------------------------ чат
     def gateway(self, user: User) -> ToolGateway:
         return ToolGateway(self.config, self.backends, user)
 
@@ -149,7 +150,7 @@ class Agent:
             if attachments:
                 route = self.router.route(message, turn.user.display_name) if message.strip() else route
                 if route.source == "guardrail" and route.intent == "refusal":
-                    yield from self._dispatch(turn, route, message)  # a refused request is not rescued by a file
+                    yield from self._dispatch(turn, route, message)  # отклонённый запрос не спасает файл
                 else:
                     route = Route("attachments", 1.0, "attachments")
                     yield from attachment_flow.handle(
@@ -206,7 +207,7 @@ class Agent:
         yield from self._dispatch(turn, route, message)
 
     def _kb_knows(self, turn: Turn, message: str) -> bool:
-        """A readable KB document that covers most of the question (same ACL as search, before ranking)."""
+        """Читаемый документ базы знаний, отвечающий на большую часть вопроса (тот же ACL, что в поиске, до ранжирования)."""
         if turn.kb is None:
             return False
         text = canonical_query(message)
@@ -227,7 +228,8 @@ class Agent:
     def _route(self, turn: Turn, message: str) -> Route:
         route = self.router.route(message, turn.user.display_name)
         if route.intent == "offtopic" and route.source == "classifier" and self._kb_knows(turn, message):
-            # «расскажи про ноутбук»: the classifier is unsure, but the test KB has a document that covers the question
+            # «расскажи про ноутбук»: классификатор не уверен, но в тестовой базе знаний есть документ, отвечающий на
+            # вопрос
             route = Route("kb_question", route.confidence, "kb", detail=route.detail)
         state = turn.state().get("absence")
         if (
@@ -244,15 +246,15 @@ class Agent:
             and trip_state.get("step") in ("collect", "proposed")
             and route.source != "guardrail"
             and route.intent not in SLOT_INTENTS_BLOCKING
-            and not (route.intent == "absence" and route.source == "rule")  # «отгул» said explicitly
+            and not (route.intent == "absence" and route.source == "rule")  # «отгул» сказан явно
             and route.intent not in ("quiz", "code_review", "troubleshoot", "learning", "benefit")
             and trips.looks_like_slot_answer(message, trip_state)
         ):
             return Route("trip", 0.9, "state")
         quiz_state = turn.state()
         if quiz_state.get("quiz"):
-            # only an explicit new request (a rule) ends the quiz: answers are bare words («ревью, пространство»), and the
-            # classifier reads them as some topic (QA 12.13)
+            # тест завершает только явный новый запрос (правило): ответы — отдельные слова («ревью, пространство»), и
+            # классификатор принимает их за какую-то тему (QA 12.13)
             breaks = route.source == "guardrail" or (route.source == "rule" and route.intent in QUIZ_BREAK_INTENTS)
             if not breaks:
                 return Route("quiz_answer", 0.9, "state")
@@ -267,9 +269,11 @@ class Agent:
         return route
 
     def _role_exception(self, turn: Turn, person: str, message: str) -> Route | None:
-        """Mentor may see own mentees' progress; lead may decide own team's requests. Everything else is refused."""
+        """Наставник может видеть прогресс своих подопечных; руководитель может решать заявки своей команды. Всё остальное
+        отклоняется.
+        """
         if re.search(r"(оформи|создай|подай|возьми)\w*\s", normalize(message)):
-            return None  # nobody acts on behalf of another person
+            return None  # никто не действует от имени другого человека
         if turn.user.role == "mentor" and any(
             same_person(person, m.get("display_name", "")) for m in turn.user.mentees
         ):
@@ -296,8 +300,8 @@ class Agent:
             and INFO_ASK.search(normalize(message))
             and self.config.intent_allowed("kb_question", turn.user.role)
         ):
-            # «как оформляется отпуск?» from the HR admin or an alumni: a question about the rules, answered from the
-            # knowledge base, not a refused request (QA 12.11)
+            # «как оформляется отпуск?» от HR-администратора или выпускника: вопрос о правилах, ответ из базы знаний, а
+            # не отклонённая заявка (QA 12.11)
             yield from qa.handle_question(turn, message)
             return
         if not self.config.intent_allowed(cfg_intent, turn.user.role):
@@ -344,12 +348,13 @@ class Agent:
         }
         yield from handlers.get(intent, qa.handle_question)(turn, message)
 
-    # ------------------------------------------------------------------ confirm turn (write) — ADR-003 layer 4
+    # ------------------------------------------------------------------ ход подтверждения (запись) — ADR-003, слой 4
     def confirm(
         self, user: User, proposal_id: str, draft: dict[str, Any], confirmation_token: str, request_id: str = ""
     ) -> Iterator[Event]:
-        """`turn.kind = confirm` of contracts/agent-stream.md: call draft.tool with draft.args unchanged, then emit the
-        internal `tool_result` event (core saves the action and relays `action_result` to web)."""
+        """`turn.kind = confirm` из contracts/agent-stream.md: вызвать draft.tool с неизменными draft.args, затем отправить
+        внутреннее событие `tool_result` (ядро сохраняет действие и пересылает `action_result` в веб).
+        """
         started = time.perf_counter()
         yield status("calling_service", "Отправляю заявку")
         try:
@@ -432,12 +437,12 @@ class Agent:
         }
         self.store.set(f"result:{proposal_id}", {**result, "_user": user.user_id}, ttl_s=86400)
         if kind in ("absence_request", "trip_request") and reg and reg.get("state_key"):
-            self.store.delete(reg["state_key"])  # the day-off or trip dialogue is finished
+            self.store.delete(reg["state_key"])  # диалог об отгуле или командировке завершён
         self.metrics.inc("agent_actions_total", kind=str(kind), outcome="created")
         self.metrics.observe("agent_execute_seconds", time.perf_counter() - started)
         return result
 
-    # ------------------------------------------------------------------ cron, summary, faq
+    # ------------------------------------------------------------------ cron, сводка, faq
     def reminders(self, user: User, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         name = (user.display_name or "").split(" ")[0]
         return [plan.reminder_text(i, name) for i in items]
@@ -454,7 +459,7 @@ class Agent:
         if not question.strip() or not answer.strip():
             raise BadRequest("Нужны вопрос и ответ.")
         names = [e.get("display_name", "") for e in self.mocks.employees.values()] if self.mocks else []
-        question, answer = generalize(question, names), generalize(answer, names)  # an FAQ for every intern
+        question, answer = generalize(question, names), generalize(answer, names)  # FAQ для любого стажёра
         digest = hashlib.sha1(f"{team_id}:{question}".encode()).hexdigest()[:8]
         doc_id = f"faq-{team_id}-{digest}"
         title = question.strip().rstrip("?")[:90]
@@ -464,11 +469,11 @@ class Agent:
             f"origin: escalation\nauthor: {user.user_id}\nupdated: {datetime.now(timezone.utc).date().isoformat()}\n---\n"
             f"# {title}?\n\n{answer.strip()}\n"
         )
-        # title/body are exactly the arguments of kb.add_faq (contracts/schemas/kb.json) that core calls itself.
+        # title/body — ровно аргументы kb.add_faq (contracts/schemas/kb.json), которые ядро вызывает само.
         return {"doc_id": doc_id, "title": title, "body": answer.strip(), "markdown": md}
 
 
-# ---------------------------------------------------------------------- factory
+# ---------------------------------------------------------------------- фабрика
 def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = None, llm_client: Any = None) -> Agent:
     embedder = None
     emb = config.embeddings
@@ -496,8 +501,9 @@ def build_agent(settings: Settings, config: AgentConfig, *, http_client: Any = N
     model = IntentModel.load(model_path) if model_path.exists() else None
     router = IntentRouter(model, float(config.nlu.get("min_confidence", 0.3)))
     if kb is not None and model is not None:
-        # words the agent knows besides the KB (the intent training set): a question word known to neither is a topic
-        # the KB does not cover — answer «not found» instead of a loosely matching document (QA 12.13)
+        # слова, которые агент знает помимо базы знаний (обучающий набор намерений): слово вопроса, неизвестное ни там,
+        # ни там, — тема, которой нет в базе знаний; отвечаем «не нашёл», а не документом с неточным совпадением (QA
+        # 12.13)
         kb.extra_vocab = {f[2:] for w in model.weights.values() for f in w if f.startswith("w:")}
     writer = make_writer(config, settings.llm_api_key, client=llm_client)
     web = WebSearch(config.raw.get("web_search") or {}, Path(config.base_dir), client=http_client)

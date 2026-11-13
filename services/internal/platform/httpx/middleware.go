@@ -14,13 +14,13 @@ import (
 	"aibuddy/services/internal/platform/apierr"
 )
 
-// HeaderRequestID is the request id header, accepted from clients and forwarded to the agent.
+// HeaderRequestID — заголовок id запроса; принимается от клиентов и передаётся агенту.
 const HeaderRequestID = "X-Request-Id"
 
-// Middleware wraps an http.Handler.
+// Middleware оборачивает http.Handler.
 type Middleware = func(http.Handler) http.Handler
 
-// Chain composes middleware; the first one is the outermost: Chain(a, b)(h) == a(b(h)).
+// Chain составляет middleware; первый — самый внешний: Chain(a, b)(h) == a(b(h)).
 func Chain(mws ...Middleware) Middleware {
 	return func(h http.Handler) http.Handler {
 		for i := len(mws) - 1; i >= 0; i-- {
@@ -32,8 +32,8 @@ func Chain(mws ...Middleware) Middleware {
 
 type requestIDKey struct{}
 
-// RequestID keeps a well-formed incoming X-Request-Id (1–128 chars of [A-Za-z0-9._:-]) or generates a UUID v4,
-// stores it in the context (RequestIDFromContext), on the request header and on the response header.
+// RequestID сохраняет корректный входящий X-Request-Id (1–128 символов из [A-Za-z0-9._:-]) или генерирует UUID v4,
+// кладёт его в контекст (RequestIDFromContext), в заголовок запроса и в заголовок ответа.
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(HeaderRequestID)
@@ -46,12 +46,12 @@ func RequestID(next http.Handler) http.Handler {
 	})
 }
 
-// WithRequestID returns ctx carrying id (RequestID does this for incoming requests).
+// WithRequestID возвращает ctx с id (RequestID делает это для входящих запросов).
 func WithRequestID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, requestIDKey{}, id)
 }
 
-// RequestIDFromContext returns the request id stored by RequestID, or "".
+// RequestIDFromContext возвращает id запроса, сохранённый RequestID, или "".
 func RequestIDFromContext(ctx context.Context) string {
 	id, _ := ctx.Value(requestIDKey{}).(string)
 	return id
@@ -73,14 +73,14 @@ func validRequestID(id string) bool {
 
 func newUUID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:]) // crypto/rand.Read never fails on supported platforms
+	_, _ = rand.Read(b[:]) // crypto/rand.Read никогда не падает на поддерживаемых платформах
 	b[6] = b[6]&0x0f | 0x40
 	b[8] = b[8]&0x3f | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
-// Recover turns a panic into an apierr internal response (if nothing was written yet) and logs it with the stack.
-// http.ErrAbortHandler is re-panicked, as net/http expects. A nil log means slog.Default().
+// Recover превращает панику во внутреннюю ошибку apierr (если ещё ничего не записано) и логирует её со стеком.
+// http.ErrAbortHandler пробрасывается паникой дальше, как ожидает net/http. Nil log означает slog.Default().
 func Recover(log *slog.Logger) Middleware {
 	if log == nil {
 		log = slog.Default()
@@ -107,8 +107,8 @@ func Recover(log *slog.Logger) Middleware {
 	}
 }
 
-// AccessLog logs one line per request: method, path, status, bytes, duration_ms, request_id.
-// GET /healthz is logged at debug level to keep container health checks out of the log. A nil log means slog.Default().
+// AccessLog пишет одну строку на запрос: method, path, status, bytes, duration_ms, request_id. GET /healthz логируется
+// на уровне debug, чтобы проверки здоровья контейнера не засоряли журнал. Nil log означает slog.Default().
 func AccessLog(log *slog.Logger) Middleware {
 	if log == nil {
 		log = slog.Default()
@@ -129,8 +129,8 @@ func AccessLog(log *slog.Logger) Middleware {
 	}
 }
 
-// statusWriter records the status and size of a response. It keeps flushing working for SSE
-// (Flush, FlushError and Unwrap for http.ResponseController).
+// statusWriter запоминает статус и размер ответа. Сохраняет работу flush для SSE (Flush, FlushError и Unwrap для
+// http.ResponseController).
 type statusWriter struct {
 	http.ResponseWriter
 	status      int
@@ -161,19 +161,19 @@ func (s *statusWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// FlushError flushes the underlying writer, reporting http.ErrNotSupported when it cannot flush.
+// FlushError сбрасывает нижележащий writer и сообщает http.ErrNotSupported, если сброс невозможен.
 func (s *statusWriter) FlushError() error {
 	err := http.NewResponseController(s.ResponseWriter).Flush()
 	if err == nil && !s.wroteHeader {
-		s.status, s.wroteHeader = http.StatusOK, true // flushing sends an implicit 200
+		s.status, s.wroteHeader = http.StatusOK, true // сброс неявно отправляет 200
 	}
 	return err
 }
 
-// Flush implements http.Flusher.
+// Flush реализует http.Flusher.
 func (s *statusWriter) Flush() { _ = s.FlushError() }
 
-// Unwrap exposes the underlying writer to http.ResponseController.
+// Unwrap открывает нижележащий writer для http.ResponseController.
 func (s *statusWriter) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func (s *statusWriter) statusCode() int {
@@ -183,17 +183,17 @@ func (s *statusWriter) statusCode() int {
 	return s.status
 }
 
-// CORS headers sent for allowed origins.
+// Заголовки CORS, отправляемые для разрешённых origin.
 const (
 	corsMethods = "GET, POST, PUT, PATCH, DELETE"
 	corsHeaders = "Authorization, Content-Type, Idempotency-Key, X-Request-Id, Last-Event-ID"
 	corsMaxAge  = 600
 )
 
-// CORS allows cross-origin requests from the exact origins listed (scheme://host[:port], trailing "/" ignored;
-// "*" allows any origin). Credentials are never allowed: the API uses bearer tokens, not cookies.
-// Preflight requests (OPTIONS with Access-Control-Request-Method) are answered here: 204 for allowed
-// origins, apierr forbidden otherwise. Requests without Origin pass through untouched.
+// CORS разрешает кросс-доменные запросы с перечисленных origin в точности (scheme://host[:port], завершающий "/"
+// игнорируется; "*" разрешает любой origin). Credentials никогда не разрешаются: API использует bearer-токены, а не
+// cookies. Preflight-запросы (OPTIONS с Access-Control-Request-Method) отвечаются здесь: 204 для разрешённых origin,
+// иначе apierr forbidden. Запросы без Origin проходят без изменений.
 func CORS(origins []string) Middleware {
 	allowed := make(map[string]bool, len(origins))
 	anyOrigin := false

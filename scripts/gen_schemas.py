@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate contracts/schemas/*.json. Usage: python3 scripts/gen_schemas.py contracts/schemas"""
+"""Пересобрать contracts/schemas/*.json. Запуск: python3 scripts/gen_schemas.py contracts/schemas"""
 import json, os, sys
 out = sys.argv[1]
 S = "https://json-schema.org/draft/2020-12/schema"

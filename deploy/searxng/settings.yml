@@ -1,8 +1,9 @@
-# Optional live web search for the agent (compose profile websearch). Only general technical questions reach it, masked.
+# Необязательный живой веб-поиск для агента (профиль compose websearch). Сюда доходят только общие технические вопросы,
+# в замаскированном виде.
 use_default_settings: true
 server:
   limiter: false
   image_proxy: false
 search:
   safe_search: 1
-  formats: [html, json]   # the agent reads /search?format=json
+  formats: [html, json]   # агент читает /search?format=json

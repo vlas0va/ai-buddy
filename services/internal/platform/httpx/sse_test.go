@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// syncRecorder is a flushable ResponseWriter that can be read while the keep-alive goroutine writes.
+// syncRecorder — ResponseWriter со сбросом, который можно читать, пока пишет горутина keep-alive.
 type syncRecorder struct {
 	mu       sync.Mutex
 	header   http.Header
@@ -228,7 +228,7 @@ func TestSSEWriter_Errors(t *testing.T) {
 	}
 }
 
-// End to end over a real HTTP server: middleware chain keeps flushing working, the reader parses the stream.
+// От начала до конца через настоящий HTTP-сервер: цепочка middleware сохраняет работу сброса, читатель разбирает поток.
 func TestSSE_OverHTTPWithMiddleware_R78(t *testing.T) {
 	h := Chain(RequestID, Recover(nil), AccessLog(nil))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sse, err := NewSSEWriter(r.Context(), w, 0)
@@ -296,7 +296,7 @@ func TestSSEReader_Parse_R78(t *testing.T) {
 			for _, mode := range []string{"whole", "one byte"} {
 				var src io.Reader = strings.NewReader(tt.stream)
 				if mode == "one byte" {
-					src = iotest.OneByteReader(src) // "\r" and "\n" arrive in separate reads
+					src = iotest.OneByteReader(src) // "\r" и "\n" приходят в разных чтениях
 				}
 				r := NewSSEReader(src)
 				var got []ev

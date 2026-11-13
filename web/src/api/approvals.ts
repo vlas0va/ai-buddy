@@ -8,7 +8,7 @@ export function listApprovals() {
   return apiRequest('/api/approvals', z.array(approvalSchema))
 }
 
-/** The Idempotency-Key is created once per approval card and reused for every attempt of that decision. */
+/** Idempotency-Key создаётся один раз на карточку согласования и переиспользуется во всех попытках этого решения. */
 export function decideApproval(id: string, decision: Decision, comment: string | undefined, idempotencyKey: string) {
   return apiRequest(`/api/approvals/${id}/decision`, approvalSchema, {
     method: 'POST',

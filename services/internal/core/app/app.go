@@ -1,7 +1,6 @@
-// Package app wires the core service (port 8080): configuration from the environment, dependencies, the HTTP
-// middleware chain and every route of contracts/openapi.yaml, plus the background AI-cron and the Kafka outbox
-// publisher. Core starts and answers /healthz even when the agent or the MCP servers are down; chat then streams
-// error{upstream_unavailable} (R79).
+// Пакет app собирает сервис ядра (порт 8080): конфигурацию из окружения, зависимости, цепочку HTTP-middleware и все
+// маршруты contracts/openapi.yaml, плюс фоновый AI-cron и публикатор outbox в Kafka. Ядро стартует и отвечает на
+// /healthz, даже когда агент или MCP-серверы недоступны; чат тогда отдаёт в потоке error{upstream_unavailable} (R79).
 package app
 
 import (
@@ -34,27 +33,27 @@ import (
 	"aibuddy/services/internal/platform/pg"
 )
 
-// Config holds core settings (docs/backend/IMPLEMENTATION.md §7, .env.example).
+// Config хранит настройки ядра (docs/backend/IMPLEMENTATION.md §7, .env.example).
 type Config struct {
 	Port               int
 	PostgresURL        string
-	RedisURL           string // empty: no Redis (no rate limiting, flags read from the DB)
+	RedisURL           string // пусто: без Redis (без ограничения частоты, флаги читаются из БД)
 	JWTSecret          string
 	ConfirmationSecret string
 	AgentURL           string
-	AgentServiceToken  string // optional X-Service-Token for the agent
+	AgentServiceToken  string // необязательный X-Service-Token для агента
 	MCPBaseURL         string
-	KafkaBrokers       []string // empty: Kafka off
+	KafkaBrokers       []string // пусто: Kafka выключена
 	CORSOrigins        []string
 	LLMTimeout         time.Duration
 	CronInterval       time.Duration
 	ChatRatePerMin     int
 	JWTTTL             time.Duration
 
-	envErr error // invalid values found by LoadConfig
+	envErr error // некорректные значения, найденные LoadConfig
 }
 
-// LoadConfig reads configuration from getenv (os.Getenv in production); Validate reports problems.
+// LoadConfig читает конфигурацию из getenv (os.Getenv в продакшене); о проблемах сообщает Validate.
 func LoadConfig(getenv func(string) string) Config {
 	env := config.New(getenv)
 	cfg := Config{
@@ -77,7 +76,7 @@ func LoadConfig(getenv func(string) string) Config {
 	return cfg
 }
 
-// Validate fails on invalid values and missing secrets: the service must not start with empty secrets.
+// Validate падает на некорректных значениях и отсутствующих секретах: сервис не должен стартовать с пустыми секретами.
 func (c Config) Validate() error {
 	var errs []error
 	if c.envErr != nil {
@@ -94,14 +93,14 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// App is the wired core service.
+// App — собранный сервис ядра.
 type App struct {
 	Handler http.Handler
 	Cron    *cron.Runner
 	Emitter *analytics.Emitter
 }
 
-// New wires every package of core over pool and rdb (nil: no Redis). It does not contact the agent or MCP.
+// New собирает все пакеты ядра поверх pool и rdb (nil: без Redis). К агенту и MCP не обращается.
 func New(cfg Config, pool *pgxpool.Pool, rdb redis.Cmdable, log *slog.Logger) (*App, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -138,13 +137,14 @@ func New(cfg Config, pool *pgxpool.Pool, rdb redis.Cmdable, log *slog.Logger) (*
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", healthz(pool))
-	auth.RegisterPublic(root) // POST /api/auth/login: the only /api route without a JWT
+	auth.RegisterPublic(root) // POST /api/auth/login: единственный маршрут /api без JWT
 	root.Handle("/api/", authn.Middleware(jwt)(api))
 	h := httpx.Chain(httpx.RequestID, httpx.Recover(log), httpx.AccessLog(log), httpx.CORS(cfg.CORSOrigins))(root)
 	return &App{Handler: h, Cron: runner, Emitter: emitter}, nil
 }
 
-// healthz answers 200 when Postgres answers a ping, 503 otherwise (the agent is not checked: core must stay up).
+// healthz отвечает 200, если Postgres отвечает на ping, иначе 503 (агент не проверяется: ядро должно оставаться
+// доступным).
 func healthz(pool *pgxpool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -157,8 +157,8 @@ func healthz(pool *pgxpool.Pool) http.HandlerFunc {
 	}
 }
 
-// Run connects to Postgres (with retry while it starts) and Redis, starts the AI-cron and, with KAFKA_BROKERS, the
-// outbox publisher, and serves until ctx is cancelled.
+// Run подключается к Postgres (с повторами, пока он стартует) и Redis, запускает AI-cron и, если задан KAFKA_BROKERS,
+// публикатор outbox, и работает, пока ctx не отменён.
 func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -171,7 +171,7 @@ func Run(ctx context.Context, cfg Config, log *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
-	var rdb redis.Cmdable // stays a nil interface without Redis
+	var rdb redis.Cmdable // без Redis остаётся nil-интерфейсом
 	if cfg.RedisURL != "" {
 		opts, err := redis.ParseURL(cfg.RedisURL)
 		if err != nil {
@@ -218,7 +218,7 @@ func serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) e
 	}
 }
 
-// Healthcheck performs GET url and fails on a non-200 answer (Docker HEALTHCHECK via `-healthcheck`).
+// Healthcheck выполняет GET url и падает на ответе не 200 (Docker HEALTHCHECK через `-healthcheck`).
 func Healthcheck(url string) error {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get(url)

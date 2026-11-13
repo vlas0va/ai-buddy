@@ -1,4 +1,4 @@
-"""HTTP surface and agent behaviour — openspec/specs/agent-behavior/spec.md (AG-xx)."""
+"""HTTP-поверхность и поведение агента — openspec/specs/agent-behavior/spec.md (AG-xx)."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def test_AG_12_tool_failure_is_retryable_error(app_factory):
     s = c.login("intern.anna")
     ev = s.say("какие доступы мне нужны")
     assert ev[-1].name == "error" and ev[-1].data["retryable"] is True
-    assert first(s.say("какие доступы мне нужны"), "action_proposal") is not None  # retry works
+    assert first(s.say("какие доступы мне нужны"), "action_proposal") is not None  # повтор работает
 
 
 def test_AG_13_expired_jwt(client):

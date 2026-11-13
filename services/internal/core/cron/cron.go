@@ -1,10 +1,11 @@
-// Package cron is the AI-cron: a periodic job that marks overdue plan tasks and sends reminders to interns and
-// mentors (R54). Texts are fixed Russian templates, no LLM is involved.
+// Пакет cron — AI-cron: периодическая задача, которая отмечает просроченные задачи плана и отправляет напоминания
+// стажёрам и наставникам (R54). Тексты — фиксированные русские шаблоны, LLM не участвует.
 //
-// Per plan the job (1) stores status 'overdue' on open tasks whose due date has passed, (2) creates one notification
-// per overdue top-level task (dedupe key overdue:<task_id>) and (3) reminds about every open top-level task of the
-// intern's current period (dedupe key period:<checklist_item_id>:<period>). Survey items CL-15 and CL-16 get their own
-// text. Repeated runs never duplicate notifications. human_only items are only reminded, never touched.
+// Для каждого плана задача (1) выставляет статус 'overdue' открытым задачам с прошедшим сроком, (2) создаёт одно
+// уведомление на каждую просроченную задачу верхнего уровня (ключ дедупликации overdue:<task_id>) и (3) напоминает о
+// каждой открытой задаче верхнего уровня текущего этапа стажёра (ключ дедупликации
+// period:<checklist_item_id>:<period>). У опросов CL-15 и CL-16 свой текст. Повторные запуски никогда не дублируют
+// уведомления. Пункты human_only только напоминаются, их не трогают.
 package cron
 
 import (
@@ -27,28 +28,28 @@ import (
 // DefaultInterval is CRON_INTERVAL's default.
 const DefaultInterval = 24 * time.Hour
 
-// Result counts what one run did.
+// Result считает, что сделал один запуск.
 type Result struct {
 	Plans         int `json:"plans"`
 	MarkedOverdue int `json:"marked_overdue"`
 	Overdue       int `json:"overdue_notifications"`
 	Reminders     int `json:"reminders"`
 	Reports       int `json:"reports"`
-	Questions     int `json:"question_digests"` // organizers 13.11: one digest a day per addressee with open questions
+	Questions     int `json:"question_digests"` // организаторы 13.11: одна сводка в день каждому адресату с открытыми вопросами
 }
 
-// Runner executes the job.
+// Runner выполняет задачу.
 type Runner struct {
 	pool     *pgxpool.Pool
 	notify   notify.Store
 	emitter  *analytics.Emitter
 	log      *slog.Logger
 	interval time.Duration
-	// Now is the clock (tests); defaults to time.Now.
+	// Now — часы (для тестов); по умолчанию time.Now.
 	Now func() time.Time
 }
 
-// NewRunner returns a Runner that fires every interval (<= 0 means DefaultInterval). emitter and log may be nil.
+// NewRunner возвращает Runner, срабатывающий раз в interval (<= 0 — DefaultInterval). emitter и log могут быть nil.
 func NewRunner(pool *pgxpool.Pool, emitter *analytics.Emitter, interval time.Duration, log *slog.Logger) *Runner {
 	if interval <= 0 {
 		interval = DefaultInterval
@@ -59,7 +60,7 @@ func NewRunner(pool *pgxpool.Pool, emitter *analytics.Emitter, interval time.Dur
 	return &Runner{pool: pool, emitter: emitter, interval: interval, log: log, Now: time.Now}
 }
 
-// Run executes the job once at start and then every interval until ctx is cancelled. Errors are logged.
+// Run выполняет задачу один раз при старте, а затем раз в interval, пока ctx не отменён. Ошибки логируются.
 func (r *Runner) Run(ctx context.Context) {
 	t := time.NewTicker(r.interval)
 	defer t.Stop()
@@ -90,8 +91,8 @@ type taskRow struct {
 	humanOnly         bool
 }
 
-// RunOnce processes every plan, each in its own transaction, and returns the totals. The first error stops the run
-// (already processed plans stay committed; the job is idempotent, so the next run continues).
+// RunOnce обрабатывает каждый план в отдельной транзакции и возвращает итоги. Первая ошибка останавливает запуск (уже
+// обработанные планы остаются зафиксированными; задача идемпотентна, поэтому следующий запуск продолжит).
 func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 	var res Result
 	rows, err := r.pool.Query(ctx, `SELECT p.id::text, p.user_id, p.plan_role, u.id, u.display_name, u.cohort_start::text
@@ -126,8 +127,8 @@ func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 	return res, nil
 }
 
-// questionDigests: interns' questions wait in the addressee's stack without a notification each (organizers 13.11);
-// once a day the addressee gets one digest «Вопросы стажёров ждут ответа: N».
+// questionDigests: вопросы стажёров ждут в списке адресата без уведомления на каждый (организаторы 13.11); раз в день
+// адресат получает одну сводку «Вопросы стажёров ждут ответа: N».
 func (r *Runner) questionDigests(ctx context.Context) (int, error) {
 	rows, err := r.pool.Query(ctx, `SELECT to_user_id, count(*)::int FROM core.escalations WHERE status = 'open'
 		GROUP BY to_user_id ORDER BY to_user_id`)
@@ -259,8 +260,8 @@ func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error {
 	return nil
 }
 
-// ReportAfter: after three months buddy tells the mentor that the internship report is ready (idea 12.11; the report is
-// for the mentor only).
+// ReportAfter: через три месяца buddy сообщает наставнику, что отчёт за стажировку готов (идея 12.11; отчёт только для
+// наставника).
 const ReportAfter = 90 * 24 * time.Hour
 
 func reportText(p planRow) (title, body string) {
@@ -274,7 +275,8 @@ func (r *Runner) emit(ctx context.Context, tx analytics.DBTX, base analytics.Eve
 	return r.emitter.Emit(ctx, tx, base)
 }
 
-// topTasks returns the top-level checklist tasks of a plan matching cond ($1 = plan id, $2 = arg when not empty).
+// topTasks возвращает задачи чек-листа верхнего уровня из плана, подходящие под cond ($1 = id плана, $2 = arg, если не
+// пусто).
 func (r *Runner) topTasks(ctx context.Context, tx notify.DBTX, planID, cond, arg string) ([]taskRow, error) {
 	args := []any{planID}
 	if arg != "" {
@@ -297,7 +299,7 @@ func (r *Runner) topTasks(ctx context.Context, tx notify.DBTX, planID, cond, arg
 	return out, rows.Err()
 }
 
-// ruDate turns YYYY-MM-DD into DD.MM.YYYY.
+// ruDate превращает YYYY-MM-DD в DD.MM.YYYY.
 func ruDate(iso *string) string {
 	if iso == nil {
 		return ""
@@ -338,17 +340,17 @@ func reminderText(t taskRow, planRole string) (title, body string) {
 	return title, body
 }
 
-// Handler serves POST /api/cron/run.
+// Handler обслуживает POST /api/cron/run.
 type Handler struct {
 	runner *Runner
 	log    *slog.Logger
-	// Demo enables the endpoint; it defaults to buildflags.Demo and is a field so tests can flip it.
+	// Demo включает эндпоинт; по умолчанию buildflags.Demo, это поле, чтобы тесты могли его переключать.
 	Demo bool
-	// Sync makes the handler run the job before answering 202 (tests). By default it runs in the background.
+	// Sync заставляет обработчик выполнить задачу до ответа 202 (для тестов). По умолчанию задача идёт в фоне.
 	Sync bool
 }
 
-// New returns the cron HTTP handler.
+// New возвращает HTTP-обработчик cron.
 func New(runner *Runner, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
@@ -356,7 +358,7 @@ func New(runner *Runner, log *slog.Logger) *Handler {
 	return &Handler{runner: runner, log: log, Demo: buildflags.Demo}
 }
 
-// Register adds POST /api/cron/run (auth required; answers 404 outside demo builds).
+// Register добавляет POST /api/cron/run (нужна авторизация; вне демо-сборок отвечает 404).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/cron/run", h.run)
 }
@@ -380,7 +382,7 @@ func (h *Handler) run(w http.ResponseWriter, r *http.Request) {
 	if h.Sync {
 		job(r.Context())
 	} else {
-		// The request ends right after 202, so the job gets its own context.
+		// Запрос заканчивается сразу после 202, поэтому у задачи свой контекст.
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()

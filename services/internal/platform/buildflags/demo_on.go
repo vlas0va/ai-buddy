@@ -1,7 +1,8 @@
 //go:build demo
 
-// Package buildflags holds compile-time feature flags (R55). Build with `-tags demo` to enable demo-only endpoints.
+// Пакет buildflags хранит feature flags времени компиляции (R55). Собирайте с `-tags demo`, чтобы включить эндпоинты
+// только для демо.
 package buildflags
 
-// Demo enables demo-only endpoints such as POST /api/cron/run and PUT /api/flags/{key}.
+// Demo включает эндпоинты только для демо, например POST /api/cron/run и PUT /api/flags/{key}.
 const Demo = true

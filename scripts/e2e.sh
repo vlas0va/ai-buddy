@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Playwright e2e against a running stack (make up). One spec per declared scenario (S1-S4) + guards and roles.
-# WEB_URL (default http://localhost:5173) and API_URL (default http://localhost:8080) point at the stack.
+# Playwright e2e на запущенном стеке (make up). По одной спеке на заявленный сценарий (S1-S4) + ограничения и роли.
+# WEB_URL (по умолчанию http://localhost:5173) и API_URL (по умолчанию http://localhost:8080) указывают на стек.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

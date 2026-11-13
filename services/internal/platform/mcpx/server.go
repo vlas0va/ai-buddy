@@ -1,22 +1,23 @@
-// Package mcpx builds the MCP servers of mcp-mocks from the contracts and calls them from core
-// (docs/backend/IMPLEMENTATION.md §4, contracts/mcp-tools.md).
+// Пакет mcpx собирает MCP-серверы mcp-mocks из контрактов и вызывает их из ядра (docs/backend/IMPLEMENTATION.md §4,
+// contracts/mcp-tools.md).
 //
-// Server side: NewServer loads contracts/schemas/<name>.json, Handle binds a plain Go func to every tool, and
-// Handler serves the MCP streamable HTTP transport (stateless, JSON responses) behind JWT verification.
-// For every tools/call mcpx enforces, in this order, before the handler runs:
-//  1. role allow-list of the tool (`roles`) → forbidden
-//  2. write tools: confirmation_token and idempotency_key present and non-empty → else invalid_confirmation
-//  3. inputSchema (unknown fields such as employee_id, types, enums, patterns, required; format date,
-//     date-time, uuid of top-level arguments) after applying schema defaults → validation_error
-//  4. write tools: confirm.Verify(sub = caller, key = idempotency_key, args as received) → invalid_confirmation
+// Серверная сторона: NewServer загружает contracts/schemas/<name>.json, Handle привязывает обычную функцию Go к каждому
+// инструменту, а Handler обслуживает streamable HTTP-транспорт MCP (без состояния, JSON-ответы) за проверкой JWT. Для
+// каждого tools/call mcpx до запуска обработчика проверяет по порядку:
+//  1. белый список ролей инструмента (`roles`) → forbidden
+//  2. инструменты записи: confirmation_token и idempotency_key есть и не пустые → иначе invalid_confirmation
+//  3. inputSchema (неизвестные поля, например employee_id, типы, перечисления, шаблоны, required; формат date,
+//     date-time, uuid у аргументов верхнего уровня) после применения значений по умолчанию → validation_error
+//  4. инструменты записи: confirm.Verify(sub = вызывающий, key = idempotency_key, args как получены) →
+//     invalid_confirmation
 //
-// Identity reaches handlers through the go-sdk mechanism for bearer auth: Handler verifies the JWT, wraps it in an
-// auth.TokenInfo (auth.RequireBearerToken), and the streamable transport copies it into CallToolRequest.Extra.
+// Личность доходит до обработчиков через механизм bearer-авторизации go-sdk: Handler проверяет JWT, оборачивает его в
+// auth.TokenInfo (auth.RequireBearerToken), а streamable-транспорт копирует его в CallToolRequest.Extra.
 //
-// Handler errors of type *apierr.Error become tool results with isError=true and structuredContent
-// {code, message, retryable} (MCP codes, see apierr.ToMCP); other errors and panics are logged and reported as a
-// generic, non-retryable error. Successful results must match the tool's outputSchema; they are sent as
-// structuredContent plus the same JSON as text content. tools/list shows only the tools the caller's role may use.
+// Ошибки обработчика типа *apierr.Error становятся результатами инструмента с isError=true и structuredContent {code,
+// message, retryable} (коды MCP, см. apierr.ToMCP); прочие ошибки и паники логируются и отдаются как общая ошибка без
+// повтора. Успешные результаты должны соответствовать outputSchema инструмента; они отправляются как structuredContent
+// плюс тот же JSON в текстовом содержимом. tools/list показывает только инструменты, доступные роли вызывающего.
 package mcpx
 
 import (
@@ -36,38 +37,39 @@ import (
 	"aibuddy/services/internal/platform/confirm"
 )
 
-// Caller is the authenticated user of an MCP request: verified JWT claims plus the raw bearer token.
-// Identity used by tool handlers comes only from here, never from tool arguments (R71).
+// Caller — аутентифицированный пользователь MCP-запроса: проверенные claims JWT плюс исходный bearer-токен. Личность в
+// обработчиках инструментов берётся только отсюда, никогда из аргументов инструмента (R71).
 type Caller struct {
 	authn.Claims
 	Token string
 }
 
-// HandlerFunc implements a tool. args are the validated tool arguments as JSON (including idempotency_key and
-// confirmation_token for write tools; schema defaults applied). The result must marshal to a JSON object that
-// matches the tool's outputSchema. Return *apierr.Error for expected failures.
+// HandlerFunc реализует инструмент. args — проверенные аргументы инструмента в JSON (с idempotency_key и
+// confirmation_token для инструментов записи; значения по умолчанию из схемы применены). Результат должен
+// сериализоваться в JSON-объект, соответствующий outputSchema инструмента. Для ожидаемых сбоев возвращайте
+// *apierr.Error.
 type HandlerFunc func(ctx context.Context, c Caller, args json.RawMessage) (any, error)
 
-// Config holds the secrets and logger of a Server.
+// Config хранит секреты и логгер Server.
 type Config struct {
-	JWTSecret          []byte       // JWT_SECRET: verifies the caller's bearer token
-	ConfirmationSecret []byte       // CONFIRMATION_HMAC_SECRET: verifies write confirmations
-	Logger             *slog.Logger // nil means slog.Default()
+	JWTSecret          []byte       // JWT_SECRET: проверяет bearer-токен вызывающего
+	ConfirmationSecret []byte       // CONFIRMATION_HMAC_SECRET: проверяет подтверждения записи
+	Logger             *slog.Logger // nil означает slog.Default()
 }
 
-// Server is one mock MCP server (absence, approvals, access, checklist, directory, kb).
+// Server — один мок-сервер MCP (absence, approvals, access, checklist, directory, kb).
 type Server struct {
 	name     string
 	cfg      Config
 	log      *slog.Logger
-	order    []string // tool names in contract order
+	order    []string // имена инструментов в порядке контракта
 	tools    map[string]*tool
 	handlers map[string]HandlerFunc
 	errs     []error
 }
 
-// NewServer returns a server whose tools are defined by contracts/schemas/<name>.json. It fails when the schema
-// is missing or invalid. Bind every tool with Handle, then call Handler (or Mount).
+// NewServer возвращает сервер, инструменты которого определены в contracts/schemas/<name>.json. Падает, если схемы нет
+// или она некорректна. Привяжите каждый инструмент через Handle, затем вызовите Handler (или Mount).
 func NewServer(name string, cfg Config) (*Server, error) {
 	defs, err := LoadTools(name)
 	if err != nil {
@@ -98,10 +100,10 @@ func newServer(name string, defs []ToolDef, cfg Config) (*Server, error) {
 	return s, nil
 }
 
-// Name returns the server name; it is served at /mcp/<name>.
+// Name возвращает имя сервера; он обслуживается по /mcp/<name>.
 func (s *Server) Name() string { return s.name }
 
-// Tools returns the tool definitions in contract order.
+// Tools возвращает определения инструментов в порядке контракта.
 func (s *Server) Tools() []ToolDef {
 	out := make([]ToolDef, 0, len(s.order))
 	for _, n := range s.order {
@@ -110,7 +112,8 @@ func (s *Server) Tools() []ToolDef {
 	return out
 }
 
-// Handle binds h to the tool called name. Unknown names, duplicates and nil handlers are reported by Validate.
+// Handle привязывает h к инструменту с именем name. О неизвестных именах, дубликатах и nil-обработчиках сообщает
+// Validate.
 func (s *Server) Handle(name string, h HandlerFunc) {
 	switch {
 	case s.tools[name] == nil:
@@ -124,8 +127,8 @@ func (s *Server) Handle(name string, h HandlerFunc) {
 	}
 }
 
-// Validate reports every registration problem: unknown or duplicate tools, contract tools without a handler,
-// missing secrets. Handler calls it, so a misconfigured server fails at startup.
+// Validate сообщает обо всех проблемах регистрации: неизвестные или повторные инструменты, инструменты контракта без
+// обработчика, отсутствующие секреты. Handler вызывает его, поэтому неправильно настроенный сервер падает при старте.
 func (s *Server) Validate() error {
 	errs := slices.Clone(s.errs)
 	for _, n := range s.order {
@@ -142,8 +145,9 @@ func (s *Server) Validate() error {
 	return errors.Join(errs...)
 }
 
-// Invoke runs tool for c through the same checks as an MCP tools/call (role, schema, confirmation, handler,
-// output schema) without HTTP. It returns the structured result or a tool error; mock servers use it in tests.
+// Invoke выполняет tool для c через те же проверки, что и MCP tools/call (роль, схема, подтверждение, обработчик,
+// выходная схема), без HTTP. Возвращает структурированный результат или ошибку инструмента; мок-серверы используют его
+// в тестах.
 func (s *Server) Invoke(ctx context.Context, c Caller, name string, args any) (json.RawMessage, *apierr.Error) {
 	raw, err := json.Marshal(args)
 	if err != nil {
@@ -161,7 +165,7 @@ func (s *Server) run(ctx context.Context, c Caller, t *tool, raw json.RawMessage
 		return nil, apierr.Forbidden()
 	}
 	if t.def.Write && !hasConfirmationFields(raw) {
-		// The rights matrix wants invalid_confirmation (not validation_error) for a write without a token.
+		// Матрица прав требует invalid_confirmation (а не validation_error) для записи без токена.
 		return nil, apierr.InvalidConfirmation()
 	}
 	args, aerr := s.checkArgs(t, raw)
@@ -197,7 +201,7 @@ func (s *Server) run(ctx context.Context, c Caller, t *tool, raw json.RawMessage
 	return result, nil
 }
 
-// checkArgs decodes the arguments, applies schema defaults and validates them.
+// checkArgs декодирует аргументы, применяет значения по умолчанию из схемы и проверяет их.
 func (s *Server) checkArgs(t *tool, raw json.RawMessage) (map[string]any, *apierr.Error) {
 	args := map[string]any{}
 	if len(bytes.TrimSpace(raw)) > 0 && !bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
@@ -217,8 +221,7 @@ func (s *Server) checkArgs(t *tool, raw json.RawMessage) (map[string]any, *apier
 	return args, nil
 }
 
-// hasConfirmationFields reports whether raw is an object with non-empty string confirmation_token and
-// idempotency_key.
+// hasConfirmationFields сообщает, является ли raw объектом с непустыми строками confirmation_token и idempotency_key.
 func hasConfirmationFields(raw json.RawMessage) bool {
 	var f struct {
 		Token *string `json:"confirmation_token"`
@@ -230,7 +233,7 @@ func hasConfirmationFields(raw json.RawMessage) bool {
 	return f.Token != nil && *f.Token != "" && f.Key != nil && *f.Key != ""
 }
 
-// call runs the handler, turning a panic into an error.
+// call запускает обработчик и превращает панику в ошибку.
 func (s *Server) call(ctx context.Context, c Caller, t *tool, args json.RawMessage) (out any, err error) {
 	defer func() {
 		if v := recover(); v != nil {
@@ -269,7 +272,7 @@ func truncate(b []byte) string {
 	return string(b)
 }
 
-// DecodeArgs unmarshals validated tool arguments into dst; a failure is a validation_error.
+// DecodeArgs разбирает проверенные аргументы инструмента в dst; сбой — validation_error.
 func DecodeArgs(args json.RawMessage, dst any) error {
 	if err := json.Unmarshal(args, dst); err != nil {
 		return apierr.Validation().WithMessage("Некорректные аргументы инструмента: " + err.Error())
@@ -277,9 +280,9 @@ func DecodeArgs(args json.RawMessage, dst any) error {
 	return nil
 }
 
-// WithConfirmation returns a copy of args with idempotency_key = key and a confirmation_token signed for sub,
-// key and the hash of args (core uses it for approvals.decide and kb.add_faq, where the button press is the
-// confirmation; tests use it for write tools).
+// WithConfirmation возвращает копию args с idempotency_key = key и confirmation_token, подписанным на sub, key и хеш
+// args (ядро использует его для approvals.decide и kb.add_faq, где подтверждением служит нажатие кнопки; тесты — для
+// инструментов записи).
 func WithConfirmation(secret []byte, sub, key string, args map[string]any, ttl time.Duration) (map[string]any, error) {
 	hash, err := confirm.ArgsHash(args)
 	if err != nil {

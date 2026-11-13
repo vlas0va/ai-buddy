@@ -1,5 +1,5 @@
-// Package directory implements the mock "directory" MCP server: who the caller is and whom to ask (S2, CL-02, CL-03).
-// Data is synthetic (R68). Identity comes only from the verified JWT (R71).
+// Пакет directory реализует мок-сервер MCP «directory»: кто вызывающий и к кому обращаться (S2, CL-02, CL-03). Данные
+// синтетические (R68). Личность берётся только из проверенного JWT (R71).
 package directory
 
 import (
@@ -17,7 +17,7 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// askAbout holds the fixed Russian topics to raise with each kind of contact.
+// askAbout хранит фиксированные русские темы, с которыми идут к каждому виду контакта.
 var askAbout = map[string][]string{
 	"mentor":  {"задачи и код-ревью", "доступы и инструменты команды", "план адаптации"},
 	"lead":    {"отгул и отсутствия", "цели стажировки"},
@@ -25,12 +25,12 @@ var askAbout = map[string][]string{
 	"curator": {"методичка наставника", "экватор и выпускной", "документы для вуза"},
 }
 
-// Register binds every tool of the directory contract to srv.
+// Register привязывает каждый инструмент контракта directory к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error {
 	return register(srv, pool, time.Now)
 }
 
-// register is Register with an injectable clock (tests).
+// register — это Register с подменяемыми часами (для тестов).
 func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error {
 	if srv == nil || pool == nil {
 		return errors.New("directory: server and pool are required")

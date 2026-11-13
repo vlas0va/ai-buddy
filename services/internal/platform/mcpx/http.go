@@ -14,18 +14,18 @@ import (
 	"aibuddy/services/internal/platform/authn"
 )
 
-// PathPrefix is where Mount serves the servers: /mcp/<name>.
+// PathPrefix — где Mount обслуживает серверы: /mcp/<name>.
 const PathPrefix = "/mcp/"
 
-// MaxRequestBody limits one MCP HTTP request body (1 MiB).
+// MaxRequestBody ограничивает тело одного HTTP-запроса MCP (1 МиБ).
 const MaxRequestBody = 1 << 20
 
 const (
-	callerKey = "mcpx.caller" // key in auth.TokenInfo.Extra
+	callerKey = "mcpx.caller" // ключ в auth.TokenInfo.Extra
 	version   = "0.1.0"
 )
 
-// Mount validates every server and serves it at PathPrefix+name on mux. It fails on the first invalid server.
+// Mount проверяет каждый сервер и обслуживает его по PathPrefix+name на mux. Падает на первом некорректном сервере.
 func Mount(mux *http.ServeMux, servers ...*Server) error {
 	for _, s := range servers {
 		h, err := s.Handler()
@@ -37,16 +37,16 @@ func Mount(mux *http.ServeMux, servers ...*Server) error {
 	return nil
 }
 
-// Handler validates the server (see Validate) and returns its HTTP handler: JWT verification, then the go-sdk
-// streamable HTTP handler in stateless mode with JSON responses (no session id, no SSE). Missing or invalid JWTs
-// get 401 with `WWW-Authenticate: Bearer` and a JSON-RPC error body whose data is the apierr JSON.
+// Handler проверяет сервер (см. Validate) и возвращает его HTTP-обработчик: проверка JWT, затем streamable
+// HTTP-обработчик go-sdk в режиме без состояния с JSON-ответами (без id сессии, без SSE). Отсутствующий или
+// некорректный JWT получает 401 с `WWW-Authenticate: Bearer` и телом ошибки JSON-RPC, в data которого JSON apierr.
 func (s *Server) Handler() (http.Handler, error) {
 	if err := s.Validate(); err != nil {
 		return nil, err
 	}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "aibuddy-" + s.name, Version: version}, &mcp.ServerOptions{
 		HasTools:     true,
-		GetSessionID: func() string { return "" }, // stateless: no Mcp-Session-Id
+		GetSessionID: func() string { return "" }, // без состояния: без Mcp-Session-Id
 	})
 	for _, n := range s.order {
 		t := s.tools[n]
@@ -59,8 +59,8 @@ func (s *Server) Handler() (http.Handler, error) {
 	srv.AddReceivingMiddleware(s.filterToolList)
 	streamable := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv },
 		&mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
-	// RequireBearerToken is how the go-sdk carries identity: the TokenInfo it puts into the request context is
-	// copied by the streamable transport into CallToolRequest.Extra.TokenInfo for every JSON-RPC message.
+	// RequireBearerToken — так go-sdk переносит личность: TokenInfo, который он кладёт в контекст запроса,
+	// streamable-транспорт копирует в CallToolRequest.Extra.TokenInfo для каждого сообщения JSON-RPC.
 	withTokenInfo := auth.RequireBearerToken(tokenInfo, nil)(streamable)
 	verifier := authn.NewVerifier(s.cfg.JWTSecret)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +81,7 @@ func (s *Server) Handler() (http.Handler, error) {
 	}), nil
 }
 
-// tokenInfo is the auth.TokenVerifier: the JWT was already verified, so it only wraps the caller.
+// tokenInfo — это auth.TokenVerifier: JWT уже проверен, поэтому он только оборачивает вызывающего.
 func tokenInfo(ctx context.Context, _ string, _ *http.Request) (*auth.TokenInfo, error) {
 	c, ok := callerFromContext(ctx)
 	if !ok {
@@ -102,8 +102,8 @@ func callerFromContext(ctx context.Context) (Caller, bool) {
 	return Caller{Claims: claims, Token: token}, true
 }
 
-// CallerFrom returns the caller of an MCP request: from req.Extra.TokenInfo (set by Handler) or, failing that,
-// from the context. Tool handlers receive the Caller directly; this is for custom go-sdk handlers and tests.
+// CallerFrom возвращает вызывающего MCP-запроса: из req.Extra.TokenInfo (ставит Handler), а если его нет — из
+// контекста. Обработчики инструментов получают Caller напрямую; это для собственных обработчиков go-sdk и тестов.
 func CallerFrom(ctx context.Context, req mcp.Request) (Caller, bool) {
 	if req != nil {
 		if extra := req.GetExtra(); extra != nil && extra.TokenInfo != nil {
@@ -133,7 +133,7 @@ func (s *Server) toolHandler(t *tool) mcp.ToolHandler {
 }
 
 func errorResult(e *apierr.Error) *mcp.CallToolResult {
-	body, _ := json.Marshal(e) // strings and a bool: cannot fail
+	body, _ := json.Marshal(e) // строки и bool: ошибки быть не может
 	return &mcp.CallToolResult{
 		IsError:           true,
 		StructuredContent: json.RawMessage(body),
@@ -141,7 +141,8 @@ func errorResult(e *apierr.Error) *mcp.CallToolResult {
 	}
 }
 
-// filterToolList hides from tools/list the tools the caller's role may not call (direct calls get forbidden).
+// filterToolList скрывает из tools/list инструменты, которые роли вызывающего вызывать нельзя (прямые вызовы получают
+// forbidden).
 func (s *Server) filterToolList(next mcp.MethodHandler) mcp.MethodHandler {
 	return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 		res, err := next(ctx, method, req)
@@ -162,7 +163,7 @@ func (s *Server) filterToolList(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
-// rpcErrUnauthorized is the JSON-RPC server error code sent with HTTP 401.
+// rpcErrUnauthorized — серверный код ошибки JSON-RPC, отправляемый с HTTP 401.
 const rpcErrUnauthorized = -32001
 
 func writeUnauthorized(w http.ResponseWriter) {

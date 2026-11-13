@@ -32,11 +32,11 @@ describe('Feedback 12.11 / 12.13: a pop-up calendar for absence dates', () => {
     const send = screen.getByRole('button', { name: 'Выбрать даты' })
     expect(send).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: /Выбери даты/ }))
-    expect(screen.getByRole('button', { name: '12 ноября 2026' })).toBeDisabled() // before min
+    expect(screen.getByRole('button', { name: '12 ноября 2026' })).toBeDisabled() // раньше min
     expect(screen.getByRole('button', { name: '20 ноября 2026, занято: Отгул ABS-000100' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: '16 ноября 2026' }))
     await userEvent.click(screen.getByRole('button', { name: '17 ноября 2026' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // closed once the range is complete
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument() // закрывается, как только диапазон выбран
     await userEvent.click(send)
     expect(onPick).toHaveBeenCalledWith('с 16.11.2026 по 17.11.2026')
     expect(screen.getByText(/Даты отправлены/)).toBeInTheDocument()
@@ -92,7 +92,7 @@ describe('Feedback 12.11: «Спросить buddy» on an action task asks abou
     expect(askText({ source: 'action', title: 'Отгул 13.11.2026' })).toBe('Что с моей заявкой «Отгул 13.11.2026»?')
     expect(askText({ source: 'action', title: 'Доступ: Jira' })).toBe('Какие доступы мне нужны?')
     expect(askText({ source: 'checklist', title: 'Познакомься с командой' })).toBe('Как выполнить задачу «Познакомься с командой»?')
-    // organizers 12.11: the access task of the checklist leads straight to the request
+    // организаторы 12.11: задача чек-листа про доступ ведёт прямо к заявке
     expect(askText({ source: 'checklist', title: 'Запроси доступ', checklist_item_id: 'CL-05' })).toBe('Какие доступы мне нужны?')
     expect(askLabel({ source: 'checklist', checklist_item_id: 'CL-05' })).toBe('Подать заявку')
     expect(askLabel({ source: 'checklist', checklist_item_id: 'CL-03' })).toBe('Спросить buddy')

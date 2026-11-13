@@ -19,7 +19,7 @@ func draftArgs() map[string]any {
 	return map[string]any{"type": "day_off", "start_date": "2026-11-14", "end_date": "2026-11-14", "comment": "Семейные дела"}
 }
 
-// Token computed by Python (json.dumps sort_keys + hmac); Go must produce and accept the same bytes.
+// Токен посчитан на Python (json.dumps sort_keys + hmac); Go должен выдавать и принимать те же байты.
 func TestIssueVerify_PythonVector_R71(t *testing.T) {
 	const wantHash = "5996ac754fae79b3bd1cc70069bd91d1e99f3b4e9aef2afa817b27b473f9dbf0"
 	const wantToken = "eyJhcmdzX2hhc2giOiI1OTk2YWM3NTRmYWU3OWIzYmQxY2M3MDA2OWJkOTFkMWU5OWYzYjRlOWFlZjJhZmE4MTdiMjdiNDczZjlkYmYwIiwiZXhwIjo0MTAyNDQ0ODAwLCJrZXkiOiI2ZjFjMmI5ZS0zZDRhLTRiNWMtOGQ3ZS0wZjFhMmIzYzRkNWUiLCJzdWIiOiJpbnRlcm4uYW5uYSJ9" +
@@ -36,7 +36,7 @@ func TestIssueVerify_PythonVector_R71(t *testing.T) {
 	if tok != wantToken {
 		t.Fatalf("token differs from Python\n got %s\nwant %s", tok, wantToken)
 	}
-	// The MCP server receives the args plus idempotency_key and confirmation_token.
+	// MCP-сервер получает args плюс idempotency_key и confirmation_token.
 	received := json.RawMessage(`{"comment":"Семейные дела","confirmation_token":"` + wantToken + `","end_date":"2026-11-14",` +
 		`"idempotency_key":"` + proposalID + `","start_date":"2026-11-14","type":"day_off"}`)
 	if err := Verify(py, wantToken, "intern.anna", proposalID, received, time.Date(2026, 11, 9, 0, 0, 0, 0, time.UTC)); err != nil {

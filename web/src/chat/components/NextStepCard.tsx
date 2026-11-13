@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import type { NextStep } from '../events'
 
-/** «Следующий шаг» from the `next_step` event (S1): the button sends the suggested message as a new turn. */
+/** «Следующий шаг» из события `next_step` (S1): кнопка отправляет предложенное сообщение новым ходом. */
 export function NextStepCard({ step, disabled, onAsk }: { step: NextStep; disabled: boolean; onAsk: (text: string) => void }) {
   return (
     <Card className="chat-card next-step" aria-label="Следующий шаг">

@@ -8,8 +8,8 @@ import { RangeCalendar } from './RangeCalendar'
 const ru = (iso: string) => iso.split('-').reverse().join('.')
 
 /**
- * Feedback 12.11 / 12.13: pick the absence dates in a small pop-up calendar (first day, then last day); the choice is
- * sent as an ordinary message («с … по …» or «перенеси заявку ABS-… на …»).
+ * Отзыв 12.11 / 12.13: даты отсутствия выбираются в маленьком всплывающем календаре (первый день, затем последний);
+ * выбор отправляется обычным сообщением («с … по …» или «перенеси заявку ABS-… на …»).
  */
 export function DatePickerCard({ picker, disabled, onPick }: { picker: DatePicker; disabled?: boolean; onPick: (text: string) => void }) {
   const [start, setStart] = useState('')
@@ -63,7 +63,7 @@ export function DatePickerCard({ picker, disabled, onPick }: { picker: DatePicke
               onChange={(s, e) => {
                 setStart(s)
                 setEnd(e)
-                if (e) setOpen(false) // the range is complete
+                if (e) setOpen(false) // диапазон выбран полностью
               }}
             />
             {start && !end && (

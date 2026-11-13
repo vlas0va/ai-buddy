@@ -1,4 +1,4 @@
-// Command core is the AI-buddy core API (owner B). Wiring lives in services/internal/core/app.
+// Команда core — API ядра AI-buddy (владелец B). Сборка зависимостей — в services/internal/core/app.
 package main
 
 import (

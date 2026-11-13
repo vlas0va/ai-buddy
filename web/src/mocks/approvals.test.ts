@@ -26,8 +26,8 @@ describe('mock approvals (S3 step 8)', () => {
 
   it('approved access becomes granted; other team lead gets forbidden; decisions survive serialize/parse', () => {
     const action = seedRequest('intern.anna', 'какие доступы')
-    expect(action.status).toBe('granted') // Jira is not elevated
-    const space = seedRequest('intern.anna', 'какие доступы') // second ask: the team space is elevated
+    expect(action.status).toBe('granted') // Jira — не повышенные права
+    const space = seedRequest('intern.anna', 'какие доступы') // второй запрос: пространство команды — повышенные права
     expect(space.status).toBe('pending_approval')
     const lead = userByLogin('lead.maria')
     expect(decideApproval({ ...lead, team_id: 'search' }, space.id, 'approved', 'k5')).toBe('forbidden')

@@ -1,4 +1,4 @@
-// Screenshots for the «Командировки и согласия» and «Файлы и поиск» slides. Needs the stack on :5173 (stub LLM).
+// Скриншоты для слайдов «Командировки и согласия» и «Файлы и поиск». Нужен стек на :5173 (stub-LLM).
 const { chromium } = require('playwright');
 const OUT = __dirname + '/img/';
 const W = process.env.WEB_URL || 'http://127.0.0.1:5173';

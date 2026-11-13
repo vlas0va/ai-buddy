@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate migrations/0003_seed_demo.sql from data/checklist/checklist.yaml + demo accounts.
+"""Генерирует migrations/0003_seed_demo.sql из data/checklist/checklist.yaml + демо-учётных записей.
 
-Run after editing the checklist:  python3 scripts/gen_seed.py   (needs: pip install pyyaml)
-All people below are fictional (R68). Passwords are "demo" for local use only (R34).
+Запускать после правки чек-листа:  python3 scripts/gen_seed.py   (нужно: pip install pyyaml)
+Все люди ниже вымышленные (R68). Пароли «demo» — только для локального использования (R34).
 """
 import json
 import pathlib
@@ -15,7 +15,7 @@ OUT = ROOT / "migrations" / "0003_seed_demo.sql"
 
 TEAMS = [("delivery", "Доставка"), ("search", "Поиск"), ("people", "HR и стажировки")]
 
-# id, display_name, role, team, cohort_offset_days (None = no cohort), mentor, lead, can_login, channel
+# id, display_name, role, team, cohort_offset_days (None — без когорты), mentor, lead, can_login, channel
 PEOPLE = [
     ("hrbp.elena", "Елена Соколова", "hrbp", "people", None, None, None, True, "#hr-questions"),
     ("curator.irina", "Ирина Зайцева", "curator", "people", None, None, None, False, "#interns-2026"),
@@ -28,7 +28,7 @@ PEOPLE = [
     ("alumni.petr", "Пётр Никитин", "alumni", "delivery", 200, "mentor.oleg", "lead.maria", True, "#delivery-team"),
 ]
 
-# id, name, kind, team (None = all), elevated, purpose, checklist item
+# id, name, kind, team (None — все), elevated, purpose, пункт чек-листа
 RESOURCES = [
     ("confluence", "Confluence", "tool", None, False, "Вики и документация", "CL-01"),
     ("jira", "Jira", "tool", None, False, "Задачи и доски команды", "CL-01"),
@@ -44,7 +44,7 @@ RESOURCES = [
 
 PERIOD_DUE_DAYS = {"week_1": 7, "week_2": 14, "month_1": 30, "month_2": 60, "after_3_months": 100}
 
-# Demo progress so the plan looks alive (anna is in week 2, oleg is her mentor).
+# Демо-прогресс, чтобы план выглядел живым (anna на второй неделе, oleg — её наставник).
 STATUS = {
     ("intern.anna", "CL-03"): "done",
     ("intern.anna", "CL-04"): "in_progress",
@@ -80,7 +80,7 @@ def main():
         ",\n".join(f"    ({q(t)}, {q(n)})" for t, n in TEAMS) + ";",
         "",
     ]
-    # employees without references first, then set references (self-references)
+    # сначала сотрудники без ссылок, затем проставляем ссылки (ссылки на самих себя)
     lines.append("INSERT INTO directory.employees (id, display_name, role, team_id, cohort_start, channel) VALUES")
     rows = []
     for pid, name, role, team, offset, _m, _l, _login, channel in PEOPLE:
@@ -123,7 +123,7 @@ def main():
         f"    ({q(r[0])}, {q(r[1])}, {q(r[2])}, {q(r[3])}, {q(r[4])}, {q(r[5])}, {q(r[6])})" for r in RESOURCES) + ";")
     lines.append("")
 
-    # Plans: interns get intern items, mentors get mentor items of their intern ("both" goes to both).
+    # Планы: стажёры получают пункты стажёра, наставники — пункты наставника своего стажёра («both» идёт обоим).
     lines += [
         "INSERT INTO core.plans (user_id, plan_role, intern_id)",
         "SELECT e.id, 'intern', e.id FROM directory.employees e WHERE e.role = 'intern'",

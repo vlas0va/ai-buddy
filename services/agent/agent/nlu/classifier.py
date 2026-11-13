@@ -1,7 +1,8 @@
-"""Intent classifier: multinomial logistic regression (softmax) on stemmed words and char n-grams (ADR-008).
+"""Классификатор намерений: мультиномиальная логистическая регрессия (softmax) на основах слов и символьных n-граммах
+(ADR-008).
 
-Pure Python, deterministic (fixed seed), trains in seconds (`python -m training.train_intents`); the model is a JSON file
-in the repo. A naive Bayes baseline is kept for comparison in the training report.
+Чистый Python, детерминирован (фиксированный seed), обучается за секунды (`python -m training.train_intents`); модель —
+JSON-файл в репозитории. Наивный байесовский базовый вариант оставлен для сравнения в отчёте об обучении.
 """
 
 from __future__ import annotations
@@ -111,7 +112,7 @@ def _softmax(scores: dict[str, float]) -> dict[str, float]:
 
 
 class NaiveBayesBaseline:
-    """Multinomial NB on the same features — baseline for the training report only."""
+    """Мультиномиальный NB на тех же признаках — базовый вариант только для отчёта об обучении."""
 
     def __init__(self, samples: list[tuple[str, str]], alpha: float = 0.1) -> None:
         by: dict[str, Counter[str]] = defaultdict(Counter)

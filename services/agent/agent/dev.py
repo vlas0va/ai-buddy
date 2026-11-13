@@ -1,7 +1,8 @@
-"""Dev-only endpoints (AGENT_DEV_MODE=true): a console to demo/test the agent before core and web are ready.
+"""Эндпоинты только для разработки (AGENT_DEV_MODE=true): консоль, чтобы показать и проверить агента до готовности ядра и
+веба.
 
-They imitate what core does: login of test accounts (mock IdP), building user_context with the plan, and minting the
-confirmation token on «Отправить». Never enabled in compose profiles used by the jury.
+Они имитируют то, что делает ядро: вход тестовых учётных записей (мок-IdP), сборку user_context с планом и выпуск токена
+подтверждения по «Отправить». Никогда не включаются в профилях compose, которыми пользуется жюри.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from .errors import BadRequest, Unauthorized
 from .orchestrator import Agent
 from .tools.inprocess import current_period
 
-PERIOD_DUE = {"week_1": 7, "week_2": 14, "month_1": 30, "month_2": 60, "after_3_months": 100}  # as in B's seed
+PERIOD_DUE = {"week_1": 7, "week_2": 14, "month_1": 30, "month_2": 60, "after_3_months": 100}  # как в демо-данных B
 
 
 def _plan(agent: Agent, user_id: str, e: dict[str, Any], overrides: dict[str, str]) -> list[dict[str, Any]]:
@@ -57,7 +58,7 @@ def register_dev(app: Flask, agent: Agent, settings: Settings) -> None:
     html = (Path(__file__).parent / "static" / "dev.html").read_text(encoding="utf-8")
 
     def _context(user_id: str) -> dict[str, Any]:
-        """What core sends as user_context (contracts/agent-stream.md) + the full plan and mentees for the console."""
+        """То, что ядро отправляет как user_context (contracts/agent-stream.md), + полный план и подопечные для консоли."""
         assert agent.mocks is not None
         e = agent.mocks.employees[user_id]
         ctx: dict[str, Any] = {
@@ -132,7 +133,7 @@ def register_dev(app: Flask, agent: Agent, settings: Settings) -> None:
 
     @app.post("/dev/confirm")
     def dev_confirm() -> Response:
-        """What core does in POST /api/actions/proposals/{id}/confirm."""
+        """То, что делает ядро в POST /api/actions/proposals/{id}/confirm."""
         claims = decode_token(settings.jwt_secret, bearer(request.headers))
         proposal = (request.get_json(silent=True) or {}).get("proposal") or {}
         draft = proposal.get("draft") or {}

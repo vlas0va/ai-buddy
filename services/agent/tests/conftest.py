@@ -1,4 +1,4 @@
-"""Shared fixtures. Test names carry OpenSpec scenario IDs (S1-xx, S2-xx, S3-xx, S4-xx, AG-xx, RG-xx, TR-xx)."""
+"""Общие фикстуры. Имена тестов содержат ID сценариев OpenSpec (S1-xx, S2-xx, S3-xx, S4-xx, AG-xx, RG-xx, TR-xx)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from agent.config import Settings, load_agent_config  # noqa: E402
 from agent.orchestrator import build_agent  # noqa: E402
 from agent.sse import Event, parse_stream  # noqa: E402
 
-TODAY = date(2026, 11, 9)  # Monday
+TODAY = date(2026, 11, 9)  # понедельник
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +42,7 @@ def make_settings(**kw: Any) -> Settings:
 
 
 class Client:
-    """Thin helper over the Flask test client that speaks contracts/agent-stream.md."""
+    """Тонкий помощник поверх тестового клиента Flask, говорящий по contracts/agent-stream.md."""
 
     def __init__(self, app):  # noqa: ANN001
         self.app = app

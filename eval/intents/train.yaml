@@ -1,5 +1,5 @@
-# Training set for the NB intent classifier (ADR-008). Synthetic, written by the team.
-# Retrain: make -C services/agent train   (writes agent/models/intent_nb.json and eval/reports/intents.md)
+# Обучающий набор для классификатора намерений NB (ADR-008). Синтетический, написан командой.
+# Переобучить: make -C services/agent train   (пишет agent/models/intent_nb.json и eval/reports/intents.md)
 absence:
 - хочу взять отгул в пятницу
 - можно мне выходной завтра

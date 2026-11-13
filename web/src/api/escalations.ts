@@ -4,7 +4,7 @@ import { escalationSchema } from './schemas'
 
 export type Escalation = z.infer<typeof escalationSchema>
 
-/** Questions sent by the caller (intern) or addressed to the caller (mentor, lead, HR BP). */
+/** Вопросы, отправленные вызывающим (стажёр) или адресованные вызывающему (наставник, руководитель, HR BP). */
 export function listEscalations() {
   return apiRequest('/api/escalations', z.array(escalationSchema))
 }
@@ -19,12 +19,12 @@ export const queueGroupSchema = z.object({
 })
 export type QueueGroup = z.infer<typeof queueGroupSchema>
 
-/** Organizers 13.11: the question stack of the caller — open questions to the caller, similar ones grouped. */
+/** Организаторы 13.11: список вопросов вызывающего — открытые вопросы к нему, похожие сгруппированы. */
 export function listQueue() {
   return apiRequest('/api/escalations/queue', z.array(queueGroupSchema))
 }
 
-/** kbScope (feedback 12.13): «team» — interns of the mentor's team; «all» — a general answer for every team. */
+/** kbScope (отзыв 12.13): «team» — стажёрам команды наставника; «all» — общий ответ для всех команд. */
 export function answerEscalation(id: string, text: string, addToKb: boolean, kbScope: 'team' | 'all' = 'team', alsoIds: string[] = []) {
   const also = alsoIds.length > 0 ? { also_ids: alsoIds } : {}
   return apiRequest(`/api/escalations/${encodeURIComponent(id)}/answer`, escalationSchema, {

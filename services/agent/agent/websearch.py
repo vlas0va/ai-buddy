@@ -1,9 +1,10 @@
-"""Web search for general technical questions the knowledge base does not cover (git, Docker, SQL, Python …).
+"""Веб-поиск по общим техническим вопросам, которых нет в базе знаний (git, Docker, SQL, Python …).
 
-Providers (agent.yaml `web_search`): `off`; `curated` (default, no network: a short list of public documentation pages
-in fixtures/web_curated.yaml); `searxng` (live internet search through a SearXNG instance, `WEB_SEARCH_URL`).
-Only the masked question leaves the agent: secrets are removed and nothing about the user is sent. Results are external
-sources (`source_type: external`), never presented as Avito rules. Spec: openspec/specs/attachments-websearch (WS-xx).
+Провайдеры (`web_search` в agent.yaml): `off`; `curated` (по умолчанию, без сети: короткий список страниц публичной
+документации в fixtures/web_curated.yaml); `searxng` (живой поиск в интернете через экземпляр SearXNG,
+`WEB_SEARCH_URL`). Из агента уходит только замаскированный вопрос: секреты удалены, ничего о пользователе не
+отправляется. Результаты — внешние источники (`source_type: external`), никогда не выдаются за правила Авито.
+Спецификация: openspec/specs/attachments-websearch (WS-xx).
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ class WebResult:
 
 
 def is_general_tech(question: str) -> bool:
-    """A general engineering question (not about Avito, the team or HR) that public documentation can answer."""
+    """Общий инженерный вопрос (не про Авито, команду или HR), на который может ответить публичная документация."""
     t = normalize(question)
     return bool(TECH.search(t)) and not COMPANY.search(t)
 

@@ -25,7 +25,7 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
       { label: 'Документы', value: Array.isArray(display?.documents) ? display.documents.map(str).join(', ') : '' },
       { label: 'Согласующий', value: str(display?.approver_display_name) },
       { label: 'Затем', value: 'HR-администратор' },
-      { label: 'Заменяет', value: str(display?.replaces) }, // feedback 12.13: a pending request inside the new dates
+      { label: 'Заменяет', value: str(display?.replaces) }, // отзыв 12.13: несогласованная заявка внутри новых дат
     ]
   }
   if (p.kind === 'absence_cancel') {
@@ -67,7 +67,7 @@ function proposalRows(p: Proposal): { label: string; value: string }[] {
       { label: 'Решение', value: str(display?.decision_label) },
     ]
   }
-  // checkpoint 11.11: a concrete resource, the environment, the rights and who approves
+  // чекпоинт 11.11: конкретный ресурс, окружение, права и кто согласует
   return [
     { label: 'Ресурс', value: str(display?.resource_name) || str(args.resource_id) },
     { label: 'Окружение', value: str(args.environment) },
@@ -111,7 +111,7 @@ export function ActionProposalCard({ proposal, disabled, onConfirm, onCancel }: 
           </div>
         ))}
       </dl>
-      {/* Rita 13.13: «Отменить» on a cancellation card read as «cancel the request» — the labels name the outcome */}
+      {/* Рита 13.11: «Отменить» на карточке отмены читалось как «отменить заявку» — подписи называют итог */}
       {state === 'cancelled' && (
         <p className="hint">{withdraw ? 'Заявка осталась как была — отмена не отправлена.' : 'Черновик закрыт, ничего не отправлено.'}</p>
       )}

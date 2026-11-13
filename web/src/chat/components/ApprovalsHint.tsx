@@ -4,8 +4,8 @@ import { listApprovals } from '@/api/approvals'
 import { keys } from '@/api/keys'
 
 /**
- * QA 12.11: «Мои заявки» are the user's own requests (a lead takes days off too); the requests of the team that wait
- * for the user's decision are in «Согласования» — the chat says so, so an empty «Мои заявки» does not look wrong.
+ * QA 12.11: «Мои заявки» — собственные заявки пользователя (руководитель тоже берёт отгулы); заявки команды, ждущие
+ * решения пользователя, — в «Согласованиях»; чат об этом говорит, чтобы пустые «Мои заявки» не выглядели ошибкой.
  */
 export function ApprovalsHint() {
   const pending = useQuery({ queryKey: keys.approvals, queryFn: listApprovals, refetchOnWindowFocus: true })

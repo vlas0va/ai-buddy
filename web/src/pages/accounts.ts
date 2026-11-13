@@ -1,4 +1,4 @@
-// Synthetic test accounts, docs/context/product.md. Passwords are for the local prototype only.
+// Синтетические тестовые учётные записи, docs/context/product.md. Пароли только для локального прототипа.
 export const TEST_ACCOUNTS = [
   { login: 'intern.anna', label: 'Стажёр, команда «Доставка»' },
   { login: 'intern.ivan', label: 'Стажёр, команда «Поиск»' },

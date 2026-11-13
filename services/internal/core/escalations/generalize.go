@@ -7,8 +7,8 @@ import (
 	"unicode"
 )
 
-// A mentor's answer added to the knowledge base must be valid for every intern (checkpoint 11.11): the question and the
-// answer lose greetings, names of people and concrete dates before kb.add_faq.
+// Ответ наставника, добавленный в базу знаний, должен подходить любому стажёру (чекпоинт 11.11): из вопроса и ответа
+// перед kb.add_faq убираются приветствия, имена людей и конкретные даты.
 
 const anyDay = "в нужный день"
 
@@ -25,7 +25,8 @@ var (
 		regexp.MustCompile(`(?i)(?:^|[^\p{L}])(?:` + prep + `(?:сегодня|завтра|послезавтра|вчера)|(?:в|во|на|до|к)\s+` + weekdays +
 			`|на\s+(?:этой|следующей|прошлой)\s+неделе)(?:[^\p{L}]|$)`),
 	}
-	// the wrapper of buddy's draft to the mentor (feedback 12.13): «Подскажи, пожалуйста: … В базе знаний команды ответа не нашёл.»
+	// обёртка черновика buddy наставнику (отзыв 12.13): «Подскажи, пожалуйста: … В базе знаний команды ответа не
+	// нашёл.»
 	draftRe = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^\s*(подскажи(те)?|можешь\s+подсказать)[\s,]*(пожалуйста)?[\s,:—-]*`),
 		regexp.MustCompile(`(?i)\s*в\s+базе\s+знаний(\s+команды)?\s+ответа\s+не\s+нашёл\.?\s*$`),
@@ -36,12 +37,12 @@ var (
 	leadingRe  = regexp.MustCompile(`^[\s,.!:;—-]+`)
 )
 
-// generalize removes greetings, names (full name, first name or surname with Russian endings) and dates from a text.
+// generalize убирает из текста приветствия, имена (полное имя, имя или фамилию с русскими окончаниями) и даты.
 func generalize(text string, names []string) string {
 	out := strings.TrimSpace(text)
 	for _, rx := range nameRes(names) {
 		out = rx.ReplaceAllStringFunc(out, func(m string) string {
-			// keep the character before the name that the pattern consumed
+			// сохранить символ перед именем, который поглотил шаблон
 			if r := []rune(m); len(r) > 0 && !isLetter(r[0]) {
 				return string(r[0])
 			}
@@ -76,7 +77,7 @@ func generalize(text string, names []string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-// nameRes builds one pattern per name word (≥ 3 letters, capitalised): the stem without its last vowel plus an ending.
+// nameRes строит по шаблону на каждое слово имени (≥ 3 букв, с заглавной): основа без последней гласной плюс окончание.
 func nameRes(names []string) []*regexp.Regexp {
 	seen := map[string]bool{}
 	var words []string
@@ -88,7 +89,7 @@ func nameRes(names []string) []*regexp.Regexp {
 			}
 		}
 	}
-	sort.Slice(words, func(i, j int) bool { return len(words[i]) > len(words[j]) }) // longer names first
+	sort.Slice(words, func(i, j int) bool { return len(words[i]) > len(words[j]) }) // сначала более длинные имена
 	var out []*regexp.Regexp
 	for _, w := range words {
 		stem := strings.TrimRight(w, "аяоеьйиыу")

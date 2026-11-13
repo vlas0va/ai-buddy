@@ -5,9 +5,9 @@ import type { EscalationDraftData } from '@/chat/events'
 import { ROLE_TEXT } from '../statusText'
 
 /**
- * Organizers 13.11: buddy does not deliver messages to the mentor — the mentor rarely opens buddy. The intern copies the
- * text into a direct message or the team channel; an unanswered question is already in the mentor's list (`queue`).
- * `messageId`, `canSend` and `sent` are kept for the call sites; nothing is sent from here.
+ * Организаторы 13.11: buddy не передаёт сообщения наставнику — наставник редко открывает buddy. Стажёр копирует текст в
+ * личные сообщения или канал команды; вопрос без ответа уже в списке наставника (`queue`). `messageId`, `canSend` и
+ * `sent` оставлены для мест вызова; отсюда ничего не отправляется.
  */
 export function EscalationDraft({ draft }: { draft: EscalationDraftData; sessionId?: string; messageId?: string; canSend?: boolean; sent?: boolean }) {
   const [text, setText] = useState(draft.text)
@@ -18,7 +18,7 @@ export function EscalationDraft({ draft }: { draft: EscalationDraftData; session
       await navigator.clipboard.writeText(text)
       setCopied(true)
     } catch {
-      const el = document.getElementById(box) as HTMLTextAreaElement | null // no clipboard API: select for Ctrl+C
+      const el = document.getElementById(box) as HTMLTextAreaElement | null // нет API буфера обмена: выделяем текст для Ctrl+C
       el?.select()
     }
   }

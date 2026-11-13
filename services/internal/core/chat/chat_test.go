@@ -15,9 +15,9 @@ import (
 	"aibuddy/services/internal/platform/confirm"
 )
 
-// The main scenario end to end: message → proposal stored → confirm → MCP write with core's token → action saved
-// and linked → action_result streamed → visible after reload → lead approves → action and task updated, intern
-// notified → a repeated confirm replays without any call.
+// Основной сценарий от начала до конца: сообщение → черновик сохранён → подтверждение → запись в MCP с токеном ядра →
+// действие сохранено и связано → action_result в потоке → видно после перезагрузки → руководитель согласует → действие
+// и задача обновлены, стажёр уведомлён → повторное подтверждение воспроизводится без вызовов.
 func TestChat_S3_DayOffEndToEnd_R66(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -157,7 +157,7 @@ func TestChat_S3_DayOffEndToEnd_R66(t *testing.T) {
 		if list[0]["status"] != "pending_hr" {
 			t.Fatalf("action after the lead %v", list[0])
 		}
-		// Second stage: the HR admin approves the request in «Согласования».
+		// Второй этап: HR-администратор согласует заявку в «Согласованиях».
 		olga := agenttest.Token(t, jwtSecret, "hradmin.olga", "hr_admin", "people", "")
 		pending = nil
 		e.do(http.MethodGet, "/api/approvals", olga, nil).json(t, &pending)
@@ -474,11 +474,11 @@ func TestConfirm_S3_LateEventsAfterSave(t *testing.T) {
 		result := e.agent.Confirm(context.Background(), req)[2]
 		result.Data.(map[string]any)["followup"] = ""
 		return []agenttest.Event{
-			agenttest.AccessProposal(agenttest.NewID(), "jira"), // ignored in a confirm turn
+			agenttest.AccessProposal(agenttest.NewID(), "jira"), // в ходе подтверждения игнорируется
 			result,
-			result, // duplicate, ignored
+			result, // дубликат, игнорируется
 			{Name: "token", Data: map[string]string{"text": "Готово"}},
-			{Name: "error", Data: map[string]any{"code": "llm_timeout", "message": "x", "retryable": true}}, // after the save
+			{Name: "error", Data: map[string]any{"code": "llm_timeout", "message": "x", "retryable": true}}, // после сохранения
 		}
 	})
 	s := e.stream(e.confirmPath(sid, pid), anna, nil)
@@ -502,7 +502,7 @@ func TestConfirm_TamperedDraftHash_Internal(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := e.do(http.MethodPost, e.confirmPath(sid, pid), anna, nil)
-	// Rejected before the agent was called: the proposal stays pending and can still be cancelled.
+	// Отклонено до вызова агента: черновик остаётся pending, и его ещё можно отменить.
 	if r.status != http.StatusInternalServerError || e.proposalStatus(pid) != "pending" || e.agent.Count(agentclient.KindConfirm) != 0 {
 		t.Fatalf("%d %s", r.status, e.proposalStatus(pid))
 	}
@@ -523,7 +523,7 @@ func TestChat_RateLimited_429_R76(t *testing.T) {
 	if e.count(`SELECT count(*) FROM core.chat_messages`) != 0 || e.limiter.keys[0] != "chat:intern.anna" {
 		t.Fatal("limited message stored")
 	}
-	e.limiter.allow, e.limiter.err = true, context.DeadlineExceeded // Redis down: fail open
+	e.limiter.allow, e.limiter.err = true, context.DeadlineExceeded // Redis недоступен: пропускаем
 	if s := e.message(sid, anna, "Привет"); s.names() != "status,token,done" {
 		t.Fatal(s.names())
 	}
@@ -601,11 +601,11 @@ func TestChat_RefusalAndUnknownEvents_R72(t *testing.T) {
 	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
 		return []agenttest.Event{
 			{Name: "refusal", Data: map[string]any{"reason": "out_of_scope", "redirect_role": "hrbp", "text": "Это вопрос к HR BP."}},
-			{Name: "action_result", Data: map[string]any{"action_id": "forged"}}, // only core emits action_result
-			{Name: "tool_result", Data: map[string]any{"id": "ABS-1"}},           // internal, never relayed
+			{Name: "action_result", Data: map[string]any{"action_id": "forged"}}, // action_result отправляет только ядро
+			{Name: "tool_result", Data: map[string]any{"id": "ABS-1"}},           // внутреннее, никогда не пересылается
 			{Name: "escalation_draft", Data: map[string]any{"to_role": "hrbp", "text": "Вопрос о зарплате"}},
 			{Name: "next_step", Data: map[string]any{"checklist_item_id": "CL-05", "title": "Запроси доступ"}},
-			{Name: "future_event", Data: map[string]any{"x": 1}}, // unknown events are relayed unchanged
+			{Name: "future_event", Data: map[string]any{"x": 1}}, // неизвестные события пересылаются без изменений
 			{Name: "done", Data: map[string]any{"message_id": "", "escalated": true, "latency_ms": 42, "provider": "stub"}},
 		}
 	})
@@ -626,8 +626,8 @@ func TestChat_RefusalAndUnknownEvents_R72(t *testing.T) {
 	}
 }
 
-// A lead approves in chat (approval_decision): core signs approvals.decide, the agent calls it, core applies the
-// decision to the intern's action and plan task, notifies the intern and streams the updated action.
+// Руководитель согласует в чате (approval_decision): ядро подписывает approvals.decide, агент его вызывает, ядро
+// применяет решение к действию и задаче плана стажёра, уведомляет стажёра и отправляет в поток обновлённое действие.
 func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	e := newEnv(t)
 	anna, maria := e.anna(), e.maria()
@@ -653,8 +653,8 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	}
 	c := e.stream(e.confirmPath(sid, pid), maria, nil)
 	got := c.find("action_result")
-	// Two decide calls: the agent's write and core's read-back with the same idempotency key (a replay).
-	// The lead's approval passes the request to the HR admin.
+	// Два вызова decide: запись агента и перечитывание ядром с тем же ключом идемпотентности (повтор). Согласование
+	// руководителя передаёт заявку HR-администратору.
 	if got == nil || got["action_id"] != ar["action_id"] || got["status"] != "pending_hr" || e.mcp.Calls("approvals.decide") != 2 {
 		t.Fatalf("%s %v", c.names(), got)
 	}
@@ -670,7 +670,7 @@ func TestChat_S3_LeadDecidesInChat_R66(t *testing.T) {
 	}
 
 	t.Run("request made outside the chat", func(t *testing.T) {
-		// The access request is created directly in MCP, as if it came from another channel: core has no action.
+		// Заявка на доступ создана прямо в MCP, как будто из другого канала: действия в ядре нет.
 		direct := agenttest.Request{Auth: "Bearer " + anna}
 		direct.Turn = agentclient.Turn{Kind: "confirm", ProposalID: agenttest.NewID(),
 			Draft: json.RawMessage(`{"tool":"access.request_access","args":{"resource_id":"space-delivery-incidents"}}`)}
@@ -774,8 +774,8 @@ func TestAgentError(t *testing.T) {
 	}
 }
 
-// Feedback 11.11: leaving the chat and coming back keeps the cards — the draft to the mentor, the draft of a request
-// with its state and the result with the current status of the action.
+// Отзыв 11.11: если уйти из чата и вернуться, карточки сохраняются — черновик наставнику, черновик заявки с его
+// состоянием и результат с текущим статусом действия.
 func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -821,7 +821,7 @@ func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 	if m[1].EscalationSent {
 		t.Fatal("not sent yet")
 	}
-	// a message sent from another draft of the session does not mark this one
+	// сообщение, отправленное из другого черновика сессии, не помечает этот
 	if _, err := e.pool.Exec(context.Background(), `INSERT INTO core.escalations (from_user_id, to_user_id, to_role, session_id, text)
 		VALUES ('intern.anna', 'mentor.oleg', 'mentor', $1, 'другое')`, sid); err != nil {
 		t.Fatal(err)
@@ -841,8 +841,8 @@ func TestChat_Feedback_HistoryKeepsCards_R66(t *testing.T) {
 	}
 }
 
-// Feedback 12.11: the list of accesses comes as several drafts in one message (checkboxes); the history keeps all of
-// them, each with its own state.
+// Отзыв 12.11: список доступов приходит несколькими черновиками в одном сообщении (галочки); история хранит их все,
+// каждый со своим состоянием.
 func TestChat_Feedback_HistoryKeepsAllDraftsOfAMessage_R66(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -879,7 +879,8 @@ func TestChat_Feedback_HistoryKeepsAllDraftsOfAMessage_R66(t *testing.T) {
 	}
 }
 
-// Feedback 12.11: a source chip opens the test document — only one the user may read (the agent checks the ACL).
+// Отзыв 12.11: чип источника открывает тестовый документ — только тот, который пользователю можно читать (агент
+// проверяет ACL).
 func TestChat_Feedback_SourceChipOpensDocument_R69(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -899,8 +900,8 @@ func TestChat_Feedback_SourceChipOpensDocument_R69(t *testing.T) {
 	}
 }
 
-// Feedback 12.11: «Новый диалог» keeps the old conversation: the list of dialogs names each by its first question;
-// the calendar under an absence answer comes back with the history.
+// Отзыв 12.11: «Новый диалог» сохраняет старый разговор: в списке диалогов каждый назван по первому вопросу; календарь
+// под ответом про отсутствие возвращается вместе с историей.
 func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -914,7 +915,7 @@ func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
 	e.agent.OnMessage(nil)
 	second := e.session(anna)
 	e.message(second, anna, "кто мой наставник?")
-	_ = e.session(anna) // an empty dialog is not listed
+	_ = e.session(anna) // пустой диалог в списке не показывается
 
 	var list []map[string]any
 	e.do(http.MethodGet, "/api/chat/sessions", anna, nil).json(t, &list)
@@ -937,7 +938,8 @@ func TestChat_Feedback_DialogListAndDatePicker_R66(t *testing.T) {
 	}
 }
 
-// Organizers 12.13: a study task is confirmed by a mini-check; the agent names the item, core marks the caller's task.
+// Организаторы 12.13: учебная задача подтверждается мини-проверкой; агент называет пункт, ядро отмечает задачу
+// вызывающего.
 func TestChat_QuizPassedMarksOwnStudyTask_Organizers1213(t *testing.T) {
 	e := newEnv(t)
 	anna := e.anna()
@@ -945,7 +947,7 @@ func TestChat_QuizPassedMarksOwnStudyTask_Organizers1213(t *testing.T) {
 	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
 		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "Результат: 3 из 3."}},
 			{Name: "quiz_passed", Data: map[string]any{"checklist_item_id": "CL-07"}},
-			{Name: "quiz_passed", Data: map[string]any{"checklist_item_id": "CL-05"}}, // not a quiz task: ignored
+			{Name: "quiz_passed", Data: map[string]any{"checklist_item_id": "CL-05"}}, // не задача с проверкой: игнорируется
 			agenttest.Done()}
 	})
 	s := e.message(sid, anna, "ответы: a, b, c")
@@ -965,8 +967,8 @@ func TestChat_QuizPassedMarksOwnStudyTask_Organizers1213(t *testing.T) {
 	}
 }
 
-// Organizers 13.11: buddy does not deliver messages to the mentor; an intern's unanswered question goes to the
-// mentor's stack once per assistant message. A draft without queue, or a mentor's turn, stores nothing.
+// Организаторы 13.11: buddy не передаёт сообщения наставнику; вопрос стажёра без ответа попадает в список наставника
+// один раз на сообщение ассистента. Черновик без queue или ход наставника ничего не сохраняют.
 func TestChat_QueuedQuestionGoesToTheMentorsStack_S2_23(t *testing.T) {
 	e := newEnv(t)
 	queued := map[string]any{"to_role": "mentor", "text": "Олег, привет! Подскажи: можно ли с собакой?", "queue": true,
@@ -986,7 +988,7 @@ func TestChat_QueuedQuestionGoesToTheMentorsStack_S2_23(t *testing.T) {
 		t.Fatalf("no notification per question, got %d", n)
 	}
 	oleg := e.oleg()
-	e.message(e.session(oleg), oleg, "можно ли с собакой?") // a mentor's question is not queued
+	e.message(e.session(oleg), oleg, "можно ли с собакой?") // вопрос наставника в список не попадает
 	delete(queued, "queue")
 	e.message(e.session(anna), anna, "ещё раз")
 	if n := e.count(`SELECT count(*) FROM core.escalations`); n != 1 {

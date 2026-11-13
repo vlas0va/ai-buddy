@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 
-/** A question queued from another page (plan «Спросить buddy», next step) that the chat sends once it is ready. */
+/**
+ * Вопрос, поставленный в очередь с другой страницы (план «Спросить buddy», следующий шаг), который чат отправит, как
+ * только будет готов.
+ */
 interface AskStore {
   pending: string | null
   ask: (text: string) => void

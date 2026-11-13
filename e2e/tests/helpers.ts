@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test'
 
 export const API_URL = process.env.API_URL ?? 'http://localhost:8080'
 
-/** Logs in through the real form (synthetic accounts, password «demo»). */
+/** Входит через настоящую форму (синтетические учётные записи, пароль «demo»). */
 export async function login(page: Page, user: string) {
   await page.goto('/login')
   await page.getByLabel('Логин').fill(user)
@@ -11,7 +11,7 @@ export async function login(page: Page, user: string) {
   await page.waitForURL('**/chat')
 }
 
-/** Starts a clean conversation and sends one message. */
+/** Начинает чистый разговор и отправляет одно сообщение. */
 export async function newDialog(page: Page) {
   await page.getByRole('button', { name: 'Новый диалог' }).click()
 }
@@ -23,7 +23,7 @@ export async function ask(page: Page, text: string) {
   await input.press('Enter')
 }
 
-/** Waits until buddy finished the turn (input unlocked again). */
+/** Ждёт, пока buddy закончит ход (ввод снова разблокирован). */
 export async function waitAnswer(page: Page) {
   await expect(page.getByLabel('Сообщение')).toBeEnabled({ timeout: 30_000 })
 }
@@ -32,7 +32,7 @@ export function lastTurn(page: Page) {
   return page.locator('.chat-turn').last()
 }
 
-/** A Tuesday 3–10 weeks ahead, different on every run, so repeated runs do not overlap earlier requests. */
+/** Вторник через 3–10 недель, каждый запуск другой, чтобы повторные запуски не пересекались с прежними заявками. */
 export function futureTuesday(seed = Date.now()): Date {
   const d = new Date()
   d.setHours(12, 0, 0, 0)

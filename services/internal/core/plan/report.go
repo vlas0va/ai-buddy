@@ -10,12 +10,12 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// InternshipDays is the length of the internship the report covers (the equator meeting is about three months in).
+// InternshipDays — длина стажировки, которую охватывает отчёт (экватор — примерно через три месяца).
 const InternshipDays = 90
 
-// Report is the internship report (idea 12.11): facts from the plan, the questions and the actions of one intern. It is
-// not an assessment: buddy counts, the mentor draws conclusions. It is for the mentor and the lead only (feedback 12.11), and
-// absences are not part of it (R72).
+// Report — отчёт за стажировку (идея 12.11): факты из плана, вопросов и действий одного стажёра. Это не оценка: buddy
+// считает, выводы делает наставник. Отчёт только для наставника и руководителя (отзыв 12.11), отсутствий в нём нет
+// (R72).
 type Report struct {
 	UserID        string         `json:"user_id"`
 	Name          string         `json:"name"`
@@ -36,7 +36,7 @@ type Report struct {
 	Discuss       []string       `json:"discuss"`
 }
 
-// ReportTasks counts the top-level checklist tasks of the intern's plan.
+// ReportTasks считает задачи чек-листа верхнего уровня в плане стажёра.
 type ReportTasks struct {
 	Total      int `json:"total"`
 	Done       int `json:"done"`
@@ -47,7 +47,7 @@ type ReportTasks struct {
 	Upcoming   int `json:"upcoming"`
 }
 
-// ReportPeriod is one period of the plan.
+// ReportPeriod — один этап плана.
 type ReportPeriod struct {
 	Period string `json:"period"`
 	Total  int    `json:"total"`
@@ -55,29 +55,29 @@ type ReportPeriod struct {
 	Late   int    `json:"late"`
 }
 
-// ReportTask is a task named in the report.
+// ReportTask — задача, названная в отчёте.
 type ReportTask struct {
 	Title       string  `json:"title"`
 	DueAt       *string `json:"due_at"`
 	CompletedAt *string `json:"completed_at"`
 }
 
-// MinutesPerQuestion is the estimate of a mentor's time per question that buddy closed on its own (an explanation in a
-// chat with context switching). The organizers put a mentor's load at 40–48 hours per 6-month internship (Q&A 12.11).
+// MinutesPerQuestion — оценка времени наставника на вопрос, который buddy закрыл сам (объяснение в чате с переключением
+// контекста). Организаторы оценивают нагрузку наставника в 40–48 часов за 6 месяцев стажировки (ответы 12.11).
 const MinutesPerQuestion = 10
 
-// ReportQuestion counts the intern's chat questions and the questions sent to people.
+// ReportQuestion считает вопросы стажёра в чате и вопросы, отправленные людям.
 type ReportQuestion struct {
 	Asked        int `json:"asked"`
 	Escalated    int `json:"escalated"`
 	Answered     int `json:"answered"`
 	AddedToKB    int `json:"added_to_kb"`
-	SelfServed   int `json:"self_served"`   // asked buddy and did not go to a person
-	SavedMinutes int `json:"saved_minutes"` // SelfServed × MinutesPerQuestion: the mentor's time buddy saved (estimate)
+	SelfServed   int `json:"self_served"`   // спросил buddy и не пошёл к человеку
+	SavedMinutes int `json:"saved_minutes"` // SelfServed × MinutesPerQuestion: время наставника, сэкономленное buddy (оценка)
 }
 
-// getReport: GET /api/plan/report?user_id= — the mentor and the lead of the team read the report of an intern of their
-// team (same rules as the plan, R71). The report is not for the intern (feedback 12.11): 403.
+// getReport: GET /api/plan/report?user_id= — наставник и руководитель команды читают отчёт стажёра своей команды (те же
+// правила, что для плана, R71). Отчёт не для стажёра (отзыв 12.11): 403.
 func (h *Handler) getReport(w http.ResponseWriter, r *http.Request) {
 	c, ok := claims(w, r)
 	if !ok {
@@ -183,7 +183,7 @@ func (h *Handler) buildReport(ctx context.Context, ref planRef) (Report, error) 
 			rep.Periods = append(rep.Periods, *bp)
 		}
 	}
-	if len(rep.Periods) != len(order) { // a period unknown to the package: keep it anyway
+	if len(rep.Periods) != len(order) { // этап, неизвестный пакету: всё равно оставляем
 		rep.Periods = rep.Periods[:0]
 		for _, p := range order {
 			rep.Periods = append(rep.Periods, *byPeriod[p])
@@ -211,7 +211,7 @@ func (h *Handler) buildReport(ctx context.Context, ref planRef) (Report, error) 
 	return rep, nil
 }
 
-// discuss suggests topics for the 1:1: facts only, the wording never judges the intern.
+// discuss предлагает темы для 1:1: только факты, формулировки никогда не оценивают стажёра.
 func discuss(rep Report) []string {
 	var out []string
 	for i, t := range rep.Overdue {

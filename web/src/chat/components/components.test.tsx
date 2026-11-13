@@ -218,7 +218,7 @@ describe('ChatInput suggestions (combobox)', () => {
     await userEvent.keyboard('{ArrowUp}')
     expect(box).toHaveAttribute('aria-activedescendant', options[0]!.id)
     await userEvent.keyboard('{ArrowUp}')
-    expect(box).toHaveAttribute('aria-activedescendant', options[5]!.id) // wraps
+    expect(box).toHaveAttribute('aria-activedescendant', options[5]!.id) // переносится
     await userEvent.keyboard('{Enter}')
     expect(onSend).toHaveBeenCalledWith('Что мне сделать на этой неделе?', [])
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()

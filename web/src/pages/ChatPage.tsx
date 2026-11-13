@@ -36,7 +36,7 @@ export function ChatPage() {
     endRef.current?.scrollIntoView?.({ block: 'end' })
   }, [state.messages, state.stage])
 
-  // a question queued on the plan page («Спросить buddy») is sent once the conversation is restored
+  // вопрос, поставленный в очередь на странице плана («Спросить buddy»), отправляется, как только восстановлен разговор
   const pending = useAsk((s) => s.pending)
   useEffect(() => {
     if (restoring || state.streaming || pending === null) return
@@ -78,7 +78,7 @@ export function ChatPage() {
                   }
                 />
               )
-              // an error without any text sits next to the avatar, like a buddy message
+              // ошибка без текста стоит рядом с аватаром, как сообщение buddy
               const inlineError = m.text === '' && !m.proposal && !m.bundle && !m.result && !m.escalation && !m.refusal && !m.datePicker
               return (
                 <div key={m.id} className="chat-turn">

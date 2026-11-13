@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Resolve Go dependencies and vendor them (run on a machine WITH network, e.g. Git Bash on Windows).
-# vendor/ is committed: Docker builds and the jury's machines then need no access to the Go module proxy.
+# Разрешить зависимости Go и положить их в vendor (запускать на машине С сетью, например Git Bash в Windows).
+# vendor/ коммитится: тогда сборкам Docker и машинам жюри не нужен доступ к прокси модулей Go.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export GOTOOLCHAIN=local GOFLAGS=-mod=mod
 TARGET_GO=1.24   # Dockerfile, CI and the cloud workspace build with Go 1.24
 go mod tidy
-# A newer dependency (often an indirect test-only one) may raise the go directive.
-# `go get go@1.24` downgrades exactly those modules to versions that still support Go 1.24.
+# Более новая зависимость (часто косвенная, только для тестов) может поднять директиву go. `go get go@1.24` понижает
+# именно эти модули до версий, которые ещё поддерживают Go 1.24.
 go get "go@${TARGET_GO}.0" toolchain@none
 go mod tidy
 go mod vendor

@@ -13,7 +13,7 @@ import { useAsk } from '@/store/ask'
 import { useChatStore } from '@/store/chat'
 import { signInAs } from '@/test/mockWorld'
 
-// S1 plan page, mentor / lead views, questions and notifications against the dev-mock handlers.
+// Страница плана S1, представления наставника и руководителя, вопросы и уведомления на обработчиках мок-режима.
 const server = setupServer(...handlers)
 beforeAll(() => server.listen())
 afterAll(() => server.close())
@@ -105,7 +105,7 @@ describe('mentor and lead views', () => {
     mountAt('/team')
     const row = await screen.findByRole('link', { name: 'План: Анна Соколова' })
     expect(row).toHaveTextContent('Готово 1 из 6')
-    expect(screen.queryByText('Иван Петров')).not.toBeInTheDocument() // other team (R71)
+    expect(screen.queryByText('Иван Петров')).not.toBeInTheDocument() // другая команда (R71)
     await userEvent.click(row)
     expect(await screen.findByText('План: Анна Соколова')).toBeInTheDocument()
     expect(await screen.findByLabelText('Отметить выполненной: Настроить рабочее окружение')).toBeDisabled()
@@ -166,9 +166,9 @@ describe('questions and notifications', () => {
     mountAt('/questions')
     await userEvent.type(await screen.findByLabelText('Ответ для Анна Соколова'), 'В Confluence, раздел «Дизайн»')
     expect(screen.getByText('Спросили 2 раза')).toBeInTheDocument()
-    expect(screen.getByLabelText(/Добавить ответ в базу знаний/)).toBeChecked() // the stack fills the KB by default
-    expect(screen.getByText(/без имён и конкретных дат/)).toBeInTheDocument() // checkpoint 11.11: the FAQ is general
-    // feedback 12.13: a general answer can go to every team
+    expect(screen.getByLabelText(/Добавить ответ в базу знаний/)).toBeChecked() // список по умолчанию наполняет базу знаний
+    expect(screen.getByText(/без имён и конкретных дат/)).toBeInTheDocument() // чекпоинт 11.11: FAQ общий
+    // отзыв 12.13: общий ответ может попасть во все команды
     expect(screen.getByLabelText(/Стажёрам моей команды/)).toBeChecked()
     await userEvent.click(screen.getByLabelText(/Всем стажёрам/))
     expect(screen.getByLabelText(/Всем стажёрам/)).toBeChecked()

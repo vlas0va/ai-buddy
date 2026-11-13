@@ -21,24 +21,24 @@ export interface ChatMessage {
   author: 'user' | 'assistant'
   text: string
   sources: Source[]
-  /** files attached to a user message (metadata only) */
+  /** файлы, приложенные к сообщению пользователя (только метаданные) */
   attachments?: AttachmentMeta[]
   proposal: (Proposal & { state: ProposalState }) | null
-  /** several drafts of one message (the missing accesses with checkboxes); then `proposal` is null */
+  /** несколько черновиков одного сообщения (недостающие доступы с галочками); тогда `proposal` — null */
   bundle?: BundleItem[]
   result: ActionResult | null
   escalation: EscalationDraftData | null
-  /** the draft was already sent (restored from the history) */
+  /** черновик уже отправлен (восстановлен из истории) */
   escalationSent?: boolean
   refusal: Refusal | null
   error: StreamError | null
   nextStep?: NextStep | null
   datePicker?: DatePicker | null
-  /** server id of a saved assistant message (done.message_id or history), used for «Полезно / Не полезно» */
+  /** серверный id сохранённого сообщения ассистента (done.message_id или история), для «Полезно / Не полезно» */
   serverId?: string
-  /** user text that produced this assistant message, used by "Повторить" */
+  /** текст пользователя, на который появилось это сообщение ассистента; используется кнопкой «Повторить» */
   retryText?: string
-  /** attachments of that user message, sent again by "Повторить" */
+  /** вложения того сообщения пользователя, которые «Повторить» отправляет снова */
   retryAttachments?: unknown[]
 }
 
@@ -48,7 +48,7 @@ export interface ChatState {
   messages: ChatMessage[]
   streaming: boolean
   stage: Stage | null
-  /** a draft of a list is being sent: its result goes into the list, no new chat message (feedback 12.11) */
+  /** отправляется черновик из списка: его результат попадает в список, нового сообщения в чате нет (отзыв 12.11) */
   quiet?: boolean
 }
 
@@ -61,7 +61,7 @@ function patchBundle(messages: ChatMessage[], pick: (p: BundleItem) => boolean, 
 
 export const initialState: ChatState = { messages: [], streaming: false, stage: null }
 
-/** Rebuilds the message list from GET /api/chat/sessions/{id}, cards included. */
+/** Восстанавливает список сообщений из GET /api/chat/sessions/{id} вместе с карточками. */
 export function fromHistory(history: ChatHistory): ChatState {
   const messages = history.messages.map((m): ChatMessage => {
     const proposalState: ProposalState = m.proposal_state === 'confirmed' ? 'confirmed' : m.proposal_state === 'cancelled' ? 'cancelled' : 'pending'
@@ -83,7 +83,7 @@ export function fromHistory(history: ChatHistory): ChatState {
       serverId: m.author === 'assistant' ? m.id : undefined,
     }
   })
-  // results of a list's drafts go back into the list instead of separate messages (the live chat shows them so too)
+  // результаты черновиков списка возвращаются в список, а не отдельными сообщениями (живой чат показывает их так же)
   const listed = new Map<string, number>()
   messages.forEach((m, i) => m.bundle?.forEach((p) => listed.set(p.proposal_id, i)))
   const kept: ChatMessage[] = []
@@ -117,7 +117,7 @@ function blank(author: ChatMessage['author'], text = ''): ChatMessage {
   }
 }
 
-/** Starts a turn: appends the user bubble (unless retrying) and an empty assistant message. */
+/** Начинает ход: добавляет пузырь пользователя (если это не повтор) и пустое сообщение ассистента. */
 export function startTurn(state: ChatState, text: string, attachments: (AttachmentMeta & { text?: string })[] = []): ChatState {
   const assistant = { ...blank('assistant'), retryText: text, retryAttachments: attachments.length ? attachments : undefined }
   const meta = attachments.map(({ name, kind, mime, size }) => ({ name, kind, mime, size }))
@@ -129,7 +129,7 @@ export function startTurn(state: ChatState, text: string, attachments: (Attachme
   }
 }
 
-/** Retry: reuse the user bubble, drop the failed assistant message and start a fresh one. */
+/** Повтор: переиспользуем пузырь пользователя, убираем неудачное сообщение ассистента и начинаем новое. */
 export function restartTurn(state: ChatState, assistantId: string): ChatState {
   const i = state.messages.findIndex((m) => m.id === assistantId)
   if (i === -1) return state
@@ -142,7 +142,7 @@ export function restartTurn(state: ChatState, assistantId: string): ChatState {
   }
 }
 
-/** Confirm turn streams into a fresh assistant message so the proposal card stays above it. */
+/** Ход подтверждения пишется в новое сообщение ассистента, чтобы карточка черновика осталась над ним. */
 export function startConfirm(state: ChatState, proposalId: string): ChatState {
   if (inBundle(state.messages, proposalId)) {
     return { messages: updateProposal(state.messages, proposalId, 'confirming'), streaming: true, stage: 'calling_service', quiet: true }
@@ -164,7 +164,7 @@ export function updateProposal(messages: ChatMessage[], proposalId: string, next
   })
 }
 
-/** Moves every draft in `from` state to `to` (single cards and bundles). */
+/** Переводит каждый черновик в состоянии `from` в `to` (одиночные карточки и списки). */
 function moveStates(messages: ChatMessage[], from: ProposalState, to: ProposalState): ChatMessage[] {
   return messages.map((m) => ({
     ...m,
@@ -194,7 +194,7 @@ export const handlers = {
   action_proposal: (s: ChatState, d: Proposal): ChatState =>
     patchLast(s, (m) => {
       const item = { ...d, state: 'pending' as const }
-      // a second access draft in the same answer turns the cards into one list with checkboxes (feedback 12.11)
+      // второй черновик доступа в том же ответе превращает карточки в один список с галочками (отзыв 12.11)
       if (d.kind === 'access_request' && (m.bundle || m.proposal?.kind === 'access_request')) {
         return { ...m, proposal: null, bundle: [...(m.bundle ?? (m.proposal ? [m.proposal] : [])), item] }
       }
@@ -256,7 +256,7 @@ export function reduce(state: ChatState, event: StreamEvent): ChatState {
     case 'done':
       return handlers.done(state, event.data)
     case 'ignored':
-    case 'quiz_passed': // a side effect only: useChat refreshes the plan
+    case 'quiz_passed': // только побочный эффект: useChat обновляет план
       return state
   }
 }

@@ -1,6 +1,7 @@
-// Original product mark (feedback 13.11): «buddy pair» — a big blue speech bubble (the buddy) and a small green one (the
-// intern). Large sizes show faces and an accessory; small sizes (header, chat avatar) keep two bubbles with dot eyes,
-// which stay readable at 28 px. Switch the character with BUDDY_VARIANT (design sketches: docs/design/buddy-icon-variants.png).
+// Оригинальный знак продукта (отзыв 13.11): «пара бадди» — большой синий пузырь-реплика (buddy) и маленький зелёный
+// (стажёр). На больших размерах видны лица и аксессуар; на маленьких (шапка, аватар в чате) остаются два пузыря с
+// глазами-точками, которые читаются и на 28 px. Персонажа переключает BUDDY_VARIANT (эскизы:
+// docs/design/buddy-icon-variants.png).
 
 type Face = 'open' | 'wink' | 'glasses' | 'happy'
 type SmallFace = 'smile' | 'wow' | 'wink'

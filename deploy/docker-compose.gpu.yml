@@ -1,6 +1,6 @@
-# NVIDIA GPU for the bundled Ollama (A-Vibe answers in seconds instead of a minute on CPU):
+# NVIDIA GPU для встроенной Ollama (A-Vibe отвечает за секунды, а не за минуту на CPU):
 #   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.gpu.yml --profile core up -d --build --wait
-# Needs the NVIDIA driver and the NVIDIA Container Toolkit (Docker Desktop on Windows: WSL2 backend).
+# Нужны драйвер NVIDIA и NVIDIA Container Toolkit (Docker Desktop на Windows: бэкенд WSL2).
 services:
   ollama:
     deploy:

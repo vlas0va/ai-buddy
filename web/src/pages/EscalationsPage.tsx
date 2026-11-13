@@ -20,7 +20,7 @@ function when(iso: string) {
 function AnswerForm({ ids, asker }: { ids: string[]; asker: string }) {
   const qc = useQueryClient()
   const [text, setText] = useState('')
-  const [toKb, setToKb] = useState(true) // organizers 13.11: the stack exists to fill the knowledge base
+  const [toKb, setToKb] = useState(true) // организаторы 13.11: список нужен, чтобы наполнять базу знаний
   const [scope, setScope] = useState<'team' | 'all'>('team')
   const [first, ...rest] = ids
   const answer = useMutation({
@@ -120,7 +120,7 @@ function EscalationCard({ e, isIntern }: { e: Escalation; isIntern: boolean }) {
   )
 }
 
-/** The intern's questions buddy could not answer and the answers to them. */
+/** Вопросы стажёра, на которые buddy не ответил, и ответы на них. */
 function MyQuestions() {
   const list = useQuery({ queryKey: keys.escalations, queryFn: listEscalations, refetchOnWindowFocus: true })
   return (
@@ -146,8 +146,8 @@ function MyQuestions() {
 }
 
 /**
- * Organizers 13.11: the mentor (lead, HR BP) answers the stack in a batch when convenient — similar questions are
- * grouped, one answer closes the group, notifies every asker and goes to the knowledge base.
+ * Организаторы 13.11: наставник (руководитель, HR BP) отвечает на список пачкой, когда удобно — похожие вопросы собраны
+ * в группу, один ответ закрывает группу, уведомляет каждого, кто спрашивал, и уходит в базу знаний.
  */
 function QuestionStack() {
   const queue = useQuery({ queryKey: keys.queue, queryFn: listQueue, refetchOnWindowFocus: true })
@@ -190,7 +190,10 @@ function QuestionStack() {
   )
 }
 
-/** Questions buddy could not answer: the intern sees theirs, mentor / lead / HR BP answer their stack (S2, R10). */
+/**
+ * Вопросы, на которые buddy не ответил: стажёр видит свои, наставник / руководитель / HR BP отвечают на свой список
+ * (S2, R10).
+ */
 export function EscalationsPage() {
   const role = useSession((s) => s.user?.role)
   return role === 'intern' ? <MyQuestions /> : <QuestionStack />

@@ -1,5 +1,5 @@
--- Schemas of mock Avito services behind MCP (owner B, R39, R52, R56). One schema per server.
--- Synthetic data only (R68). These imitate existing systems; they are not HR systems of our own (R70).
+-- Схемы мок-сервисов Авито за MCP (владелец B, R39, R52, R56). Одна схема на сервер. Только синтетические данные (R68).
+-- Они имитируют существующие системы; это не собственные HR-системы (R70).
 
 CREATE SCHEMA IF NOT EXISTS directory;
 CREATE SCHEMA IF NOT EXISTS checklist;
@@ -8,7 +8,7 @@ CREATE SCHEMA IF NOT EXISTS approvals;
 CREATE SCHEMA IF NOT EXISTS access;
 CREATE SCHEMA IF NOT EXISTS kb;
 
--- directory: employee data imitation
+-- directory: имитация данных сотрудников
 CREATE TABLE directory.teams (
     id   text PRIMARY KEY,
     name text NOT NULL
@@ -23,10 +23,10 @@ CREATE TABLE directory.employees (
     lead_id      text REFERENCES directory.employees(id),
     hrbp_id      text REFERENCES directory.employees(id),
     curator_id   text REFERENCES directory.employees(id),
-    channel      text                            -- work chat name, no personal contacts
+    channel      text                            -- название рабочего чата, без личных контактов
 );
 
--- checklist: Avito intern checklist (data/checklist/checklist.yaml)
+-- checklist: чек-лист стажёра Авито (data/checklist/checklist.yaml)
 CREATE TABLE checklist.items (
     id          text PRIMARY KEY CHECK (id ~ '^CL-[0-9]{2}$'),
     role        text NOT NULL CHECK (role IN ('intern','mentor','both')),
@@ -40,7 +40,7 @@ CREATE TABLE checklist.items (
     human_only  boolean NOT NULL
 );
 
--- absence: absence system imitation (S3)
+-- absence: имитация системы отсутствий (S3)
 CREATE SEQUENCE absence.request_seq START 100;
 CREATE TABLE absence.requests (
     id              text PRIMARY KEY DEFAULT 'ABS-' || lpad(nextval('absence.request_seq')::text, 6, '0'),
@@ -58,12 +58,12 @@ CREATE TABLE absence.requests (
 );
 CREATE INDEX absence_requests_employee_idx ON absence.requests (employee_id, start_date);
 
--- access: access and channels imitation (S4)
+-- access: имитация доступов и каналов (S4)
 CREATE TABLE access.resources (
     id                text PRIMARY KEY,
     name              text NOT NULL,
     kind              text NOT NULL CHECK (kind IN ('tool','space','channel')),
-    team_id           text REFERENCES directory.teams(id),  -- NULL = required for every team
+    team_id           text REFERENCES directory.teams(id),  -- NULL — обязательно для всех команд
     elevated          boolean NOT NULL DEFAULT false,
     purpose           text,
     checklist_item_id text
@@ -81,7 +81,7 @@ CREATE TABLE access.requests (
     decided_at      timestamptz
 );
 
--- approvals: approval system imitation ("Согласия"), shared by S3 and S4
+-- approvals: имитация системы согласований («Согласия»), общая для S3 и S4
 CREATE TABLE approvals.items (
     id              text PRIMARY KEY DEFAULT 'APR-' || substr(md5(gen_random_uuid()::text), 1, 8),
     kind            text NOT NULL CHECK (kind IN ('absence_request','access_request')),
@@ -91,23 +91,23 @@ CREATE TABLE approvals.items (
     summary         text NOT NULL,
     status          text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
     comment         text,
-    idempotency_key uuid UNIQUE,                -- of the decide call
+    idempotency_key uuid UNIQUE,                -- вызова decide
     created_at      timestamptz NOT NULL DEFAULT now(),
     decided_at      timestamptz,
     UNIQUE (kind, ref_id)
 );
 CREATE INDEX approvals_approver_idx ON approvals.items (approver_id, status);
 
--- kb: knowledge base with ACL applied before anything reaches the LLM (R71) and Russian full-text search
+-- kb: база знаний с ACL, применяемым до того, как что-либо попадёт в LLM (R71), и русским полнотекстовым поиском
 CREATE TABLE kb.documents (
     doc_id      text PRIMARY KEY,
     title       text NOT NULL,
     body        text NOT NULL,
     source_type text NOT NULL DEFAULT 'test' CHECK (source_type = 'test'),  -- R69
-    acl_roles   text[] NOT NULL,                -- e.g. {intern,mentor,lead}
-    acl_teams   text[] NOT NULL,                -- team ids or {*}
-    kind        text NOT NULL DEFAULT 'doc' CHECK (kind IN ('doc','faq','note')),  -- faq = mentor answer, note = private notes
-    owner_id    text REFERENCES directory.employees(id),  -- set only for private notes (CL-04 step 3)
+    acl_roles   text[] NOT NULL,                -- например {intern,mentor,lead}
+    acl_teams   text[] NOT NULL,                -- id команд или {*}
+    kind        text NOT NULL DEFAULT 'doc' CHECK (kind IN ('doc','faq','note')),  -- faq — ответ наставника, note — личные заметки
+    owner_id    text REFERENCES directory.employees(id),  -- задаётся только для личных заметок (CL-04 шаг 3)
     created_by  text REFERENCES directory.employees(id),
     idempotency_key uuid UNIQUE,                -- kb.add_faq
     checklist_item_id text,

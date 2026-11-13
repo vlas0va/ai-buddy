@@ -9,7 +9,7 @@ import { Steps } from './Steps'
 
 type Action = z.infer<typeof actionSchema>
 
-// "Мои заявки": compact cards, shared by the right-side panel and the drawer.
+// «Мои заявки»: компактные карточки, общие для правой панели и выдвижной панели.
 export function ActionsPanel({ query }: { query: Pick<UseQueryResult<Action[]>, 'data' | 'isPending' | 'error' | 'refetch'> }) {
   return (
     <QueryState

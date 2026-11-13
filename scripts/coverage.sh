@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Per-service Go coverage gate (>= 80%, R73).  Reports: coverage/<service>/cover.out and index.html.
-# Service sets: platform, mocks, core. Generated code (/internal/gen/) and cmd/ mains are not counted.
-# Without TEST_DATABASE_URL a disposable Postgres is started (scripts/test-db.sh).
-# Agent (Python, owner A) is measured with pytest-cov into coverage/agent (HTML + Cobertura). Web (owner C) enforces its
-# own threshold in web/vite.config.ts (CI job web).
+# Порог покрытия Go по сервисам (>= 80%, R73).  Отчёты: coverage/<service>/cover.out и index.html.
+# Наборы сервисов: platform, mocks, core. Сгенерированный код (/internal/gen/) и main из cmd/ не считаются.
+# Без TEST_DATABASE_URL поднимается одноразовый Postgres (scripts/test-db.sh).
+# Агент (Python, владелец A) меряется через pytest-cov в coverage/agent (HTML + Cobertura).
+# Веб (владелец C) проверяет свой порог в web/vite.config.ts (задача CI web).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -57,7 +57,7 @@ for i in "${!NAMES[@]}"; do
   fi
 done
 
-# Agent (Python, owner A): pytest-cov over services/agent/{agent,training}; tests and the model JSON are excluded.
+# Агент (Python, владелец A): pytest-cov по services/agent/{agent,training}; тесты и JSON модели исключены.
 if [ -f "$ROOT/services/agent/requirements.txt" ]; then
   if python3 -c "" >/dev/null 2>&1; then PY=python3; else PY=python; fi
   out="$ROOT/coverage/agent"

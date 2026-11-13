@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import base from './playwright.config'
 
-// README gallery: `npx playwright test --config gallery.config.ts` against a fresh stack writes docs/screenshots/*.png.
+// Галерея README: `npx playwright test --config gallery.config.ts` на свежем стеке пишет docs/screenshots/*.png.
 export default defineConfig({
   ...base,
   testDir: './gallery',

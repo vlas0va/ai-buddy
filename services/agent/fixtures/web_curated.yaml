@@ -1,5 +1,6 @@
-# Curated public documentation for WEB_SEARCH_PROVIDER=curated (default, works offline): official docs only.
-# Snippets are short descriptions written for the prototype, not quotes. Live search: WEB_SEARCH_PROVIDER=searxng.
+# Отобранная публичная документация для WEB_SEARCH_PROVIDER=curated (по умолчанию, работает без сети): только
+# официальная документация. Фрагменты — короткие описания, написанные для прототипа, а не цитаты. Живой поиск:
+# WEB_SEARCH_PROVIDER=searxng.
 - title: "Pro Git: ветвление в Git"
   url: https://git-scm.com/book/ru/v2/Ветвление-в-Git-Основы-ветвления-и-слияния
   snippet: "Как создать ветку (git switch -c), переключаться между ветками и сливать их (git merge); что делать при конфликте слияния."

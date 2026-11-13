@@ -11,7 +11,10 @@ import { BenefitPanel } from '@/plan/BenefitPanel'
 import { PERIOD_LABELS } from '@/plan/periods'
 import '@/plan/plan.css'
 
-/** Mentor and lead: interns of their team with progress (R08, R11). Data comes filtered by core (R71). */
+/**
+ * Наставник и руководитель: стажёры их команды с прогрессом (R08, R11). Данные приходят уже отфильтрованными ядром
+ * (R71).
+ */
 export function TeamPage() {
   const interns = useQuery({ queryKey: keys.interns, queryFn: listInterns, refetchOnWindowFocus: true })
   return (

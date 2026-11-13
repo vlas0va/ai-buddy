@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// fakeTB records Skipf/Fatalf of New and stops its goroutine like the real testing.T does.
+// fakeTB запоминает Skipf/Fatalf из New и останавливает свою горутину, как настоящий testing.T.
 type fakeTB struct {
 	testing.TB
 	kind, msg string
@@ -87,8 +87,8 @@ func TestNew_FailsWithoutCreateDBRight(t *testing.T) {
 	}
 }
 
-// A keyword/value DSN connects as admin but cannot be rewritten for the test database: New must fail and
-// still drop the database it created.
+// DSN в формате ключ/значение подключается как администратор, но не может быть переписан для тестовой базы: New должен
+// упасть и всё равно удалить созданную базу.
 func TestNew_FailsOnKeywordDSNAndDropsDatabase(t *testing.T) {
 	admin := os.Getenv(EnvVar)
 	if admin == "" {
@@ -100,7 +100,7 @@ func TestNew_FailsOnKeywordDSNAndDropsDatabase(t *testing.T) {
 	}
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Database)
-	// Follow this test's own database by name: other packages create and drop test databases concurrently.
+	// Следим за собственной базой этого теста по имени: другие пакеты параллельно создают и удаляют тестовые базы.
 	name := "t_keyword_dsn_" + randomHex(4)
 	orig := newName
 	newName = func() string { return name }

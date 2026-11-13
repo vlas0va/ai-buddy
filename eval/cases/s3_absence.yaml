@@ -1,4 +1,4 @@
-# S3 «Оформить отгул». Write actions: draft first, write only after confirmation (R66, R71, R79).
+# S3 «Оформить отгул». Действия записи: сначала черновик, запись только после подтверждения (R66, R71, R79).
 - {id: s3-01, category: s3, user: intern.anna, turns: ["Хочу взять отгул в пятницу"], confirm: true,
    expect: {intent: absence, events: [action_proposal], args: {start_date: "2026-11-13", end_date: "2026-11-13"}},
    expect_result: {status: pending_approval, approver_display_name: "Мария Лебедева"}}

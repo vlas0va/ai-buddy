@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ask, lastTurn, login, newDialog, waitAnswer } from './helpers'
 
-// S1: plan from the Avito checklist, statuses, next step, mentor goals, reminders.
+// S1: план из чек-листа Авито, статусы, следующий шаг, цели от наставника, напоминания.
 test('S1: intern sees the plan with periods, next step and toggles a task in under a second', async ({ page }) => {
   await login(page, 'intern.anna')
   await page.getByRole('link', { name: 'Мой план' }).click()
@@ -10,10 +10,11 @@ test('S1: intern sees the plan with periods, next step and toggles a task in und
   await expect(page.getByRole('list', { name: 'Этапы стажировки' }).locator('[aria-current="step"]')).toBeVisible()
   await expect(page.getByLabel('Следующий шаг')).toBeVisible()
 
-  // R76: a simple local operation answers in < 1 s (optimistic toggle), and the state survives a reload
+  // R76: простая локальная операция отвечает быстрее 1 с (оптимистичное переключение), и состояние сохраняется после
+  // перезагрузки
   const candidate = page.locator('.plan-subtasks label').filter({ has: page.locator('input:not(:checked):not(:disabled)') }).first()
   const label = await candidate.innerText()
-  // a stable locator by text: a `:not(:checked)` one would jump to the next box after the click
+  // стабильный локатор по тексту: локатор с `:not(:checked)` после клика перепрыгнул бы на следующую галочку
   const box = page.locator('.plan-subtasks label').filter({ hasText: label }).locator('input')
   const t0 = Date.now()
   await box.click()
@@ -23,7 +24,7 @@ test('S1: intern sees the plan with periods, next step and toggles a task in und
   await page.reload()
   const again = page.locator('.plan-subtasks label').filter({ hasText: label }).locator('input')
   await expect(again).toBeChecked()
-  await again.click() // put it back for the next run
+  await again.click() // вернуть как было для следующего запуска
   await expect(again).not.toBeChecked()
 })
 
@@ -58,7 +59,7 @@ test('S1: mentor sees interns, opens a plan read-only and sets goals that the in
   await login(intern, 'intern.anna')
   await intern.goto('/plan')
   await expect(intern.getByText(goal)).toBeVisible()
-  // the intern does not edit or approve goals; she may only write down new ones for approval (organizers 12.11)
+  // стажёр не редактирует и не утверждает цели; она может только записать новые на утверждение (организаторы 12.11)
   await expect(intern.getByRole('button', { name: /Изменить цели|Задать цели|Согласовать/ })).toHaveCount(0)
 })
 
@@ -120,10 +121,10 @@ test('Confirmation: a study task opens a mini-check, a team task is confirmed by
   await expect(study).toContainText('отмечается после мини-проверки')
   await expect(study.getByRole('checkbox')).toBeDisabled()
   const team = ivan.locator('.plan-task').filter({ hasText: 'Познакомься с командой' })
-  // a repeated run finds the task done or waiting: bring it back to work first
+  // повторный запуск находит задачу выполненной или ожидающей: сначала вернуть её в работу
   if (await team.getByRole('checkbox').isChecked()) await team.getByRole('checkbox').click()
   await expect(team.getByRole('checkbox')).not.toBeChecked()
-  if (!(await team.textContent())?.includes('Ждёт подтверждения')) await team.getByRole('checkbox').click() // asks the mentor
+  if (!(await team.textContent())?.includes('Ждёт подтверждения')) await team.getByRole('checkbox').click() // спрашивает наставника
   await expect(team).toContainText('Ждёт подтверждения')
 
   const sergey = await (await browser.newContext()).newPage()

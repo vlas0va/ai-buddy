@@ -1,5 +1,5 @@
-// Package authapi implements the mock IdP login (POST /api/auth/login, public) and GET /api/me (R34, R52, R70).
-// Identity comes only from core.users; passwords are bcrypt hashes checked inside Postgres with crypt().
+// Пакет authapi реализует вход через мок-IdP (POST /api/auth/login, публичный) и GET /api/me (R34, R52, R70). Личность
+// берётся только из core.users; пароли — bcrypt-хеши, проверяются внутри Postgres через crypt().
 package authapi
 
 import (
@@ -20,12 +20,12 @@ import (
 	"aibuddy/services/internal/platform/period"
 )
 
-// FlagSource gives the feature flags visible to a team (flags.Service implements it).
+// FlagSource выдаёт feature flags, видимые команде (реализован в flags.Service).
 type FlagSource interface {
 	ForTeam(ctx context.Context, team string) (map[string]bool, error)
 }
 
-// Handler serves login and /api/me.
+// Handler обслуживает вход и /api/me.
 type Handler struct {
 	pool    *pgxpool.Pool
 	secret  []byte
@@ -33,14 +33,14 @@ type Handler struct {
 	flags   FlagSource
 	emitter *analytics.Emitter
 	log     *slog.Logger
-	// Now is the clock (tests); defaults to time.Now.
+	// Now — часы (для тестов); по умолчанию time.Now.
 	Now func() time.Time
 }
 
-// DefaultTTL is the JWT lifetime when ttl <= 0 is passed to New (JWT_TTL default).
+// DefaultTTL — время жизни JWT, если в New передан ttl <= 0 (JWT_TTL по умолчанию).
 const DefaultTTL = 12 * time.Hour
 
-// New returns the auth handler. emitter and log may be nil.
+// New возвращает обработчик авторизации. emitter и log могут быть nil.
 func New(pool *pgxpool.Pool, secret []byte, ttl time.Duration, flags FlagSource, emitter *analytics.Emitter, log *slog.Logger) *Handler {
 	if ttl <= 0 {
 		ttl = DefaultTTL
@@ -51,17 +51,17 @@ func New(pool *pgxpool.Pool, secret []byte, ttl time.Duration, flags FlagSource,
 	return &Handler{pool: pool, secret: secret, ttl: ttl, flags: flags, emitter: emitter, log: log, Now: time.Now}
 }
 
-// RegisterPublic adds POST /api/auth/login; mount it OUTSIDE authn.Middleware.
+// RegisterPublic добавляет POST /api/auth/login; монтировать ВНЕ authn.Middleware.
 func (h *Handler) RegisterPublic(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/login", h.login)
 }
 
-// Register adds GET /api/me (auth required).
+// Register добавляет GET /api/me (нужна авторизация).
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/me", h.me)
 }
 
-// User is the openapi User schema.
+// User — схема openapi User.
 type User struct {
 	ID          string  `json:"id"`
 	Login       string  `json:"login"`
@@ -104,11 +104,11 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	// Password check happens in SQL; an unknown login and a wrong password are indistinguishable (generic 401, R52).
+	// Пароль проверяется в SQL; неизвестный логин и неверный пароль неразличимы (общий 401, R52).
 	u, err := scanUser(h.pool.QueryRow(ctx, userSelect+`
 		WHERE u.id = $1 AND u.can_login AND u.password_hash = crypt($2, u.password_hash)`, req.Login, req.Password))
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Spend comparable time for unknown logins.
+		// Тратим сопоставимое время на неизвестные логины.
 		_, _ = h.pool.Exec(ctx, `SELECT crypt($1, gen_salt('bf', 8))`, req.Password)
 		apierr.WriteJSON(w, badLogin())
 		return
@@ -133,7 +133,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := h.emitter.Emit(ctx, h.pool, analytics.Event{Name: "session.started", UserID: u.ID, Role: u.Role, TeamID: u.TeamID, Props: props}); err != nil {
-		h.log.Warn("session.started event failed", "err", err) // analytics must not block login
+		h.log.Warn("session.started event failed", "err", err) // аналитика не должна блокировать вход
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"token": token, "user": u})
 }
@@ -146,7 +146,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 	u, err := scanUser(h.pool.QueryRow(r.Context(), userSelect+` WHERE u.id = $1 AND u.can_login`, c.Sub))
 	if errors.Is(err, pgx.ErrNoRows) {
-		apierr.WriteJSON(w, apierr.Unauthorized()) // token of a user that no longer exists
+		apierr.WriteJSON(w, apierr.Unauthorized()) // токен пользователя, которого больше нет
 		return
 	}
 	if err != nil {

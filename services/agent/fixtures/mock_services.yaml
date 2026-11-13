@@ -1,6 +1,6 @@
-# Synthetic data for the agent's in-process mocks of the corporate MCP servers. Mirrors B's seed
-# (migrations/0003_seed_demo.sql) and the tool schemas in contracts/schemas/*.json, so switching an MCP_<SERVER>_URL
-# from empty (in-process) to B's Go server changes nothing for the agent. All names are fictional (R68).
+# Синтетические данные для моков корпоративных MCP-серверов в процессе агента. Повторяют демо-данные B
+# (migrations/0003_seed_demo.sql) и схемы инструментов в contracts/schemas/*.json, поэтому переключение MCP_<SERVER>_URL
+# с пустого (в процессе) на Go-сервер B для агента ничего не меняет. Все имена вымышленные (R68).
 teams:
   delivery: {name: "Доставка"}
   search:   {name: "Поиск"}
@@ -56,13 +56,13 @@ access_requests:
   - {id: ACC-000042, employee_id: intern.ivan, resource_id: jira, status: granted, approver_id: null}
   - {id: ACC-000043, employee_id: alumni.petr, resource_id: confluence, status: granted, approver_id: null}
 
-# Demo plan statuses for the dev console (in compose the plan lives in core).
+# Демо-статусы плана для консоли разработки (в compose план живёт в ядре).
 demo_plan_status:
   intern.anna: {CL-03: done, CL-04: in_progress}
   intern.ivan: {CL-03: done}
   mentor.oleg: {CL-01: in_progress}
 
-# consents (= migrations/0006 consents.types): pdn and nda are signed in the HR portal at hire, the rest are voluntary
+# согласия (= migrations/0006 consents.types): pdn и nda подписываются в HR-портале при найме, остальные — добровольные
 consents:
   - {consent_id: pdn, title: "Обработка персональных данных", description: "Подписывается при оформлении в кадровом портале", signable: false, required: true}
   - {consent_id: nda, title: "Соглашение о конфиденциальности", description: "Подписывается при оформлении в кадровом портале", signable: false, required: true}

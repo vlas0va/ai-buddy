@@ -1,16 +1,16 @@
-// Package mcpclient is core's typed adapter over mcpx.Client for the mock MCP servers (contracts/mcp-tools.md).
+// Пакет mcpclient — типизированный адаптер ядра поверх mcpx.Client для мок-серверов MCP (contracts/mcp-tools.md).
 //
-// Core calls MCP itself only where a button press is the confirmation: the lead's decision buttons
-// (approvals.list_pending, approvals.decide) and a mentor's answer published to the KB (kb.add_faq). Confirmed chat
-// writes (absence.create_request, access.request_access) are executed by the agent in a confirm turn
-// (contracts/agent-stream.md); their result types live here because core decodes and saves them. Every call carries
-// the user's own JWT, so the MCP servers derive identity from it (R71). For write tools the client signs a
-// confirmation token for the caller's verified subject, the idempotency key and the exact arguments it sends
-// (mcpx.WithConfirmation).
+// Ядро само вызывает MCP только там, где подтверждением служит нажатие кнопки: кнопки решения руководителя
+// (approvals.list_pending, approvals.decide) и ответ наставника, публикуемый в базу знаний (kb.add_faq). Подтверждённые
+// записи из чата (absence.create_request, access.request_access) выполняет агент в ходе подтверждения
+// (contracts/agent-stream.md); типы их результатов лежат здесь, потому что ядро их декодирует и сохраняет. Каждый вызов
+// несёт собственный JWT пользователя, поэтому MCP-серверы берут личность из него (R71). Для инструментов записи клиент
+// подписывает токен подтверждения на проверенного субъекта вызывающего, ключ идемпотентности и ровно те аргументы,
+// которые отправляет (mcpx.WithConfirmation).
 //
-// Errors: tool errors are returned as *apierr.Error with an MCP code (forbidden, not_found, validation_error,
-// conflict, invalid_confirmation, unavailable); transport and protocol failures wrap an *apierr.Error
-// (upstream_unavailable, unauthorized, internal). apierr.WriteJSON maps both onto openapi codes.
+// Ошибки: ошибки инструментов возвращаются как *apierr.Error с кодом MCP (forbidden, not_found, validation_error,
+// conflict, invalid_confirmation, unavailable); сбои транспорта и протокола оборачивают *apierr.Error
+// (upstream_unavailable, unauthorized, internal). apierr.WriteJSON переводит и те и другие в коды openapi.
 package mcpclient
 
 import (
@@ -28,13 +28,13 @@ import (
 	"aibuddy/services/internal/platform/mcpx"
 )
 
-// DefaultBaseURL is MCP_BASE_URL when unset.
+// DefaultBaseURL — MCP_BASE_URL, если он не задан.
 const DefaultBaseURL = "http://mcp-mocks:8100/mcp"
 
-// DefaultConfirmationTTL is the lifetime of a confirmation token issued by the client (openapi: exp 5 min).
+// DefaultConfirmationTTL — время жизни токена подтверждения, выпущенного клиентом (openapi: exp 5 мин).
 const DefaultConfirmationTTL = 5 * time.Minute
 
-// Tool names in the "<server>.<tool>" form used by agent drafts.
+// Имена инструментов в форме "<server>.<tool>", как в черновиках агента.
 const (
 	ToolCreateAbsence  = "absence.create_request"
 	ToolRequestAccess  = "access.request_access"
@@ -47,16 +47,16 @@ const (
 	ToolCancelAbsence  = "absence.cancel_request"
 )
 
-// Config configures a Client.
+// Config настраивает Client.
 type Config struct {
-	BaseURL            string        // MCP_BASE_URL; empty means DefaultBaseURL
-	JWTSecret          []byte        // JWT_SECRET: the subject of a confirmation comes from the verified user token
+	BaseURL            string        // MCP_BASE_URL; пусто — DefaultBaseURL
+	JWTSecret          []byte        // JWT_SECRET: субъект подтверждения берётся из проверенного токена пользователя
 	ConfirmationSecret []byte        // CONFIRMATION_HMAC_SECRET
-	HTTPClient         *http.Client  // nil means http.DefaultTransport without a client timeout (use ctx deadlines)
-	ConfirmationTTL    time.Duration // <= 0 means DefaultConfirmationTTL
+	HTTPClient         *http.Client  // nil означает http.DefaultTransport без таймаута клиента (используйте дедлайны ctx)
+	ConfirmationTTL    time.Duration // <= 0 — DefaultConfirmationTTL
 }
 
-// Client calls MCP tools on behalf of users. Safe for concurrent use.
+// Client вызывает инструменты MCP от имени пользователей. Безопасен для конкурентного использования.
 type Client struct {
 	mcp      *mcpx.Client
 	verifier *authn.Verifier
@@ -64,7 +64,7 @@ type Client struct {
 	ttl      time.Duration
 }
 
-// New returns a Client; both secrets are required.
+// New возвращает Client; оба секрета обязательны.
 func New(cfg Config) (*Client, error) {
 	if len(cfg.JWTSecret) == 0 || len(cfg.ConfirmationSecret) == 0 {
 		return nil, errors.New("mcpclient: JWT and confirmation secrets are required")
@@ -85,7 +85,7 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
-// SplitTool splits "<server>.<tool>" into its parts.
+// SplitTool делит "<server>.<tool>" на части.
 func SplitTool(tool string) (server, name string, ok bool) {
 	server, name, ok = strings.Cut(tool, ".")
 	if !ok || server == "" || name == "" || strings.ContainsAny(name, "./ ") || strings.ContainsAny(server, "/ ") {
@@ -94,7 +94,7 @@ func SplitTool(tool string) (server, name string, ok bool) {
 	return server, name, true
 }
 
-// Call invokes a read tool ("<server>.<tool>") with args (nil means {}) and returns its structured result.
+// Call вызывает инструмент чтения ("<server>.<tool>") с args (nil — {}) и возвращает его структурированный результат.
 func (c *Client) Call(ctx context.Context, userToken, tool string, args any) (json.RawMessage, error) {
 	server, name, ok := SplitTool(tool)
 	if !ok {
@@ -110,9 +110,9 @@ func (c *Client) Call(ctx context.Context, userToken, tool string, args any) (js
 	return out, nil
 }
 
-// Execute invokes a write tool ("<server>.<tool>") with args plus idempotency_key = key and a confirmation token
-// signed for the subject of userToken. args must not contain idempotency_key or confirmation_token (they are
-// overwritten). A repeated call with the same key returns the stored result (`replayed: true`).
+// Execute вызывает инструмент записи ("<server>.<tool>") с args плюс idempotency_key = key и токеном подтверждения,
+// подписанным на субъекта userToken. args не должны содержать idempotency_key или confirmation_token (они
+// перезаписываются). Повторный вызов с тем же ключом возвращает сохранённый результат (`replayed: true`).
 func (c *Client) Execute(ctx context.Context, userToken, tool string, args map[string]any, key string) (json.RawMessage, error) {
 	claims, err := c.verifier.Verify(userToken)
 	if err != nil {
@@ -128,7 +128,7 @@ func (c *Client) Execute(ctx context.Context, userToken, tool string, args map[s
 	return c.Call(ctx, userToken, tool, signed)
 }
 
-// AbsenceRequest is the result of absence.create_request (contracts/schemas/absence.json).
+// AbsenceRequest — результат absence.create_request (contracts/schemas/absence.json).
 type AbsenceRequest struct {
 	ID                  string `json:"id"`
 	Type                string `json:"type"`
@@ -142,7 +142,7 @@ type AbsenceRequest struct {
 	Replayed            bool   `json:"replayed,omitempty"`
 }
 
-// TripRequest is the result of trips.create_request (contracts/schemas/trips.json).
+// TripRequest — результат trips.create_request (contracts/schemas/trips.json).
 type TripRequest struct {
 	ID                  string `json:"id"`
 	City                string `json:"city"`
@@ -154,7 +154,7 @@ type TripRequest struct {
 	ApproverDisplayName string `json:"approver_display_name,omitempty"`
 }
 
-// ConsentSignature is the result of consents.sign (contracts/schemas/consents.json).
+// ConsentSignature — результат consents.sign (contracts/schemas/consents.json).
 type ConsentSignature struct {
 	ID        string `json:"id"`
 	ConsentID string `json:"consent_id"`
@@ -163,7 +163,7 @@ type ConsentSignature struct {
 	SignedAt  string `json:"signed_at"`
 }
 
-// AccessRequest is the result of access.request_access (contracts/schemas/access.json).
+// AccessRequest — результат access.request_access (contracts/schemas/access.json).
 type AccessRequest struct {
 	ID              string  `json:"id"`
 	ResourceID      string  `json:"resource_id"`
@@ -171,13 +171,13 @@ type AccessRequest struct {
 	Status          string  `json:"status"`
 	ApproverID      *string `json:"approver_id,omitempty"`
 	ChecklistItemID *string `json:"checklist_item_id,omitempty"`
-	Environment     *string `json:"environment,omitempty"` // dev, stage, prod for a database (checkpoint 11.11)
+	Environment     *string `json:"environment,omitempty"` // dev, stage, prod для базы данных (чекпоинт 11.11)
 	Level           string  `json:"level,omitempty"`       // read, write, admin
 	CreatedAt       string  `json:"created_at"`
 	Replayed        bool    `json:"replayed,omitempty"`
 }
 
-// Approval is an item of approvals.list_pending and the result of approvals.decide (contracts/schemas/approvals.json).
+// Approval — элемент approvals.list_pending и результат approvals.decide (contracts/schemas/approvals.json).
 type Approval struct {
 	ID                   string   `json:"id"`
 	Kind                 string   `json:"kind"`
@@ -187,13 +187,13 @@ type Approval struct {
 	Summary              string   `json:"summary"`
 	Status               string   `json:"status"`
 	Comment              string   `json:"comment,omitempty"`
-	Stage                string   `json:"stage,omitempty"` // absence: lead, then hr_admin
+	Stage                string   `json:"stage,omitempty"` // отсутствие: lead, затем hr_admin
 	CreatedAt            string   `json:"created_at"`
 	TeamAbsent           []string `json:"team_absent,omitempty"`
 	Replayed             bool     `json:"replayed,omitempty"`
 }
 
-// FAQ is the result of kb.add_faq.
+// FAQ — результат kb.add_faq.
 type FAQ struct {
 	DocID      string `json:"doc_id"`
 	Title      string `json:"title"`
@@ -201,7 +201,7 @@ type FAQ struct {
 	Replayed   bool   `json:"replayed,omitempty"`
 }
 
-// Decode unmarshals a tool result into dst; a malformed result is an internal error.
+// Decode разбирает результат инструмента в dst; некорректный результат — внутренняя ошибка.
 func Decode(raw json.RawMessage, dst any) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	if err := dec.Decode(dst); err != nil {
@@ -220,7 +220,7 @@ func execTyped[T any](ctx context.Context, c *Client, token, tool string, args m
 	return out, err
 }
 
-// ListPendingApprovals calls approvals.list_pending with the lead's token.
+// ListPendingApprovals вызывает approvals.list_pending с токеном руководителя.
 func (c *Client) ListPendingApprovals(ctx context.Context, userToken string) ([]Approval, error) {
 	raw, err := c.Call(ctx, userToken, ToolListApprovals, map[string]any{})
 	if err != nil {
@@ -238,8 +238,8 @@ func (c *Client) ListPendingApprovals(ctx context.Context, userToken string) ([]
 	return out.Items, nil
 }
 
-// DecideApproval calls approvals.decide with args {approval_id, decision[, comment]} (comment only when non-empty)
-// and idempotency_key = key (the request's Idempotency-Key header).
+// DecideApproval вызывает approvals.decide с args {approval_id, decision[, comment]} (comment — только если не пустой)
+// и idempotency_key = key (заголовок Idempotency-Key запроса).
 func (c *Client) DecideApproval(ctx context.Context, userToken, approvalID, decision, comment, key string) (Approval, error) {
 	args := map[string]any{"approval_id": approvalID, "decision": decision}
 	if comment != "" {
@@ -248,8 +248,7 @@ func (c *Client) DecideApproval(ctx context.Context, userToken, approvalID, deci
 	return execTyped[Approval](ctx, c, userToken, ToolDecideApproval, args, key)
 }
 
-// AddFAQ calls kb.add_faq with the mentor's token; idempotencyKey is the escalation id. It implements
-// escalations.FAQWriter.
+// AddFAQ вызывает kb.add_faq с токеном наставника; idempotencyKey — id обращения. Реализует escalations.FAQWriter.
 func (c *Client) AddFAQ(ctx context.Context, mentorToken, title, body, scope, idempotencyKey string) error {
 	args := map[string]any{"title": title, "body": body}
 	if scope == "all" {
