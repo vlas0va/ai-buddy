@@ -964,3 +964,32 @@ func TestChat_QuizPassedMarksOwnStudyTask_Organizers1213(t *testing.T) {
 		t.Fatal("another intern's task must not change")
 	}
 }
+
+// Organizers 13.11: buddy does not deliver messages to the mentor; an intern's unanswered question goes to the
+// mentor's stack once per assistant message. A draft without queue, or a mentor's turn, stores nothing.
+func TestChat_QueuedQuestionGoesToTheMentorsStack_S2_23(t *testing.T) {
+	e := newEnv(t)
+	queued := map[string]any{"to_role": "mentor", "text": "Олег, привет! Подскажи: можно ли с собакой?", "queue": true,
+		"question": "Можно ли приходить в офис с собакой?"}
+	e.agent.OnMessage(func(agenttest.Request) []agenttest.Event {
+		return []agenttest.Event{{Name: "token", Data: map[string]any{"text": "В базе знаний ответа нет."}},
+			{Name: "escalation_draft", Data: queued}, agenttest.Done()}
+	})
+	anna := e.anna()
+	e.message(e.session(anna), anna, "можно ли с собакой?")
+	if n := e.count(`SELECT count(*) FROM core.escalations e JOIN core.chat_messages m ON m.id = e.message_id
+		WHERE e.from_user_id = 'intern.anna' AND e.to_user_id = 'mentor.oleg' AND e.text = 'Можно ли приходить в офис с собакой?'
+		AND e.status = 'open' AND m.author = 'assistant'`); n != 1 {
+		t.Fatalf("queued: %d", n)
+	}
+	if n := e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'mentor.oleg'`); n != 0 {
+		t.Fatalf("no notification per question, got %d", n)
+	}
+	oleg := e.oleg()
+	e.message(e.session(oleg), oleg, "можно ли с собакой?") // a mentor's question is not queued
+	delete(queued, "queue")
+	e.message(e.session(anna), anna, "ещё раз")
+	if n := e.count(`SELECT count(*) FROM core.escalations`); n != 1 {
+		t.Fatalf("escalations: %d", n)
+	}
+}

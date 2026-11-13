@@ -24,7 +24,7 @@ test('S2: engineering onboarding — branches and PR answered from the KB', asyn
   await expect(lastTurn(page).getByLabel('Источники')).toContainText('Ветки, коммиты и pull request')
 })
 
-test('S2: unknown question → draft to the mentor → mentor answers → intern sees the answer', async ({ browser }) => {
+test('S2: unknown question → text to write the mentor directly, the question waits in the mentor\'s stack → answer reaches the intern (organizers 13.11)', async ({ browser }) => {
   const marker = `Где посмотреть расписание командного митапа по архитектуре в этом квартале (${Date.now() % 100000})?`
   const intern = await (await browser.newContext()).newPage()
   await login(intern, 'intern.anna')
@@ -33,8 +33,10 @@ test('S2: unknown question → draft to the mentor → mentor answers → intern
   await waitAnswer(intern)
   const draft = intern.getByLabel('Черновик сообщения').last()
   await expect(draft).toBeVisible()
-  await draft.getByRole('button', { name: /Отправить/ }).click()
-  await expect(draft.getByText('Сообщение отправлено.')).toBeVisible()
+  await expect(draft.getByRole('button', { name: 'Скопировать' })).toBeVisible()
+  await expect(draft.getByRole('button', { name: /Отправить/ })).toHaveCount(0) // buddy does not deliver messages
+  await expect(draft).toContainText('#delivery-team')
+  await expect(draft).toContainText('Вопрос уже в списке наставника')
   await intern.getByRole('link', { name: 'Мои вопросы' }).click()
   await expect(intern.getByText(marker).first()).toBeVisible()
 
@@ -60,9 +62,7 @@ test('S2: a question the KB does not know → Oleg answers for all → another i
   await ask(anna, question)
   await waitAnswer(anna)
   await expect(lastTurn(anna)).toContainText('Точного ответа в базе знаний нет')
-  const draft = anna.getByLabel('Черновик сообщения').last()
-  await draft.getByRole('button', { name: /Отправить/ }).click()
-  await expect(lastTurn(anna)).toContainText('Сообщение отправлено')
+  await expect(lastTurn(anna)).toContainText('в список вопросов для наставника')
 
   const oleg = await (await browser.newContext()).newPage()
   await login(oleg, 'mentor.oleg')

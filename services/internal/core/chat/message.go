@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 
 	"aibuddy/services/internal/core/agentclient"
+	"aibuddy/services/internal/core/analytics"
+	"aibuddy/services/internal/core/escalations"
 	"aibuddy/services/internal/core/mcpclient"
 	"aibuddy/services/internal/platform/apierr"
 	"aibuddy/services/internal/platform/authn"
@@ -49,6 +51,7 @@ type turnState struct {
 	refusal       string          // refusal.reason
 	refusalText   string          // refusal.text (assistant text fallback)
 	escalatedTo   string          // escalation_draft.to_role
+	queued        string          // escalation_draft.question with queue=true: goes to the addressee's stack (13.11)
 	done          json.RawMessage // the agent's done, relayed with core's message_id
 	doneProvider  string
 	doneLatencyMS *int64
@@ -113,10 +116,15 @@ func (s *turnState) collect(ev agentclient.Event) {
 		s.card("refusal", ev.Data)
 	case agentclient.EventEscalationDraft:
 		var d struct {
-			ToRole string `json:"to_role"`
+			ToRole   string `json:"to_role"`
+			Queue    bool   `json:"queue"`
+			Question string `json:"question"`
 		}
 		if json.Unmarshal(ev.Data, &d) == nil {
 			s.escalatedTo = d.ToRole
+			if d.Queue {
+				s.queued = d.Question
+			}
 		}
 		s.card("escalation", ev.Data)
 	case agentclient.EventNextStep:
@@ -293,6 +301,7 @@ loop:
 		return
 	}
 	h.reportAnswer(ctx, c, sid, assistantID, started, &st)
+	h.enqueue(ctx, c, sid, assistantID, &st)
 	_ = sse.Send(agentclient.EventDone, st.doneEvent(assistantID))
 }
 
@@ -434,3 +443,22 @@ func (h *Handler) quizPassed(ctx context.Context, c authn.Claims, data json.RawM
 
 // quizItems mirror plan.confirmModes («quiz»): study tasks without steps.
 var quizItems = map[string]bool{"CL-07": true, "CL-09": true}
+
+// enqueue puts the intern's question that buddy could not answer into the addressee's stack (organizers 13.11). The
+// user comes from the JWT and the message is the one just saved; a failure is logged and never breaks the turn.
+func (h *Handler) enqueue(ctx context.Context, c authn.Claims, sid, messageID string, st *turnState) {
+	if st.queued == "" {
+		return
+	}
+	added, err := escalations.Enqueue(ctx, h.pool, c, st.escalatedTo, st.queued, sid, messageID)
+	if err != nil {
+		h.log.Warn("question not queued", "session", sid, "err", err)
+		return
+	}
+	if added && h.emitter != nil {
+		if err := h.emitter.Emit(ctx, h.pool, analytics.Event{Name: "escalation.sent", UserID: c.Sub, Role: c.Role, TeamID: c.TeamID,
+			Props: map[string]any{"to_role": st.escalatedTo}}); err != nil {
+			h.log.Warn("escalation.sent event failed", "err", err)
+		}
+	}
+}

@@ -236,12 +236,15 @@ def test_CO_17_nearby_documents_before_escalation_and_kb_loop(anna, monkeypatch)
     monkeypatch.setattr(qa, "_nearby", lambda turn, text: [_Doc()])
     ev = anna.say("Где посмотреть расписание командного митапа по архитектуре?")
     text = text_of(ev)
-    assert "Возможно, поможет: «Ценности команды»" in text and "в базу знаний" in text
+    assert "Возможно, поможет: «Ценности команды»" in text and "в базе знаний" in text
     assert _sources(ev) == ["common-team-values"]
-    assert first(ev, "escalation_draft")["to_role"] == "mentor"
+    draft = first(ev, "escalation_draft")
+    # organizers 13.11: the intern writes the mentor directly; the question goes to the mentor's stack
+    assert draft["to_role"] == "mentor" and draft["queue"] is True and draft["channel"] == "#delivery-team"
+    assert "в личных сообщениях или в канале #delivery-team" in text and "в список вопросов для наставника" in text
     monkeypatch.undo()
     ev = anna.say("Где посмотреть расписание командного митапа по архитектуре?")
-    assert "Ниже черновик" in text_of(ev) and first(ev, "sources") is None
+    assert "ниже готовый текст" in text_of(ev) and first(ev, "sources") is None
 
 
 def test_CO_22_unsure_classifier_but_the_kb_knows(anna, client):
@@ -299,3 +302,10 @@ def test_CO_20_study_task_confirmed_by_the_quiz(anna):
     ev = anna.say(", ".join(state["answers"]))
     assert first(ev, "quiz_passed") == {"checklist_item_id": "CL-07"}
     assert "отмечена выполненной" in text_of(ev)
+
+
+def test_S2_23_only_interns_questions_go_to_the_stack(client):
+    """Organizers 13.11: a mentor's unknown question gives the text to the curator, nothing goes to a stack."""
+    ev = client.login("mentor.oleg").say("Где посмотреть расписание командного митапа по архитектуре?")
+    draft = first(ev, "escalation_draft")
+    assert draft and "queue" not in draft and "в список вопросов" not in text_of(ev)

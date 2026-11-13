@@ -41,27 +41,57 @@ def _addressee(text: str, default: str = "mentor") -> str:
     return default
 
 
-def escalation_event(turn: Turn, question: str, role: str, topic: str = "question", kb_found: bool = False) -> Event:
+# Questions buddy could not answer go to the mentor's stack (organizers 13.11): the mentor answers them in a batch when
+# convenient and the answer lands in the knowledge base. The intern writes the person directly, buddy only gives the text.
+QUEUE_ROLES = ("mentor", "lead", "hrbp")
+
+
+def escalation_event(
+    turn: Turn, question: str, role: str, topic: str = "question", kb_found: bool = False, queue: bool = False
+) -> Event:
     person = turn.contact(role) or (turn.contact("mentor") if role != "mentor" else None)
     if person is None:
         role = "mentor"
     hello = f"{first_name(person)}, привет!" if person else "Привет!"
     q = question.strip().rstrip("?") + "?" if question.strip() else "Можешь подсказать?"
-    return Event(
-        "escalation_draft",
-        {
-            "to_role": role,
-            "to_user_id": (person or {}).get("user_id"),
-            "to_name": person_name(person),
-            "topic": topic,
-            "text": f"{hello} Подскажи, пожалуйста: {q} "
-            + (
-                "В базе знаний есть общий ответ, но нужно твоё уточнение."
-                if kb_found
-                else "В базе знаний команды ответа не нашёл."
-            ),
-        },
-    )
+    data: dict[str, Any] = {
+        "to_role": role,
+        "to_user_id": (person or {}).get("user_id"),
+        "to_name": person_name(person),
+        "channel": (person or {}).get("channel", ""),
+        "topic": topic,
+        "text": f"{hello} Подскажи, пожалуйста: {q} "
+        + (
+            "В базе знаний есть общий ответ, но нужно твоё уточнение."
+            if kb_found
+            else "В базе знаний команды ответа не нашёл."
+        ),
+    }
+    if queue and queues(turn, role):
+        data["queue"] = True
+        data["question"] = q
+    return Event("escalation_draft", data)
+
+
+def queues(turn: Turn, role: str) -> bool:
+    """The question goes to the addressee's stack: interns' questions to the mentor, the lead or HR BP."""
+    return turn.user.role == "intern" and role in QUEUE_ROLES
+
+
+def write_directly(turn: Turn, role: str) -> str:
+    """«Спроси наставника в личных сообщениях или в канале #… — ниже готовый текст» (+ the stack, for interns)."""
+    gen = GENITIVE.get(role, "наставника")
+    person = turn.contact(role)
+    name = f" ({person_name(person)})" if person else ""
+    channel = (person or {}).get("channel", "")
+    where = f"в личных сообщениях или в канале {channel}" if channel else "в личных сообщениях"
+    out = f"Спроси {gen}{name} {where} — ниже готовый текст, его можно скопировать."
+    if queues(turn, role):
+        out += (
+            f" Я добавил вопрос в список вопросов для {gen}: когда он ответит, ответ появится в «Мои вопросы» и в базе "
+            "знаний, и в следующий раз я отвечу сам."
+        )
+    return out
 
 
 ASK_MENTOR = re.compile(r"(уточни|спроси|обратись|напиши)\w*\s+(\w+\s+){0,2}(у\s+|к\s+)?наставник", re.I)
@@ -252,7 +282,6 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             return
         # a mentor or a lead asks the curator of the internship, not «the mentor» (QA 12.11)
         role = _addressee(asked, "curator" if turn.user.role in ("mentor", "lead") else "mentor")
-        label = CONTACT_LABELS.get(role, "наставник")
         near = _nearby(turn, text)
         if near:
             yield Event(
@@ -268,12 +297,8 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
             lead = f"Точного ответа в базе знаний нет. Возможно, поможет: {titles} — загляни туда сначала."
         else:
             lead = "В базе знаний команды я не нашёл ответа на этот вопрос."
-        tail = "Если не то — ниже" if near else "Ниже"
-        yield from say(
-            f"{lead} {tail} черновик вопроса ({label}). Когда он ответит, ответ можно одной галочкой "
-            "добавить в базу знаний, и в следующий раз я отвечу сам."
-        )
-        yield escalation_event(turn, asked, role)
+        yield from say(f"{lead} {write_directly(turn, role)}")
+        yield escalation_event(turn, asked, role, queue=True)
         turn.meta["escalated"] = True
         return
     yield Event(
@@ -305,13 +330,11 @@ def handle_question(turn: Turn, text: str) -> Iterator[Event]:
         answer.append(chunk)
         yield from (say(chunk) if len(chunk) > 80 else iter([Event("token", {"text": chunk})]))
     if turn.user.role == "intern" and sends_to_mentor("".join(answer)):
-        # the answer sends the intern to the mentor: give the message ready to send through buddy, so the mentor's
-        # answer can go to the knowledge base for the next interns (QA 12.11)
-        yield from say(
-            "\n\nНиже черновик вопроса наставнику — отправь его здесь, а не в личку: если ответ пригодится другим, "
-            "наставник одной галочкой добавит его в базу знаний."
-        )
-        yield escalation_event(turn, asked, "mentor", kb_found=True)
+        # the answer sends the intern to the mentor: the message to copy, and the question to the mentor's stack so the
+        # answer reaches the knowledge base for the next interns (organizers 13.11)
+        ask = write_directly(turn, "mentor")
+        yield from say(f"\n\nЕсли нужно уточнение — {ask[0].lower()}{ask[1:]}")
+        yield escalation_event(turn, asked, "mentor", kb_found=True, queue=True)
     if CURATOR_TOPICS.search(normalize(text)) and re.search(r"документ|справк|подпис|договор", normalize(text)):
         yield from say(
             "\n\nПо документам для вуза лучше сразу написать куратору стажировки — могу подготовить сообщение."
@@ -366,8 +389,8 @@ def handle_escalate(turn: Turn, text: str) -> Iterator[Event]:
     if len(question) < 8:
         last = next((h["text"] for h in reversed(turn.history) if h.get("role") == "user"), "")
         question = last or question
-    yield from say(f"Подготовил черновик для {GENITIVE.get(role, 'наставника')} — проверь и отправь, если всё верно.")
-    yield escalation_event(turn, question, role, topic="manual")
+    yield from say(f"Подготовил сообщение. {write_directly(turn, role)}")
+    yield escalation_event(turn, question, role, topic="manual", queue=True)
     turn.meta["escalated"] = True
 
 

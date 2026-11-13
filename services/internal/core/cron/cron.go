@@ -34,6 +34,7 @@ type Result struct {
 	Overdue       int `json:"overdue_notifications"`
 	Reminders     int `json:"reminders"`
 	Reports       int `json:"reports"`
+	Questions     int `json:"question_digests"` // organizers 13.11: one digest a day per addressee with open questions
 }
 
 // Runner executes the job.
@@ -117,7 +118,54 @@ func (r *Runner) RunOnce(ctx context.Context) (Result, error) {
 		}
 		res.Plans++
 	}
+	n, err := r.questionDigests(ctx)
+	if err != nil {
+		return res, err
+	}
+	res.Questions = n
 	return res, nil
+}
+
+// questionDigests: interns' questions wait in the addressee's stack without a notification each (organizers 13.11);
+// once a day the addressee gets one digest «Вопросы стажёров ждут ответа: N».
+func (r *Runner) questionDigests(ctx context.Context) (int, error) {
+	rows, err := r.pool.Query(ctx, `SELECT to_user_id, count(*)::int FROM core.escalations WHERE status = 'open'
+		GROUP BY to_user_id ORDER BY to_user_id`)
+	if err != nil {
+		return 0, fmt.Errorf("select open questions: %w", err)
+	}
+	type pending struct {
+		user string
+		n    int
+	}
+	var all []pending
+	for rows.Next() {
+		var p pending
+		if err := rows.Scan(&p.user, &p.n); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("scan open questions: %w", err)
+		}
+		all = append(all, p)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("read open questions: %w", err)
+	}
+	day := r.Now().UTC().Format("2006-01-02")
+	sent := 0
+	for _, p := range all {
+		n := notify.Notification{UserID: p.user, Kind: notify.KindReminder, DedupeKey: "questions:" + day,
+			Title: fmt.Sprintf("Вопросы стажёров ждут ответа: %d", p.n),
+			Body:  "Ответьте в разделе «Вопросы стажёров» — похожие вопросы собраны вместе, ответ можно добавить в базу знаний."}
+		created, err := r.notify.CreateIfNew(ctx, r.pool, n)
+		if err != nil {
+			return sent, fmt.Errorf("question digest %s: %w", p.user, err)
+		}
+		if created {
+			sent++
+		}
+	}
+	return sent, nil
 }
 
 func (r *Runner) runPlan(ctx context.Context, p planRow, res *Result) error {

@@ -354,8 +354,8 @@ def test_LLM_06_false_not_found_over_a_covering_document_is_replaced():
 
 
 def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, client):
-    """QA 12.11: «уточни у наставника» in the answer → a ready message to the mentor, sent through buddy so the answer
-    can go to the knowledge base."""
+    """QA 12.11 / organizers 13.11: «уточни у наставника» in the answer → a ready message to copy into the messenger, and
+    the question goes to the mentor's stack so the answer can reach the knowledge base."""
     from agent.llm.writer import StubWriter
 
     def fake(self, question, hits, user, task_hint="", **kw):  # noqa: ANN001, ANN202
@@ -366,7 +366,8 @@ def test_LLM_07_answer_that_sends_to_the_mentor_comes_with_a_draft(monkeypatch, 
     ev = anna.say("какие документы и мануалы по работе в моей команде мне нужно изучить")
     draft = first(ev, "escalation_draft")
     assert draft and draft["to_role"] == "mentor" and "документы и мануалы" in draft["text"]
-    assert "добавит его в базу знаний" in "".join(e.data["text"] for e in ev if e.name == "token")
+    assert "в список вопросов для наставника" in "".join(e.data["text"] for e in ev if e.name == "token")
+    assert draft["queue"] is True and draft["question"].startswith("какие документы")
     assert "есть общий ответ, но нужно твоё уточнение" in draft["text"]
 
 
