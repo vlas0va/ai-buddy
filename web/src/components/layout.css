@@ -88,7 +88,7 @@
     padding: var(--space-8) 56px; background: var(--gradient-hero);
   }
   .login-hero-main { display: grid; gap: var(--space-6); align-content: center; flex: 1; max-width: 460px; }
-  .login-hero .brand { padding: 0; }
+  .login-hero .brand { padding: 0; gap: var(--space-3); }
   .login-hero .brand-name { font-size: var(--text-lg); }
   .login-hero-title { font-size: var(--text-xl); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; }
   .benefits { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-4); }

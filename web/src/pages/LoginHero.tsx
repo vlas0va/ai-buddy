@@ -12,7 +12,7 @@ export function LoginHero() {
     <section className="login-hero" aria-label="О продукте">
       <div className="login-hero-main">
         <div className="brand">
-          <Logo size={40} />
+          <Logo size={72} />
           <span className="brand-name">AI-buddy</span>
         </div>
         <p className="login-hero-title">Помощник для первых недель стажировки</p>
