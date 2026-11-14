@@ -55,13 +55,13 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">aibuddy/services/internal/mocks/absence/absence.go (90.9%)</option>
+				<option value="file0">aibuddy/services/internal/mocks/absence/absence.go (86.4%)</option>
 				
-				<option value="file1">aibuddy/services/internal/mocks/access/access.go (87.2%)</option>
+				<option value="file1">aibuddy/services/internal/mocks/access/access.go (86.6%)</option>
 				
 				<option value="file2">aibuddy/services/internal/mocks/app/app.go (90.9%)</option>
 				
-				<option value="file3">aibuddy/services/internal/mocks/approvals/approvals.go (89.4%)</option>
+				<option value="file3">aibuddy/services/internal/mocks/approvals/approvals.go (87.9%)</option>
 				
 				<option value="file4">aibuddy/services/internal/mocks/checklist/checklist.go (86.7%)</option>
 				
@@ -69,7 +69,7 @@
 				
 				<option value="file6">aibuddy/services/internal/mocks/directory/directory.go (94.6%)</option>
 				
-				<option value="file7">aibuddy/services/internal/mocks/kb/kb.go (86.5%)</option>
+				<option value="file7">aibuddy/services/internal/mocks/kb/kb.go (84.7%)</option>
 				
 				<option value="file8">aibuddy/services/internal/mocks/kb/loader.go (95.7%)</option>
 				
@@ -87,9 +87,11 @@
 		</div>
 		<div id="content">
 		
-		<pre class="file" id="file0" style="display: none">// Package absence implements the mock "absence" MCP server: day-off policy, validation and requests (S3).
-// Data is synthetic (R68). Identity comes only from the verified JWT (R71); a request is visible only to its author.
-// create_request writes the request and its approval item in one transaction and is idempotent by key (R66, R79).
+		<pre class="file" id="file0" style="display: none">// Пакет absence реализует мок-сервер MCP «absence»: правила, проверку и заявки на отгул, отпуск, отсутствие и декрет
+// (S3; чекпоинт 11.11). Сначала согласует руководитель, затем HR-администратор; пока HR-администратор не согласовал,
+// заявку можно перенести на другие даты. Данные синтетические (R68). Личность берётся только из проверенного JWT (R71);
+// заявку видит только её автор. create_request записывает заявку и её пункт согласования в одной транзакции и
+// идемпотентна по ключу (R66, R79).
 package absence
 
 import (
@@ -108,19 +110,30 @@ import (
         "aibuddy/services/internal/platform/mcpx"
 )
 
-// maxDays is the longest day off in consecutive calendar days.
-const maxDays = 3
+// Правила по видам (тестовые правила прототипа): самая длинная заявка в календарных днях и минимальный срок подачи в
+// днях.
+const (
+        maxDays         = 3  // отгул
+        maxVacationDays = 28 // отпуск
+        vacationNotice  = 14 // отпуск: подаётся не меньше чем за две недели
+        maxAbsenceDays  = 5  // отсутствие по личным причинам
+        maxDocuments    = 3
+        maxDocumentName = 200
+)
 
-// moscow is the business time zone for "tomorrow". Europe/Moscow is UTC+3 without DST since 2014; a fixed zone
-// avoids depending on tzdata in the container image.
+// typeLabels называют каждый вид в сводках и сообщениях.
+var typeLabels = map[string]string{"day_off": "Отгул", "vacation": "Отпуск", "absence": "Отсутствие", "parental_leave": "Декрет"}
+
+// moscow — рабочий часовой пояс для «завтра». Europe/Moscow — UTC+3 без перехода на летнее время с 2014 года;
+// фиксированная зона избавляет от зависимости от tzdata в образе контейнера.
 var moscow = time.FixedZone("MSK", 3*60*60)
 
-// Register binds every tool of the absence contract to srv.
+// Register привязывает каждый инструмент контракта absence к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         return register(srv, pool, time.Now)
 }</span>
 
-// register is Register with an injectable clock (tests).
+// register — это Register с подменяемыми часами (для тестов).
 func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
         if srv == nil || pool == nil || now == nil </span><span class="cov8" title="1">{
                 return errors.New("absence: server, pool and clock are required")
@@ -134,6 +147,8 @@ func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error 
         srv.Handle("validate_request", s.validateRequest)
         srv.Handle("create_request", s.createRequest)
         srv.Handle("get_request", s.getRequest)
+        srv.Handle("reschedule_request", s.rescheduleRequest)
+        srv.Handle("cancel_request", s.cancelRequest)
         return nil</span>
 }
 
@@ -142,32 +157,44 @@ type service struct {
         now  func() time.Time
 }
 
-// querier is satisfied by *pgxpool.Pool and pgx.Tx.
+// querier удовлетворяют *pgxpool.Pool и pgx.Tx.
 type querier interface {
         Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
         QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-// request is one absence request as returned by the tools.
+// request — одна заявка на отсутствие в том виде, как её возвращают инструменты.
 type request struct {
-        ID                  string `json:"id"`
-        Type                string `json:"type"`
-        StartDate           string `json:"start_date"`
-        EndDate             string `json:"end_date"`
-        Comment             string `json:"comment,omitempty"`
-        Status              string `json:"status"`
-        ApproverID          string `json:"approver_id"`
-        ApproverDisplayName string `json:"approver_display_name,omitempty"`
-        CreatedAt           string `json:"created_at"`
-        Steps               []step `json:"steps"`
-        Replayed            *bool  `json:"replayed,omitempty"`
+        ID                  string     `json:"id"`
+        Type                string     `json:"type"`
+        StartDate           string     `json:"start_date"`
+        EndDate             string     `json:"end_date"`
+        Comment             string     `json:"comment,omitempty"`
+        Status              string     `json:"status"`
+        ApproverID          string     `json:"approver_id"`
+        ApproverDisplayName string     `json:"approver_display_name,omitempty"`
+        CreatedAt           string     `json:"created_at"`
+        Documents           []document `json:"documents"`
+        Steps               []step     `json:"steps"`
+        Replayed            *bool      `json:"replayed,omitempty"`
+        // ReplacedID: несогласованная заявка внутри новых дат, которую отменил create_request (отзыв 12.13)
+        ReplacedID string `json:"replaced_id,omitempty"`
 
         employeeID     string
         idempotencyKey string
+        rescheduleKey  string
+        cancelKey      string
 }
 
-// step is one stage of a day off after it is created (organizers' Q&amp;A 10.11): the lead approves, the HR admin registers
-// the approved day off in the HR system, the HR BP is notified.
+// document — метаданные файла, приложенного к заявке; его содержимое в сервис не попадает.
+type document struct {
+        Name string `json:"name"`
+        Mime string `json:"mime,omitempty"`
+        Size int64  `json:"size,omitempty"`
+}
+
+// step — один этап отгула после его создания (ответы организаторов 10.11): руководитель согласует, HR-администратор
+// оформляет согласованный отгул в HR-системе, HR BP получает уведомление.
 type step struct {
         Role        string `json:"role"`
         DisplayName string `json:"display_name,omitempty"`
@@ -178,7 +205,8 @@ type step struct {
 const selectRequest = `
 SELECT r.id, r.type, r.start_date, r.end_date, coalesce(r.comment, ''), r.status, r.approver_id,
        coalesce(a.display_name, ''), r.created_at, r.employee_id, r.idempotency_key::text,
-       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at
+       r.decided_at, coalesce(ha.display_name, ''), r.registered_at, coalesce(hb.display_name, ''), r.hrbp_notified_at,
+       r.documents, r.lead_decided_at, coalesce(r.reschedule_key::text, ''), coalesce(r.cancel_key::text, '')
 FROM absence.requests r
 LEFT JOIN directory.employees a ON a.id = r.approver_id
 LEFT JOIN directory.employees emp ON emp.id = r.employee_id
@@ -192,18 +220,25 @@ func scanRequest(row pgx.CollectableRow) (request, error) <span class="cov8" tit
                 start, end                    time.Time
                 created                       time.Time
                 decided, registered, notified *time.Time
+                leadDecided                   *time.Time
                 hrAdmin, hrbp                 string
+                docs                          []byte
         )
         err := row.Scan(&amp;r.ID, &amp;r.Type, &amp;start, &amp;end, &amp;r.Comment, &amp;r.Status, &amp;r.ApproverID, &amp;r.ApproverDisplayName,
-                &amp;created, &amp;r.employeeID, &amp;r.idempotencyKey, &amp;decided, &amp;hrAdmin, &amp;registered, &amp;hrbp, &amp;notified)
+                &amp;created, &amp;r.employeeID, &amp;r.idempotencyKey, &amp;decided, &amp;hrAdmin, &amp;registered, &amp;hrbp, &amp;notified,
+                &amp;docs, &amp;leadDecided, &amp;r.rescheduleKey, &amp;r.cancelKey)
         r.StartDate, r.EndDate = start.Format(time.DateOnly), end.Format(time.DateOnly)
         r.CreatedAt = created.UTC().Format(time.RFC3339)
-        r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, decided, registered, notified)
-        return r, err
-}</span>
+        if json.Unmarshal(docs, &amp;r.Documents) != nil || r.Documents == nil </span><span class="cov0" title="0">{
+                r.Documents = []document{}
+        }</span>
+        <span class="cov8" title="1">r.Steps = steps(r.Status, r.ApproverDisplayName, hrAdmin, hrbp, leadDecided, decided, registered, notified)
+        return r, err</span>
+}
 
-// steps derives the stages of a request from its status and HR timestamps.
-func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *time.Time) []step <span class="cov8" title="1">{
+// steps выводит этапы заявки из её статуса и отметок времени: решает руководитель (leadDecided), затем решает
+// HR-администратор (decided) и оформляет её, затем уведомляется HR BP.
+func steps(status, lead, hrAdmin, hrbp string, leadDecided, decided, registered, notified *time.Time) []step <span class="cov8" title="1">{
         at := func(t *time.Time) string </span><span class="cov8" title="1">{
                 if t == nil </span><span class="cov8" title="1">{
                         return ""
@@ -212,10 +247,17 @@ func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *ti
         }
         <span class="cov8" title="1">out := []step{{Role: "lead", DisplayName: lead, Status: "waiting"}, {Role: "hr_admin", DisplayName: hrAdmin, Status: "waiting"},
                 {Role: "hrbp", DisplayName: hrbp, Status: "waiting"}}
-        switch status </span>{
-        case "approved":<span class="cov8" title="1">
-                out[0].Status, out[0].At = "approved", at(decided)</span>
-        case "rejected", "cancelled":<span class="cov8" title="1">
+        switch </span>{
+        case status == "pending_hr", status == "approved":<span class="cov8" title="1">
+                out[0].Status, out[0].At = "approved", at(leadDecided)
+                if leadDecided == nil </span><span class="cov8" title="1">{
+                        out[0].At = at(decided)
+                }</span>
+        case (status == "rejected" || status == "cancelled") &amp;&amp; leadDecided != nil:<span class="cov8" title="1">
+                out[0].Status, out[0].At = "approved", at(leadDecided)
+                out[1].Status, out[1].At = "rejected", at(decided)
+                out[2].Status = "skipped"</span>
+        case status == "rejected", status == "cancelled":<span class="cov8" title="1">
                 out[0].Status, out[0].At = "rejected", at(decided)
                 out[1].Status, out[2].Status = "skipped", "skipped"</span>
         }
@@ -228,7 +270,7 @@ func steps(status, lead, hrAdmin, hrbp string, decided, registered, notified *ti
         <span class="cov8" title="1">return out</span>
 }
 
-// findRequest returns the request matching where (a condition on alias r with parameter $1), or ok=false.
+// findRequest возвращает заявку, подходящую под where (условие на псевдоним r с параметром $1), или ok=false.
 func findRequest(ctx context.Context, q querier, where string, arg any) (request, bool, error) <span class="cov8" title="1">{
         rows, err := q.Query(ctx, selectRequest+" WHERE "+where, arg)
         if err != nil </span><span class="cov8" title="1">{
@@ -258,8 +300,8 @@ type policy struct {
         URL        string `json:"url,omitempty"`
 }
 
-// getPolicy returns the team's test instruction (absence-policy-&lt;team&gt;) or the common one (absence-policy).
-// The KB ACL is applied as in kb.search, so a document the caller may not read is never returned (R71).
+// getPolicy возвращает тестовую инструкцию команды (absence-policy-&lt;team&gt;) или общую (absence-policy). ACL базы знаний
+// применяется как в kb.search, поэтому документ, который вызывающему читать нельзя, никогда не возвращается (R71).
 func (s *service) getPolicy(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         var p policy
         err := s.pool.QueryRow(ctx, `
@@ -322,7 +364,7 @@ func (s *service) getRequest(ctx context.Context, c mcpx.Caller, args json.RawMe
                 return nil, err
         }</span>
         <span class="cov8" title="1">if !ok || r.employeeID != c.Sub </span><span class="cov8" title="1">{
-                return nil, forbiddenRequest() // never reveal whether another user's request exists (R71)
+                return nil, forbiddenRequest() // никогда не раскрывать, существует ли заявка другого пользователя (R71)
         }</span>
         <span class="cov8" title="1">return r, nil</span>
 }
@@ -330,9 +372,11 @@ func (s *service) getRequest(ctx context.Context, c mcpx.Caller, args json.RawMe
 // --- validate_request ---
 
 type dates struct {
-        Type      string `json:"type"`
-        StartDate string `json:"start_date"`
-        EndDate   string `json:"end_date"`
+        Type      string     `json:"type"`
+        StartDate string     `json:"start_date"`
+        EndDate   string     `json:"end_date"`
+        Documents []document `json:"documents"`
+        ExcludeID string     `json:"exclude_id"`
 }
 
 type validateOut struct {
@@ -350,7 +394,7 @@ func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.
         <span class="cov8" title="1">return s.validate(ctx, s.pool, c, in)</span>
 }
 
-// validate checks the dates of a new request for c and finds the approver (the employee's lead).
+// validate проверяет даты новой заявки для c и находит согласующего (руководителя сотрудника).
 func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in dates) (validateOut, error) <span class="cov8" title="1">{
         out := validateOut{Problems: []string{}}
         start, errStart := time.Parse(time.DateOnly, in.StartDate)
@@ -370,9 +414,20 @@ WHERE e.id = $1`, c.Sub).Scan(&amp;leadID, &amp;leadName)
                 return out, fmt.Errorf("load employee: %w", err)
         }</span>
 
-        <span class="cov8" title="1">out.Problems = append(out.Problems, dateProblems(start, end, s.now())...)
+        <span class="cov8" title="1">if _, ok := typeLabels[in.Type]; !ok </span><span class="cov8" title="1">{
+                return out, apierr.Validation().WithMessage("Вид заявки: отгул, отпуск, отсутствие или декрет")
+        }</span>
+        <span class="cov8" title="1">if len(in.Documents) &gt; maxDocuments </span><span class="cov8" title="1">{
+                return out, apierr.Validation().WithMessage(fmt.Sprintf("Можно приложить не больше %d документов", maxDocuments))
+        }</span>
+        <span class="cov8" title="1">for _, d := range in.Documents </span><span class="cov8" title="1">{
+                if strings.TrimSpace(d.Name) == "" || len([]rune(d.Name)) &gt; maxDocumentName </span><span class="cov8" title="1">{
+                        return out, apierr.Validation().WithMessage("Имя документа: от 1 до 200 символов")
+                }</span>
+        }
+        <span class="cov8" title="1">out.Problems = append(out.Problems, typeProblems(in.Type, start, end, len(in.Documents), s.now())...)
         if !end.Before(start) </span><span class="cov8" title="1">{
-                overlaps, err := overlapProblems(ctx, q, c.Sub, in.StartDate, in.EndDate)
+                overlaps, err := overlapProblems(ctx, q, c.Sub, in.StartDate, in.EndDate, in.ExcludeID)
                 if err != nil </span><span class="cov0" title="0">{
                         return out, err
                 }</span>
@@ -388,8 +443,52 @@ WHERE e.id = $1`, c.Sub).Scan(&amp;leadID, &amp;leadName)
         return out, nil</span>
 }
 
-// dateProblems applies the calendar rules: start not before tomorrow (Moscow date of now), end not before start,
-// working days only, at most maxDays consecutive days.
+// typeProblems применяет правила каждого вида; у отгула остаются правила по рабочим дням (dateProblems).
+func typeProblems(kind string, start, end time.Time, docs int, now time.Time) []string <span class="cov8" title="1">{
+        y, m, d := now.In(moscow).Date()
+        today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+        days := int(end.Sub(start).Hours()/24) + 1
+        var problems []string
+        switch kind </span>{
+        case "day_off":<span class="cov8" title="1">
+                return dateProblems(start, end, now)</span>
+        case "vacation":<span class="cov8" title="1">
+                if earliest := today.AddDate(0, 0, vacationNotice); start.Before(earliest) </span><span class="cov8" title="1">{
+                        problems = append(problems, fmt.Sprintf("Заявку на отпуск подают не позже чем за %d дней: начало не раньше %s",
+                                vacationNotice, ru(earliest)))
+                }</span>
+                <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                        return append(problems, "Дата окончания не может быть раньше даты начала")
+                }</span>
+                <span class="cov8" title="1">if days &gt; maxVacationDays </span><span class="cov8" title="1">{
+                        problems = append(problems, fmt.Sprintf("Отпуск за один раз — не больше %d календарных дней, выбрано %d", maxVacationDays, days))
+                }</span>
+        case "absence":<span class="cov8" title="1">
+                if start.Before(today.AddDate(0, 0, 1)) </span><span class="cov8" title="1">{
+                        problems = append(problems, fmt.Sprintf("Дата начала должна быть не раньше завтрашнего дня (%s)", ru(today.AddDate(0, 0, 1))))
+                }</span>
+                <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                        return append(problems, "Дата окончания не может быть раньше даты начала")
+                }</span>
+                <span class="cov8" title="1">if days &gt; maxAbsenceDays </span><span class="cov8" title="1">{
+                        problems = append(problems, fmt.Sprintf("Отсутствие оформляется не больше чем на %d дней, выбрано %d", maxAbsenceDays, days))
+                }</span>
+        case "parental_leave":<span class="cov8" title="1">
+                if start.Before(today) </span><span class="cov8" title="1">{
+                        problems = append(problems, "Дата начала уже прошла")
+                }</span>
+                <span class="cov8" title="1">if end.Before(start) </span><span class="cov8" title="1">{
+                        return append(problems, "Дата окончания не может быть раньше даты начала")
+                }</span>
+                <span class="cov8" title="1">if docs == 0 </span><span class="cov8" title="1">{
+                        problems = append(problems, "Для декрета нужен подтверждающий документ — приложите заявление")
+                }</span>
+        }
+        <span class="cov8" title="1">return problems</span>
+}
+
+// dateProblems применяет правила отгула: начало не раньше завтра (московская дата now), конец не раньше начала, только
+// рабочие дни, не больше maxDays дней подряд.
 func dateProblems(start, end, now time.Time) []string <span class="cov8" title="1">{
         var problems []string
         y, m, d := now.In(moscow).Date()
@@ -424,14 +523,15 @@ func dateProblems(start, end, now time.Time) []string <span class="cov8" title="
         <span class="cov8" title="1">return problems</span>
 }
 
-// overlapProblems reports the caller's pending or approved requests that intersect [start, end].
-func overlapProblems(ctx context.Context, q querier, sub, start, end string) ([]string, error) <span class="cov8" title="1">{
+// overlapProblems сообщает о несогласованных или согласованных заявках вызывающего, пересекающих [start, end], кроме
+// excludeID (переносимой заявки).
+func overlapProblems(ctx context.Context, q querier, sub, start, end, excludeID string) ([]string, error) <span class="cov8" title="1">{
         rows, err := q.Query(ctx, `
 SELECT id, start_date, end_date, status
 FROM absence.requests
-WHERE employee_id = $1 AND status IN ('pending_approval', 'approved')
+WHERE employee_id = $1 AND status IN ('pending_approval', 'pending_hr', 'approved') AND id &lt;&gt; $4
   AND start_date &lt;= $3::date AND end_date &gt;= $2::date
-ORDER BY start_date, id`, sub, start, end)
+ORDER BY start_date, id`, sub, start, end, excludeID)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("query overlapping requests: %w", err)
         }</span>
@@ -442,7 +542,7 @@ ORDER BY start_date, id`, sub, start, end)
                 )
                 err := row.Scan(&amp;id, &amp;s, &amp;e, &amp;status)
                 label := "согласована"
-                if status == "pending_approval" </span><span class="cov8" title="1">{
+                if status != "approved" </span><span class="cov8" title="1">{
                         label = "на согласовании"
                 }</span>
                 <span class="cov8" title="1">return fmt.Sprintf("Даты пересекаются с заявкой %s на %s (%s)", id, period(s, e), label), err</span>
@@ -459,10 +559,11 @@ type createIn struct {
         dates
         Comment        string `json:"comment"`
         IdempotencyKey string `json:"idempotency_key"`
+        Replaces       string `json:"replaces"` // несогласованная заявка вызывающего внутри новых дат: отменяется тем же шагом
 }
 
-// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead)
-// and its approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+// createRequest повторно проверяет и в одной транзакции вставляет заявку (pending_approval, согласующий = руководитель)
+// и её пункт согласования. Тот же idempotency_key возвращает сохранённую заявку с replayed=true (R79).
 func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
         var in createIn
         if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
@@ -473,7 +574,7 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
                 return nil, fmt.Errorf("begin: %w", err)
         }</span>
         <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
-        // Serialise the caller's writes: the replay lookup and the overlap check must see each other's commits.
+        // Сериализуем записи вызывающего: поиск повтора и проверка пересечений должны видеть коммиты друг друга.
         <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("lock employee: %w", err)
         }</span>
@@ -484,20 +585,47 @@ func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.Ra
         <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
                 return replay(prev, c, in)
         }</span>
-        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, in.dates)
+        <span class="cov8" title="1">if in.ExcludeID != "" </span><span class="cov0" title="0">{
+                return nil, apierr.Validation().WithMessage("exclude_id используется только при проверке переноса")
+        }</span>
+        <span class="cov8" title="1">d := in.dates
+        if in.Replaces != "" </span><span class="cov8" title="1">{
+                // отзыв 12.13: отпуск или декрет, накрывающий несогласованный отгул, заменяет его
+                old, ok, err := findRequest(ctx, tx, "r.id = $1", in.Replaces)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">if !ok || old.employeeID != c.Sub </span><span class="cov0" title="0">{
+                        return nil, forbiddenRequest()
+                }</span>
+                <span class="cov8" title="1">if old.Status != "pending_approval" &amp;&amp; old.Status != "pending_hr" </span><span class="cov0" title="0">{
+                        return nil, apierr.Conflict().WithMessage("Заменить можно только заявку, которую HR-администратор ещё не согласовал")
+                }</span>
+                <span class="cov8" title="1">if old.StartDate &lt; in.StartDate || old.EndDate &gt; in.EndDate </span><span class="cov8" title="1">{
+                        return nil, apierr.Validation().WithMessage("Заменяемая заявка должна целиком попадать в новые даты")
+                }</span>
+                <span class="cov8" title="1">d.ExcludeID = old.ID</span>
+        }
+        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, d)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
         <span class="cov8" title="1">if !check.Valid </span><span class="cov8" title="1">{
-                return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, "; "))
+                return nil, apierr.Validation().WithMessage("Заявку нельзя создать: " + strings.Join(check.Problems, ". "))
         }</span>
-        <span class="cov8" title="1">var id string
+        <span class="cov8" title="1">if in.Replaces != "" </span><span class="cov8" title="1">{
+                if err := cancelInTx(ctx, tx, in.Replaces, ""); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+        }
+        <span class="cov8" title="1">docs, _ := json.Marshal(nonNilDocs(in.Documents))
+        var id string
         err = tx.QueryRow(ctx, `
-INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, approver_id, idempotency_key)
-VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid)
-RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey).Scan(&amp;id)
+INSERT INTO absence.requests (employee_id, type, start_date, end_date, comment, approver_id, idempotency_key, documents)
+VALUES ($1, $2, $3::date, $4::date, nullif($5, ''), $6, $7::uuid, $8)
+RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.ApproverID, in.IdempotencyKey, docs).Scan(&amp;id)
         if isUniqueViolation(err) </span><span class="cov0" title="0">{
-                return nil, keyConflict() // the key belongs to another employee's request
+                return nil, keyConflict() // ключ принадлежит заявке другого сотрудника
         }</span>
         <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("insert absence request: %w", err)
@@ -506,7 +634,7 @@ RETURNING id`, c.Sub, in.Type, in.StartDate, in.EndDate, in.Comment, check.Appro
         end, _ := time.Parse(time.DateOnly, in.EndDate)
         if _, err := tx.Exec(ctx, `
 INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
-VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, "Отгул "+period(start, end)); err != nil </span><span class="cov8" title="1">{
+VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, typeLabels[in.Type]+" "+period(start, end)); err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("insert approval item: %w", err)
         }</span>
         <span class="cov8" title="1">created, _, err := findRequest(ctx, tx, "r.id = $1", id)
@@ -517,18 +645,177 @@ VALUES ('absence_request', $1, $2, $3, $4)`, id, c.Sub, check.ApproverID, "От�
                 return nil, fmt.Errorf("commit: %w", err)
         }</span>
         <span class="cov8" title="1">created.Replayed = new(bool)
+        created.ReplacedID = in.Replaces
         return created, nil</span>
 }
 
-// replay returns the stored request for a repeated key, or conflict when the key was used for other arguments.
+// --- cancel_request ---
+
+type cancelIn struct {
+        ID             string `json:"id"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// cancelRequest отзывает заявку вызывающего, пока HR-администратор её не согласовал (отзыв 12.13): заявка становится
+// cancelled, а её открытые пункты согласования исчезают из «Согласований». Повтор ключа снова возвращает её.
+func (s *service) cancelRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in cancelIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">r, ok, err := findRequest(ctx, tx, "r.id = $1", in.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !ok || r.employeeID != c.Sub </span><span class="cov8" title="1">{
+                return nil, forbiddenRequest()
+        }</span>
+        <span class="cov8" title="1">if r.cancelKey == in.IdempotencyKey &amp;&amp; r.Status == "cancelled" </span><span class="cov8" title="1">{
+                replayed := true
+                r.Replayed = &amp;replayed
+                return r, nil
+        }</span>
+        <span class="cov8" title="1">if r.Status != "pending_approval" &amp;&amp; r.Status != "pending_hr" </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Отменить можно только заявку, которую HR-администратор ещё не согласовал. " +
+                        "Согласованную заявку отменяет HR-администратор — напиши ему.")
+        }</span>
+        <span class="cov8" title="1">if err := cancelInTx(ctx, tx, r.ID, in.IdempotencyKey); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">out, _, err := findRequest(ctx, tx, "r.id = $1", r.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">out.Replayed = new(bool)
+        return out, nil</span>
+}
+
+func cancelInTx(ctx context.Context, tx pgx.Tx, id, key string) error <span class="cov8" title="1">{
+        if _, err := tx.Exec(ctx, `UPDATE absence.requests SET status = 'cancelled', decided_at = now(),
+    cancel_key = coalesce(nullif($2, '')::uuid, cancel_key) WHERE id = $1`, id, key); err != nil </span><span class="cov0" title="0">{
+                if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                        return keyConflict()
+                }</span>
+                <span class="cov0" title="0">return fmt.Errorf("cancel absence request: %w", err)</span>
+        }
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `UPDATE approvals.items SET status = 'cancelled', decided_at = now()
+WHERE kind = 'absence_request' AND ref_id = $1 AND status = 'pending'`, id); err != nil </span><span class="cov0" title="0">{
+                return fmt.Errorf("cancel approval items: %w", err)
+        }</span>
+        <span class="cov8" title="1">return nil</span>
+}
+
+// replay возвращает сохранённую заявку при повторе ключа или conflict, если ключ использовался с другими аргументами.
 func replay(prev request, c mcpx.Caller, in createIn) (any, error) <span class="cov8" title="1">{
         if prev.employeeID != c.Sub || prev.Type != in.Type || prev.StartDate != in.StartDate ||
-                prev.EndDate != in.EndDate || prev.Comment != in.Comment </span><span class="cov8" title="1">{
+                prev.EndDate != in.EndDate || prev.Comment != in.Comment || len(prev.Documents) != len(in.Documents) </span><span class="cov8" title="1">{
                 return nil, keyConflict()
         }</span>
         <span class="cov8" title="1">replayed := true
         prev.Replayed = &amp;replayed
         return prev, nil</span>
+}
+
+func nonNilDocs(d []document) []document <span class="cov8" title="1">{
+        if d == nil </span><span class="cov8" title="1">{
+                return []document{}
+        }</span>
+        <span class="cov8" title="1">return d</span>
+}
+
+// --- reschedule_request ---
+
+type rescheduleIn struct {
+        ID             string `json:"id"`
+        StartDate      string `json:"start_date"`
+        EndDate        string `json:"end_date"`
+        IdempotencyKey string `json:"idempotency_key"`
+}
+
+// rescheduleRequest переносит заявку вызывающего на другие даты, пока HR-администратор её не согласовал (чекпоинт
+// 11.11). Согласование начинается заново: открытые пункты согласования отменяются, руководитель получает новый. Тот же
+// ключ возвращает перенесённую заявку с replayed=true (R79).
+func (s *service) rescheduleRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
+        var in rescheduleIn
+        if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">tx, err := s.pool.Begin(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("begin: %w", err)
+        }</span>
+        <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "absence:"+c.Sub); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("lock employee: %w", err)
+        }</span>
+        <span class="cov8" title="1">r, ok, err := findRequest(ctx, tx, "r.id = $1", in.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !ok || r.employeeID != c.Sub </span><span class="cov8" title="1">{
+                return nil, forbiddenRequest()
+        }</span>
+        <span class="cov8" title="1">if r.rescheduleKey == in.IdempotencyKey </span><span class="cov8" title="1">{
+                if r.StartDate != in.StartDate || r.EndDate != in.EndDate </span><span class="cov8" title="1">{
+                        return nil, keyConflict()
+                }</span>
+                <span class="cov8" title="1">replayed := true
+                r.Replayed = &amp;replayed
+                return r, nil</span>
+        }
+        <span class="cov8" title="1">if r.Status != "pending_approval" &amp;&amp; r.Status != "pending_hr" </span><span class="cov8" title="1">{
+                return nil, apierr.Conflict().WithMessage("Перенести можно только заявку, которую HR-администратор ещё не согласовал")
+        }</span>
+        <span class="cov8" title="1">check, err := s.validate(ctx, tx, c, dates{Type: r.Type, StartDate: in.StartDate, EndDate: in.EndDate,
+                Documents: r.Documents, ExcludeID: r.ID})
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !check.Valid </span><span class="cov8" title="1">{
+                return nil, apierr.Validation().WithMessage("Перенести нельзя: " + strings.Join(check.Problems, ". "))
+        }</span>
+        <span class="cov8" title="1">_, err = tx.Exec(ctx, `
+UPDATE absence.requests SET start_date = $2::date, end_date = $3::date, status = 'pending_approval',
+    approver_id = $4, lead_decided_at = NULL, decided_at = NULL, reschedule_key = $5::uuid
+WHERE id = $1`, r.ID, in.StartDate, in.EndDate, check.ApproverID, in.IdempotencyKey)
+        if isUniqueViolation(err) </span><span class="cov0" title="0">{
+                return nil, keyConflict()
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("move absence request: %w", err)
+        }</span>
+        <span class="cov8" title="1">if _, err := tx.Exec(ctx, `UPDATE approvals.items SET status = 'cancelled', decided_at = now()
+WHERE kind = 'absence_request' AND ref_id = $1 AND status = 'pending'`, r.ID); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("cancel approval items: %w", err)
+        }</span>
+        <span class="cov8" title="1">start, _ := time.Parse(time.DateOnly, in.StartDate)
+        end, _ := time.Parse(time.DateOnly, in.EndDate)
+        if _, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
+VALUES ('absence_request', $1, $2, $3, $4)`, r.ID, c.Sub, check.ApproverID,
+                typeLabels[r.Type]+" "+period(start, end)+" (перенос)"); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("insert approval item: %w", err)
+        }</span>
+        <span class="cov8" title="1">moved, _, err := findRequest(ctx, tx, "r.id = $1", r.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("commit: %w", err)
+        }</span>
+        <span class="cov8" title="1">moved.Replayed = new(bool)
+        return moved, nil</span>
 }
 
 func keyConflict() *apierr.Error <span class="cov8" title="1">{
@@ -540,12 +827,12 @@ func isUniqueViolation(err error) bool <span class="cov8" title="1">{
         return errors.As(err, &amp;pgErr) &amp;&amp; pgErr.Code == "23505"
 }</span>
 
-// --- formatting ---
+// --- форматирование ---
 
-// ru formats a date as DD.MM.YYYY.
+// ru форматирует дату как DD.MM.YYYY.
 func ru(t time.Time) string <span class="cov8" title="1">{ return t.Format("02.01.2006") }</span>
 
-// period formats a date range: one date for a single day, otherwise "start–end".
+// period форматирует диапазон дат: одна дата для одного дня, иначе «начало–конец».
 func period(start, end time.Time) string <span class="cov8" title="1">{
         if start.Equal(end) </span><span class="cov8" title="1">{
                 return ru(start)
@@ -553,7 +840,7 @@ func period(start, end time.Time) string <span class="cov8" title="1">{
         <span class="cov8" title="1">return ru(start) + "–" + ru(end)</span>
 }
 
-// plural picks the Russian plural form for n: 1 день, 2 дня, 5 дней.
+// plural выбирает русскую форму множественного числа для n: 1 день, 2 дня, 5 дней.
 func plural(n int, one, few, many string) string <span class="cov8" title="1">{
         switch n10, n100 := n%10, n%100; </span>{
         case n10 == 1 &amp;&amp; n100 != 11:<span class="cov8" title="1">
@@ -573,10 +860,10 @@ func deref(s *string) string <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file1" style="display: none">// Package access implements the mock "access" MCP server: required accesses, team channels and access requests (S4).
-// Data is synthetic (R68). Identity and team come only from the verified JWT (R71): a caller sees and requests only
-// resources of their own team or of every team. Elevated resources go to the caller's lead for approval; requests are
-// idempotent by key (R79).
+		<pre class="file" id="file1" style="display: none">// Пакет access реализует мок-сервер MCP «access»: обязательные доступы, каналы команды и заявки на доступ (S4). Данные
+// синтетические (R68). Личность и команда берутся только из проверенного JWT (R71): вызывающий видит и запрашивает
+// только ресурсы своей команды или общие для всех. Ресурсы с повышенными правами уходят на согласование руководителю
+// вызывающего; заявки идемпотентны по ключу (R79).
 package access
 
 import (
@@ -584,6 +871,7 @@ import (
         "encoding/json"
         "errors"
         "fmt"
+        "slices"
         "time"
 
         "github.com/jackc/pgx/v5"
@@ -594,7 +882,7 @@ import (
         "aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the access contract to srv.
+// Register привязывает каждый инструмент контракта access к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("access: server and pool are required")
@@ -614,21 +902,30 @@ type service struct {
         pool *pgxpool.Pool
 }
 
-// latestStatus is a LATERAL subquery: the caller's ($1) most recent request for resource r.
+// latestStatus — LATERAL-подзапрос: самая свежая заявка вызывающего ($1) на ресурс r.
 const latestStatus = `
-LATERAL (SELECT q.status FROM access.requests q
+LATERAL (SELECT q.status, coalesce(q.environment, '') AS environment, q.level FROM access.requests q
          WHERE q.resource_id = r.id AND q.employee_id = $1
          ORDER BY q.created_at DESC, q.id DESC LIMIT 1) q`
 
-// resourceStatus is a resource with the caller's status for it.
+// resourceStatus — ресурс со статусом вызывающего по нему.
 type resourceStatus struct {
-        ResourceID      string `json:"resource_id"`
-        Name            string `json:"name"`
-        Kind            string `json:"kind"`
-        Elevated        bool   `json:"elevated"`
-        Status          string `json:"status"`
-        ChecklistItemID string `json:"checklist_item_id,omitempty"`
+        ResourceID      string   `json:"resource_id"`
+        Name            string   `json:"name"`
+        Kind            string   `json:"kind"`
+        Elevated        bool     `json:"elevated"`
+        Status          string   `json:"status"`
+        ChecklistItemID string   `json:"checklist_item_id,omitempty"`
+        Environments    []string `json:"environments"`
+        Levels          []string `json:"levels"`
+        Optional        bool     `json:"optional"`
+        ApproverLabel   string   `json:"approver_label"`
+        Environment     string   `json:"environment,omitempty"` // последней заявки
+        Level           string   `json:"level,omitempty"`
 }
+
+const resourceCols = `r.id, r.name, r.kind, r.elevated, coalesce(q.status, 'not_requested'), coalesce(r.checklist_item_id, ''),
+       r.environments, r.levels, r.optional, r.approver_label, coalesce(q.environment, ''), coalesce(q.level, '')`
 
 type listOut struct {
         Items []resourceStatus `json:"items"`
@@ -641,7 +938,8 @@ func (s *service) listResources(ctx context.Context, sql string, args ...any) (a
         }</span>
         <span class="cov8" title="1">items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (resourceStatus, error) </span><span class="cov8" title="1">{
                 var r resourceStatus
-                err := row.Scan(&amp;r.ResourceID, &amp;r.Name, &amp;r.Kind, &amp;r.Elevated, &amp;r.Status, &amp;r.ChecklistItemID)
+                err := row.Scan(&amp;r.ResourceID, &amp;r.Name, &amp;r.Kind, &amp;r.Elevated, &amp;r.Status, &amp;r.ChecklistItemID,
+                        &amp;r.Environments, &amp;r.Levels, &amp;r.Optional, &amp;r.ApproverLabel, &amp;r.Environment, &amp;r.Level)
                 return r, err
         }</span>)
         <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
@@ -653,20 +951,20 @@ func (s *service) listResources(ctx context.Context, sql string, args ...any) (a
         <span class="cov8" title="1">return listOut{Items: items}, nil</span>
 }
 
-// listRequired returns the tools and spaces required for the caller's team with the caller's status.
+// listRequired возвращает инструменты и пространства, обязательные для команды вызывающего, со статусом вызывающего.
 func (s *service) listRequired(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         return s.listResources(ctx, `
-SELECT r.id, r.name, r.kind, r.elevated, coalesce(q.status, 'not_requested'), coalesce(r.checklist_item_id, '')
+SELECT `+resourceCols+`
 FROM access.resources r
 LEFT JOIN `+latestStatus+` ON true
-WHERE r.kind IN ('tool', 'space') AND (r.team_id IS NULL OR r.team_id = $2)
-ORDER BY r.kind DESC, r.team_id NULLS FIRST, r.id`, c.Sub, c.TeamID)
+WHERE r.kind IN ('tool', 'space', 'project', 'repo', 'database') AND (r.team_id IS NULL OR r.team_id = $2)
+ORDER BY array_position(ARRAY['tool','project','repo','space','database'], r.kind), r.team_id NULLS FIRST, r.id`, c.Sub, c.TeamID)
 }</span>
 
-// listMyAccess returns every resource the caller has requested, with the latest status.
+// listMyAccess возвращает все ресурсы, которые запрашивал вызывающий, с последним статусом.
 func (s *service) listMyAccess(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         return s.listResources(ctx, `
-SELECT r.id, r.name, r.kind, r.elevated, q.status, coalesce(r.checklist_item_id, '')
+SELECT `+resourceCols+`
 FROM access.resources r
 JOIN `+latestStatus+` ON true
 ORDER BY r.kind DESC, r.team_id NULLS FIRST, r.id`, c.Sub)
@@ -682,7 +980,8 @@ type channelsOut struct {
         Items []channel `json:"items"`
 }
 
-// listTeamChannels returns the channels of the caller's team and of every team: name, purpose, closed only.
+// listTeamChannels возвращает каналы команды вызывающего и общие для всех: только название, назначение и признак
+// закрытости.
 func (s *service) listTeamChannels(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         rows, err := s.pool.Query(ctx, `
 SELECT name, coalesce(purpose, ''), elevated
@@ -711,8 +1010,12 @@ ORDER BY team_id NULLS FIRST, elevated, name`, c.TeamID)
 type requestIn struct {
         ResourceID     string `json:"resource_id"`
         Reason         string `json:"reason"`
+        Environment    string `json:"environment"`
+        Level          string `json:"level"`
         IdempotencyKey string `json:"idempotency_key"`
 }
+
+var levelLabels = map[string]string{"read": "чтение", "write": "редактирование", "admin": "администрирование"}
 
 type requestOut struct {
         ID              string  `json:"id"`
@@ -721,6 +1024,8 @@ type requestOut struct {
         Status          string  `json:"status"`
         ApproverID      *string `json:"approver_id"`
         ChecklistItemID *string `json:"checklist_item_id"`
+        Environment     *string `json:"environment"`
+        Level           string  `json:"level"`
         CreatedAt       string  `json:"created_at"`
         Replayed        bool    `json:"replayed"`
 
@@ -728,16 +1033,17 @@ type requestOut struct {
         reason     string
 }
 
-// querier is satisfied by pgx.Tx and *pgxpool.Pool.
+// querier удовлетворяют pgx.Tx и *pgxpool.Pool.
 type querier interface {
         Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// findRequest returns the access request matching where (a condition on alias q with parameters $1, $2), or ok=false.
+// findRequest возвращает заявку на доступ, подходящую под where (условие на псевдоним q с параметрами $1, $2), или
+// ok=false.
 func findRequest(ctx context.Context, db querier, where string, args ...any) (requestOut, bool, error) <span class="cov8" title="1">{
         rows, err := db.Query(ctx, `
-SELECT q.id, q.resource_id, r.name, q.status, q.approver_id, r.checklist_item_id, q.created_at, q.employee_id,
-       coalesce(q.reason, '')
+SELECT q.id, q.resource_id, r.name, q.status, q.approver_id, r.checklist_item_id, q.environment, q.level, q.created_at,
+       q.employee_id, coalesce(q.reason, '')
 FROM access.requests q JOIN access.resources r ON r.id = q.resource_id
 WHERE `+where+`
 ORDER BY q.created_at DESC, q.id DESC LIMIT 1`, args...)
@@ -749,8 +1055,8 @@ ORDER BY q.created_at DESC, q.id DESC LIMIT 1`, args...)
                         o       requestOut
                         created time.Time
                 )
-                err := row.Scan(&amp;o.ID, &amp;o.ResourceID, &amp;o.ResourceName, &amp;o.Status, &amp;o.ApproverID, &amp;o.ChecklistItemID, &amp;created,
-                        &amp;o.employeeID, &amp;o.reason)
+                err := row.Scan(&amp;o.ID, &amp;o.ResourceID, &amp;o.ResourceName, &amp;o.Status, &amp;o.ApproverID, &amp;o.ChecklistItemID, &amp;o.Environment,
+                        &amp;o.Level, &amp;created, &amp;o.employeeID, &amp;o.reason)
                 o.CreatedAt = created.UTC().Format(time.RFC3339)
                 return o, err
         }</span>)
@@ -763,9 +1069,9 @@ ORDER BY q.created_at DESC, q.id DESC LIMIT 1`, args...)
         <span class="cov8" title="1">return out, true, nil</span>
 }
 
-// requestAccess creates an access request for the caller. A resource outside the caller's team is forbidden;
-// a plain resource is granted at once; an elevated one waits for the caller's lead (approvals item). A repeated
-// idempotency_key returns the stored request with replayed=true.
+// requestAccess создаёт заявку на доступ для вызывающего. Ресурс вне команды вызывающего запрещён; обычный ресурс
+// выдаётся сразу; ресурс с повышенными правами ждёт руководителя вызывающего (пункт согласования). Повтор
+// idempotency_key возвращает сохранённую заявку с replayed=true.
 func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
         var in requestIn
         if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
@@ -776,7 +1082,7 @@ func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.Ra
                 return nil, fmt.Errorf("begin: %w", err)
         }</span>
         <span class="cov8" title="1">defer func() </span><span class="cov8" title="1">{ _ = tx.Rollback(context.WithoutCancel(ctx)) }</span>()
-        // Serialise the caller's writes so that the replay lookup and the duplicate check see each other's commits.
+        // Сериализуем записи вызывающего, чтобы поиск повтора и проверка дубликатов видели коммиты друг друга.
         <span class="cov8" title="1">if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, "access:"+c.Sub); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("lock employee: %w", err)
         }</span>
@@ -784,8 +1090,12 @@ func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.Ra
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
+        <span class="cov8" title="1">if in.Level == "" </span><span class="cov0" title="0">{
+                in.Level = "read"
+        }</span>
         <span class="cov8" title="1">if found </span><span class="cov8" title="1">{
-                if prev.employeeID != c.Sub || prev.ResourceID != in.ResourceID || prev.reason != in.Reason </span><span class="cov8" title="1">{
+                if prev.employeeID != c.Sub || prev.ResourceID != in.ResourceID || prev.reason != in.Reason || prev.Level != in.Level ||
+                        deref(prev.Environment) != in.Environment </span><span class="cov8" title="1">{
                         return nil, keyConflict()
                 }</span>
                 <span class="cov8" title="1">prev.Replayed = true
@@ -793,24 +1103,32 @@ func (s *service) requestAccess(ctx context.Context, c mcpx.Caller, args json.Ra
         }
 
         <span class="cov8" title="1">var (
-                name     string
-                elevated bool
+                name         string
+                elevated     bool
+                environments []string
+                levels       []string
         )
         err = tx.QueryRow(ctx, `
-SELECT name, elevated FROM access.resources WHERE id = $1 AND (team_id IS NULL OR team_id = $2)`,
-                in.ResourceID, c.TeamID).Scan(&amp;name, &amp;elevated)
+SELECT name, elevated, environments, levels FROM access.resources WHERE id = $1 AND (team_id IS NULL OR team_id = $2)`,
+                in.ResourceID, c.TeamID).Scan(&amp;name, &amp;elevated, &amp;environments, &amp;levels)
         if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
-                // Unknown resources and other teams' resources look the same (R71).
+                // Неизвестные ресурсы и ресурсы других команд выглядят одинаково (R71).
                 return nil, apierr.Forbidden().WithMessage("Ресурс недоступен для запроса из вашей команды")
         }</span>
         <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("load resource: %w", err)
         }</span>
-        <span class="cov8" title="1">last, found, err := findRequest(ctx, tx, "q.employee_id = $1 AND q.resource_id = $2", c.Sub, in.ResourceID)
+        <span class="cov8" title="1">if err := checkScope(name, environments, levels, in); err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+        // чекпоинт 11.11: права на запись и администрирование и всё на prod согласуются; чтение dev/stage выдаётся сразу
+        <span class="cov8" title="1">elevated = elevated || in.Level != "read" || in.Environment == "prod"
+        last, found, err := findRequest(ctx, tx, "q.employee_id = $1 AND q.resource_id = $2 AND coalesce(q.environment, '') = $3",
+                c.Sub, in.ResourceID, in.Environment)
         if err != nil </span><span class="cov0" title="0">{
                 return nil, err
         }</span>
-        <span class="cov8" title="1">if found &amp;&amp; last.Status == "granted" </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if found &amp;&amp; last.Status == "granted" &amp;&amp; last.Level == in.Level </span><span class="cov8" title="1">{
                 return nil, apierr.Conflict().WithMessage(fmt.Sprintf("Доступ к ресурсу «%s» уже выдан (заявка %s)", name, last.ID))
         }</span>
         <span class="cov8" title="1">if found &amp;&amp; last.Status == "pending_approval" </span><span class="cov8" title="1">{
@@ -836,11 +1154,11 @@ SELECT name, elevated FROM access.resources WHERE id = $1 AND (team_id IS NULL O
         }
         <span class="cov8" title="1">var id string
         err = tx.QueryRow(ctx, `
-INSERT INTO access.requests (employee_id, resource_id, reason, status, approver_id, idempotency_key, decided_at)
-VALUES ($1, $2, nullif($3, ''), $4, $5, $6::uuid, CASE WHEN $4 = 'granted' THEN now() END)
-RETURNING id`, c.Sub, in.ResourceID, in.Reason, status, approver, in.IdempotencyKey).Scan(&amp;id)
+INSERT INTO access.requests (employee_id, resource_id, reason, status, approver_id, idempotency_key, decided_at, environment, level)
+VALUES ($1, $2, nullif($3, ''), $4, $5, $6::uuid, CASE WHEN $4 = 'granted' THEN now() END, nullif($7, ''), $8)
+RETURNING id`, c.Sub, in.ResourceID, in.Reason, status, approver, in.IdempotencyKey, in.Environment, in.Level).Scan(&amp;id)
         if isUniqueViolation(err) </span><span class="cov0" title="0">{
-                return nil, keyConflict() // the key belongs to another employee's request
+                return nil, keyConflict() // ключ принадлежит заявке другого сотрудника
         }</span>
         <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("insert access request: %w", err)
@@ -848,7 +1166,7 @@ RETURNING id`, c.Sub, in.ResourceID, in.Reason, status, approver, in.Idempotency
         <span class="cov8" title="1">if elevated </span><span class="cov8" title="1">{
                 if _, err := tx.Exec(ctx, `
 INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary)
-VALUES ('access_request', $1, $2, $3, $4)`, id, c.Sub, *approver, "Доступ: "+name); err != nil </span><span class="cov8" title="1">{
+VALUES ('access_request', $1, $2, $3, $4)`, id, c.Sub, *approver, "Доступ: "+name+scopeLabel(in)); err != nil </span><span class="cov8" title="1">{
                         return nil, fmt.Errorf("insert approval item: %w", err)
                 }</span>
         }
@@ -862,6 +1180,40 @@ VALUES ('access_request', $1, $2, $3, $4)`, id, c.Sub, *approver, "Доступ:
         <span class="cov8" title="1">return created, nil</span>
 }
 
+// checkScope проверяет окружение и уровень по ресурсу: базе данных нужно окружение, у инструмента его нет; уровень
+// должен быть из предлагаемых ресурсом.
+func checkScope(name string, environments, levels []string, in requestIn) error <span class="cov8" title="1">{
+        switch </span>{
+        case len(environments) &gt; 0 &amp;&amp; in.Environment == "":<span class="cov8" title="1">
+                return apierr.Validation().WithMessage(fmt.Sprintf("Для ресурса «%s» укажите окружение: %v", name, environments))</span>
+        case len(environments) == 0 &amp;&amp; in.Environment != "":<span class="cov8" title="1">
+                return apierr.Validation().WithMessage(fmt.Sprintf("У ресурса «%s» нет окружений", name))</span>
+        case in.Environment != "" &amp;&amp; !slices.Contains(environments, in.Environment):<span class="cov0" title="0">
+                return apierr.Validation().WithMessage(fmt.Sprintf("Окружение %q недоступно для ресурса «%s»", in.Environment, name))</span>
+        case !slices.Contains(levels, in.Level):<span class="cov8" title="1">
+                return apierr.Validation().WithMessage(fmt.Sprintf("Права «%s» недоступны для ресурса «%s»", levelLabels[in.Level], name))</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+// scopeLabel — « (stage, редактирование)» для сводки согласования; пусто для обычного чтения инструмента.
+func scopeLabel(in requestIn) string <span class="cov8" title="1">{
+        switch </span>{
+        case in.Environment != "":<span class="cov8" title="1">
+                return fmt.Sprintf(" (%s, %s)", in.Environment, levelLabels[in.Level])</span>
+        case in.Level != "read":<span class="cov8" title="1">
+                return fmt.Sprintf(" (%s)", levelLabels[in.Level])</span>
+        }
+        <span class="cov8" title="1">return ""</span>
+}
+
+func deref(s *string) string <span class="cov8" title="1">{
+        if s == nil </span><span class="cov8" title="1">{
+                return ""
+        }</span>
+        <span class="cov0" title="0">return *s</span>
+}
+
 func keyConflict() *apierr.Error <span class="cov8" title="1">{
         return apierr.Conflict().WithMessage("Ключ идемпотентности уже использован для другой заявки, подтвердите действие ещё раз")
 }</span>
@@ -872,9 +1224,10 @@ func isUniqueViolation(err error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file2" style="display: none">// Package app wires mcp-mocks: eight independent mock Avito MCP servers served by one binary at /mcp/&lt;server&gt;
-// (absence, approvals, access, directory, checklist, kb, trips, consents). Each server owns its DB schema and tool set, so it can be
-// moved to its own process or replaced by a real Avito API by changing a URL in the agent config (R23, R56).
+		<pre class="file" id="file2" style="display: none">// Пакет app собирает mcp-mocks: восемь независимых мок-серверов MCP Авито в одном бинарнике по адресу /mcp/&lt;server&gt;
+// (absence, approvals, access, directory, checklist, kb, trips, consents). У каждого сервера своя схема БД и набор
+// инструментов, поэтому его можно вынести в отдельный процесс или заменить настоящим API Авито, поменяв URL в конфиге
+// агента (R23, R56).
 package app
 
 import (
@@ -901,7 +1254,7 @@ import (
         "aibuddy/services/internal/platform/pg"
 )
 
-// Config holds mcp-mocks settings (docs/backend/IMPLEMENTATION.md §7).
+// Config хранит настройки mcp-mocks (docs/backend/IMPLEMENTATION.md §7).
 type Config struct {
         Port               int
         PostgresURL        string
@@ -910,7 +1263,7 @@ type Config struct {
         KBDir              string
 }
 
-// LoadConfig reads configuration from getenv; Validate reports missing secrets.
+// LoadConfig читает конфигурацию из getenv; об отсутствующих секретах сообщает Validate.
 func LoadConfig(getenv func(string) string) Config <span class="cov8" title="1">{
         env := config.New(getenv)
         return Config{
@@ -922,7 +1275,7 @@ func LoadConfig(getenv func(string) string) Config <span class="cov8" title="1">
         }
 }</span>
 
-// Validate fails when a required secret is missing: the service must not start with empty secrets.
+// Validate падает, если нет обязательного секрета: сервис не должен стартовать с пустыми секретами.
 func (c Config) Validate() error <span class="cov8" title="1">{
         var missing []string
         if c.JWTSecret == "" </span><span class="cov8" title="1">{
@@ -937,7 +1290,7 @@ func (c Config) Validate() error <span class="cov8" title="1">{
         <span class="cov8" title="1">return nil</span>
 }
 
-// registrars lists every mock server and its registration function, in a stable order.
+// registrars перечисляет все мок-серверы и их функции регистрации в стабильном порядке.
 var registrars = []struct {
         name     string
         register func(*mcpx.Server, *pgxpool.Pool) error
@@ -952,7 +1305,7 @@ var registrars = []struct {
         {"consents", consents.Register},
 }
 
-// NewHandler builds the HTTP handler: /healthz plus /mcp/&lt;server&gt; for all eight servers.
+// NewHandler собирает HTTP-обработчик: /healthz плюс /mcp/&lt;server&gt; для всех восьми серверов.
 func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler, error) <span class="cov8" title="1">{
         if err := cfg.Validate(); err != nil </span><span class="cov8" title="1">{
                 return nil, err
@@ -985,7 +1338,7 @@ func NewHandler(cfg Config, pool *pgxpool.Pool, log *slog.Logger) (http.Handler,
         <span class="cov8" title="1">return httpx.Chain(httpx.RequestID, httpx.Recover(log), httpx.AccessLog(log))(mux), nil</span>
 }
 
-// Run connects to Postgres, loads the knowledge base from KB_DIR and serves until ctx is cancelled.
+// Run подключается к Postgres, загружает базу знаний из KB_DIR и работает, пока ctx не отменён.
 func Run(ctx context.Context, cfg Config, log *slog.Logger) error <span class="cov8" title="1">{
         if err := cfg.Validate(); err != nil </span><span class="cov8" title="1">{
                 return err
@@ -1025,7 +1378,7 @@ func serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) e
         }
 }
 
-// Healthcheck performs GET url and fails on a non-200 answer (Docker HEALTHCHECK via `-healthcheck`).
+// Healthcheck выполняет GET url и падает на ответе не 200 (Docker HEALTHCHECK через `-healthcheck`).
 func Healthcheck(url string) error <span class="cov8" title="1">{
         client := &amp;http.Client{Timeout: 3 * time.Second}
         resp, err := client.Get(url)
@@ -1040,9 +1393,9 @@ func Healthcheck(url string) error <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file3" style="display: none">// Package approvals implements the mock "approvals" MCP server («Согласия»), shared by S3 (day off) and S4 (access).
-// Data is synthetic (R68). Only the approver named on an item sees and decides it (R71); a decision updates the item
-// and the underlying absence or access request in one transaction and is idempotent by key (R79).
+		<pre class="file" id="file3" style="display: none">// Пакет approvals реализует мок-сервер MCP «approvals» («Согласия»), общий для S3 (отгул) и S4 (доступ). Данные
+// синтетические (R68). Пункт видит и решает только указанный в нём согласующий (R71); решение обновляет пункт и
+// исходную заявку на отсутствие или доступ в одной транзакции и идемпотентно по ключу (R79).
 package approvals
 
 import (
@@ -1060,7 +1413,7 @@ import (
         "aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the approvals contract to srv.
+// Register привязывает каждый инструмент контракта approvals к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("approvals: server and pool are required")
@@ -1078,7 +1431,7 @@ type service struct {
         pool *pgxpool.Pool
 }
 
-// item is one approval item as returned by the tools.
+// item — один пункт согласования в том виде, как его возвращают инструменты.
 type item struct {
         ID                   string `json:"id"`
         Kind                 string `json:"kind"`
@@ -1088,8 +1441,11 @@ type item struct {
         Summary              string `json:"summary"`
         Status               string `json:"status"`
         Comment              string `json:"comment,omitempty"`
+        Stage                string `json:"stage"`
         CreatedAt            string `json:"created_at"`
         Replayed             *bool  `json:"replayed,omitempty"`
+        // TeamAbsent: кто ещё из команды заявителя отсутствует в эти дни (отзыв 12.13), только для пунктов об отсутствии
+        TeamAbsent []string `json:"team_absent,omitempty"`
 
         approverID     string
         idempotencyKey string
@@ -1097,7 +1453,7 @@ type item struct {
 
 const selectItem = `
 SELECT i.id, i.kind, i.ref_id, i.requester_id, coalesce(e.display_name, ''), i.summary, i.status,
-       coalesce(i.comment, ''), i.created_at, i.approver_id, coalesce(i.idempotency_key::text, '')
+       coalesce(i.comment, ''), i.created_at, i.approver_id, coalesce(i.idempotency_key::text, ''), i.stage
 FROM approvals.items i
 LEFT JOIN directory.employees e ON e.id = i.requester_id`
 
@@ -1107,7 +1463,7 @@ func scanItem(row pgx.CollectableRow) (item, error) <span class="cov8" title="1"
                 created time.Time
         )
         err := row.Scan(&amp;it.ID, &amp;it.Kind, &amp;it.RefID, &amp;it.RequesterID, &amp;it.RequesterDisplayName, &amp;it.Summary, &amp;it.Status,
-                &amp;it.Comment, &amp;created, &amp;it.approverID, &amp;it.idempotencyKey)
+                &amp;it.Comment, &amp;created, &amp;it.approverID, &amp;it.idempotencyKey, &amp;it.Stage)
         it.CreatedAt = created.UTC().Format(time.RFC3339)
         return it, err
 }</span>
@@ -1116,7 +1472,7 @@ type listOut struct {
         Items []item `json:"items"`
 }
 
-// listPending returns the pending items whose approver is the caller, oldest first.
+// listPending возвращает ожидающие пункты, где согласующий — вызывающий, самые старые сначала.
 func (s *service) listPending(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         rows, err := s.pool.Query(ctx, selectItem+`
 WHERE i.approver_id = $1 AND i.status = 'pending'
@@ -1132,7 +1488,46 @@ LIMIT 200`, c.Sub)
         <span class="cov8" title="1">if items == nil </span><span class="cov0" title="0">{
                 items = []item{}
         }</span>
+        <span class="cov8" title="1">for i := range items </span><span class="cov8" title="1">{
+                if items[i].Kind != "absence_request" </span><span class="cov8" title="1">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">absent, err := s.teamAbsent(ctx, items[i].RefID)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">items[i].TeamAbsent = absent</span>
+        }
         <span class="cov8" title="1">return listOut{Items: items}, nil</span>
+}
+
+// teamAbsent перечисляет коллег заявителя с несогласованным или согласованным отсутствием, пересекающимся с заявкой:
+// руководитель сразу видит, что половины команды не будет (отзыв 12.13).
+func (s *service) teamAbsent(ctx context.Context, requestID string) ([]string, error) <span class="cov8" title="1">{
+        rows, err := s.pool.Query(ctx, `
+SELECT e.display_name, o.type, o.start_date, o.end_date
+FROM absence.requests r
+JOIN directory.employees me ON me.id = r.employee_id
+JOIN absence.requests o ON o.employee_id &lt;&gt; r.employee_id AND o.status IN ('pending_approval', 'pending_hr', 'approved')
+     AND o.start_date &lt;= r.end_date AND o.end_date &gt;= r.start_date
+JOIN directory.employees e ON e.id = o.employee_id AND e.team_id = me.team_id
+WHERE r.id = $1
+ORDER BY o.start_date, e.display_name
+LIMIT 5`, requestID)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("team absences: %w", err)
+        }</span>
+        <span class="cov8" title="1">return pgx.CollectRows(rows, func(row pgx.CollectableRow) (string, error) </span><span class="cov8" title="1">{
+                var name, kind string
+                var start, end time.Time
+                err := row.Scan(&amp;name, &amp;kind, &amp;start, &amp;end)
+                label := map[string]string{"day_off": "отгул", "vacation": "отпуск", "absence": "отсутствие", "parental_leave": "декрет"}[kind]
+                when := start.Format("02.01")
+                if !end.Equal(start) </span><span class="cov0" title="0">{
+                        when += "–" + end.Format("02.01")
+                }</span>
+                <span class="cov8" title="1">return fmt.Sprintf("%s: %s %s", name, label, when), err</span>
+        })
 }
 
 type decideIn struct {
@@ -1142,7 +1537,7 @@ type decideIn struct {
         IdempotencyKey string `json:"idempotency_key"`
 }
 
-// underlying maps an item kind and decision to the request table and its new status.
+// underlying сопоставляет виду пункта и решению таблицу заявок и её новый статус.
 var underlying = map[string]struct {
         table    string
         statuses map[string]string
@@ -1152,7 +1547,7 @@ var underlying = map[string]struct {
         "trip_request":    {"trips.requests", map[string]string{"approved": "approved", "rejected": "rejected"}},
 }
 
-// decide approves or rejects one of the caller's pending items and propagates the decision to the request.
+// decide согласует или отклоняет один из ожидающих пунктов вызывающего и распространяет решение на заявку.
 func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
         var in decideIn
         if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
@@ -1170,7 +1565,7 @@ func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessag
         }</span>
         <span class="cov8" title="1">it, err := pgx.CollectOneRow(rows, scanItem)
         if errors.Is(err, pgx.ErrNoRows) || (err == nil &amp;&amp; it.approverID != c.Sub) </span><span class="cov8" title="1">{
-                // Other teams' items and unknown ids look the same (R71).
+                // Пункты других команд и неизвестные id выглядят одинаково (R71).
                 return nil, apierr.Forbidden().WithMessage("Запрос недоступен: решение принимает только назначенный согласующий")
         }</span>
         <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
@@ -1192,33 +1587,25 @@ func (s *service) decide(ctx context.Context, c mcpx.Caller, args json.RawMessag
 UPDATE approvals.items SET status = $2, comment = nullif($3, ''), idempotency_key = $4::uuid, decided_at = now()
 WHERE id = $1`, it.ID, in.Decision, in.Comment, in.IdempotencyKey)
         if isUniqueViolation(err) </span><span class="cov8" title="1">{
-                return nil, keyConflict() // the key was already used for another decision
+                return nil, keyConflict() // ключ уже использован для другого решения
         }</span>
         <span class="cov8" title="1">if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("update approval item: %w", err)
         }</span>
-        // kind is limited by a CHECK constraint to the keys of underlying; the table name never comes from input.
-        <span class="cov8" title="1">target := underlying[it.Kind]
-        tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
+        <span class="cov8" title="1">if it.Kind == "absence_request" </span><span class="cov8" title="1">{
+                if err := decideAbsence(ctx, tx, it, in.Decision, c.Sub); err != nil </span><span class="cov8" title="1">{
+                        return nil, err
+                }</span>
+        } else<span class="cov8" title="1"> {
+                // kind ограничен CHECK-ограничением ключами underlying; имя таблицы никогда не берётся из ввода.
+                target := underlying[it.Kind]
+                tag, err := tx.Exec(ctx, `UPDATE `+target.table+` SET status = $2, decided_at = now()
 WHERE id = $1 AND status = 'pending_approval'`, it.RefID, target.statuses[in.Decision])
-        if err != nil </span><span class="cov8" title="1">{
-                return nil, fmt.Errorf("update %s: %w", target.table, err)
-        }</span>
-        <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov8" title="1">{
-                return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
-        }</span>
-        <span class="cov8" title="1">if it.Kind == "absence_request" &amp;&amp; in.Decision == "approved" </span><span class="cov8" title="1">{
-                // The HR admin registers the approved day off in the HR system and the HR BP of the employee is notified
-                // (organizers' Q&amp;A 10.11: a day off involves the lead, the HR admin and the HR BP). In this imitation both
-                // happen at once; a real HR system would report them asynchronously.
-                if _, err := tx.Exec(ctx, `
-UPDATE absence.requests r SET
-    hr_admin_id = (SELECT x.id FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1),
-    registered_at = now(),
-    hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
-    hrbp_notified_at = now()
-WHERE r.id = $1`, it.RefID); err != nil </span><span class="cov0" title="0">{
-                        return nil, fmt.Errorf("register absence: %w", err)
+                if err != nil </span><span class="cov0" title="0">{
+                        return nil, fmt.Errorf("update %s: %w", target.table, err)
+                }</span>
+                <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov0" title="0">{
+                        return nil, apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
                 }</span>
         }
         <span class="cov8" title="1">if err := tx.Commit(ctx); err != nil </span><span class="cov0" title="0">{
@@ -1226,6 +1613,57 @@ WHERE r.id = $1`, it.RefID); err != nil </span><span class="cov0" title="0">{
         }</span>
         <span class="cov8" title="1">it.Status, it.Comment, it.Replayed = in.Decision, in.Comment, new(bool)
         return it, nil</span>
+}
+
+// decideAbsence применяет решение к заявке на отсутствие в два этапа (чекпоинт 11.11): руководитель согласует → заявка
+// ждёт HR-администратора (pending_hr), и HR-администратор получает пункт согласования; HR-администратор согласует →
+// заявка согласована, оформлена в HR-системе, а HR BP сотрудника получает уведомление. Отказ на любом этапе отклоняет
+// заявку.
+func decideAbsence(ctx context.Context, tx pgx.Tx, it item, decision, approver string) error <span class="cov8" title="1">{
+        var (
+                sql  string
+                args []any
+        )
+        switch </span>{
+        case it.Stage == "lead" &amp;&amp; decision == "approved":<span class="cov8" title="1">
+                sql = `UPDATE absence.requests SET status = 'pending_hr', lead_decided_at = now()
+WHERE id = $1 AND status = 'pending_approval'`
+                args = []any{it.RefID}</span>
+        case it.Stage == "lead":<span class="cov8" title="1">
+                sql = `UPDATE absence.requests SET status = 'rejected', decided_at = now()
+WHERE id = $1 AND status = 'pending_approval'`
+                args = []any{it.RefID}</span>
+        case decision == "approved":<span class="cov8" title="1">
+                sql = `UPDATE absence.requests r SET status = 'approved', decided_at = now(), hr_admin_id = $2,
+    registered_at = now(), hrbp_id = (SELECT e.hrbp_id FROM directory.employees e WHERE e.id = r.employee_id),
+    hrbp_notified_at = now()
+WHERE r.id = $1 AND r.status = 'pending_hr'`
+                args = []any{it.RefID, approver}</span>
+        default:<span class="cov8" title="1">
+                sql = `UPDATE absence.requests SET status = 'rejected', decided_at = now(), hr_admin_id = $2
+WHERE id = $1 AND status = 'pending_hr'`
+                args = []any{it.RefID, approver}</span>
+        }
+        <span class="cov8" title="1">tag, err := tx.Exec(ctx, sql, args...)
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("update absence request: %w", err)
+        }</span>
+        <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov8" title="1">{
+                return apierr.Conflict().WithMessage("Заявка больше не ожидает согласования")
+        }</span>
+        <span class="cov8" title="1">if it.Stage == "lead" &amp;&amp; decision == "approved" </span><span class="cov8" title="1">{
+                tag, err := tx.Exec(ctx, `
+INSERT INTO approvals.items (kind, ref_id, requester_id, approver_id, summary, stage)
+SELECT 'absence_request', $1::text, $2::text, x.id, $3::text, 'hr_admin'
+FROM directory.employees x WHERE x.role = 'hr_admin' ORDER BY x.id LIMIT 1`, it.RefID, it.RequesterID, it.Summary)
+                if err != nil </span><span class="cov0" title="0">{
+                        return fmt.Errorf("insert hr admin approval item: %w", err)
+                }</span>
+                <span class="cov8" title="1">if tag.RowsAffected() != 1 </span><span class="cov0" title="0">{
+                        return apierr.Conflict().WithMessage("В справочнике нет HR-администратора")
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
 }
 
 func keyConflict() *apierr.Error <span class="cov8" title="1">{
@@ -1238,7 +1676,7 @@ func isUniqueViolation(err error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file4" style="display: none">// Package checklist implements the mock "checklist" MCP server: the Avito intern checklist template (S1).
+		<pre class="file" id="file4" style="display: none">// Пакет checklist реализует мок-сервер MCP «checklist»: шаблон чек-листа стажёра Авито (S1).
 package checklist
 
 import (
@@ -1253,7 +1691,7 @@ import (
         "aibuddy/services/internal/platform/period"
 )
 
-// Register binds every tool of the checklist contract to srv.
+// Register привязывает каждый инструмент контракта checklist к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("checklist: server and pool are required")
@@ -1321,10 +1759,10 @@ func template(ctx context.Context, pool *pgxpool.Pool, role string) (any, error)
 }
 </pre>
 		
-		<pre class="file" id="file5" style="display: none">// Package consents implements the mock "consents" MCP server: an employee's consents with their statuses (case
-// «Пространство решений»: согласия). Data is synthetic (R68). Consents signed in the HR portal at hire (personal data,
-// NDA) are only shown; voluntary ones (photo and video, surveys) can be signed by the employee from the JWT after
-// explicit confirmation (R71). Signing is idempotent by key (R79).
+		<pre class="file" id="file5" style="display: none">// Пакет consents реализует мок-сервер MCP «consents»: согласия сотрудника с их статусами (кейс «Пространство решений»:
+// согласия). Данные синтетические (R68). Согласия, подписанные в HR-портале при найме (персональные данные, NDA),
+// только показываются; добровольные (фото и видео, опросы) сотрудник из JWT может подписать после явного подтверждения
+// (R71). Подписание идемпотентно по ключу (R79).
 package consents
 
 import (
@@ -1342,7 +1780,7 @@ import (
         "aibuddy/services/internal/platform/mcpx"
 )
 
-// Register binds every tool of the consents contract to srv.
+// Register привязывает каждый инструмент контракта consents к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("consents: server and pool are required")
@@ -1375,7 +1813,7 @@ type listOut struct {
         Items []consent `json:"items"`
 }
 
-// list returns every consent type with the caller's status.
+// list возвращает все виды согласий со статусом вызывающего.
 func (s *service) list(ctx context.Context, c mcpx.Caller, _ json.RawMessage) (any, error) <span class="cov8" title="1">{
         rows, err := s.pool.Query(ctx, `
 SELECT t.id, t.title, t.description, t.signable, t.required, g.via, g.signed_at
@@ -1443,8 +1881,8 @@ WHERE `+where, args...).Scan(&amp;g.ID, &amp;g.ConsentID, &amp;g.Title, &amp;at,
         return g, true, nil</span>
 }
 
-// sign records the caller's voluntary consent. Consents signed only in the HR portal are refused; a consent signed
-// before is a conflict; the same key returns the stored signature with replayed=true.
+// sign записывает добровольное согласие вызывающего. Согласия, которые подписываются только в HR-портале, отклоняются;
+// уже подписанное согласие — conflict; тот же ключ возвращает сохранённую подпись с replayed=true.
 func (s *service) sign(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
         var in signIn
         if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
@@ -1520,8 +1958,8 @@ func isUniqueViolation(err error) bool <span class="cov8" title="1">{
 }</span>
 </pre>
 		
-		<pre class="file" id="file6" style="display: none">// Package directory implements the mock "directory" MCP server: who the caller is and whom to ask (S2, CL-02, CL-03).
-// Data is synthetic (R68). Identity comes only from the verified JWT (R71).
+		<pre class="file" id="file6" style="display: none">// Пакет directory реализует мок-сервер MCP «directory»: кто вызывающий и к кому обращаться (S2, CL-02, CL-03). Данные
+// синтетические (R68). Личность берётся только из проверенного JWT (R71).
 package directory
 
 import (
@@ -1539,7 +1977,7 @@ import (
         "aibuddy/services/internal/platform/period"
 )
 
-// askAbout holds the fixed Russian topics to raise with each kind of contact.
+// askAbout хранит фиксированные русские темы, с которыми идут к каждому виду контакта.
 var askAbout = map[string][]string{
         "mentor":  {"задачи и код-ревью", "доступы и инструменты команды", "план адаптации"},
         "lead":    {"отгул и отсутствия", "цели стажировки"},
@@ -1547,12 +1985,12 @@ var askAbout = map[string][]string{
         "curator": {"методичка наставника", "экватор и выпускной", "документы для вуза"},
 }
 
-// Register binds every tool of the directory contract to srv.
+// Register привязывает каждый инструмент контракта directory к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         return register(srv, pool, time.Now)
 }</span>
 
-// register is Register with an injectable clock (tests).
+// register — это Register с подменяемыми часами (для тестов).
 func register(srv *mcpx.Server, pool *pgxpool.Pool, now func() time.Time) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("directory: server and pool are required")
@@ -1644,8 +2082,8 @@ func contacts(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller) (any, erro
 }
 </pre>
 		
-		<pre class="file" id="file7" style="display: none">// Package kb implements the mock "kb" MCP server: the synthetic knowledge base with ACL applied before anything
-// reaches the LLM (R71). Every document is a test instruction of the prototype (R69).
+		<pre class="file" id="file7" style="display: none">// Пакет kb реализует мок-сервер MCP «kb»: синтетическую базу знаний, где ACL применяется до того, как что-либо попадёт
+// в LLM (R71). Каждый документ — тестовая инструкция прототипа (R69).
 package kb
 
 import (
@@ -1668,7 +2106,7 @@ const (
         maxSnippet = 300
 )
 
-// Register binds every tool of the kb contract to srv.
+// Register привязывает каждый инструмент контракта kb к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         if srv == nil || pool == nil </span><span class="cov8" title="1">{
                 return errors.New("kb: server and pool are required")
@@ -1686,16 +2124,26 @@ func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" tit
                 }</span>
                 <span class="cov8" title="1">return search(ctx, pool, c, in.Query, in.K)</span>
         })
+        <span class="cov8" title="1">srv.Handle("get", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) </span><span class="cov8" title="1">{
+                var in struct {
+                        DocID string `json:"doc_id"`
+                }
+                if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
+                        return nil, err
+                }</span>
+                <span class="cov8" title="1">return get(ctx, pool, c, in.DocID)</span>
+        })
         <span class="cov8" title="1">srv.Handle("add_faq", func(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) </span><span class="cov8" title="1">{
                 var in struct {
                         Title string `json:"title"`
                         Body  string `json:"body"`
                         Key   string `json:"idempotency_key"`
+                        Scope string `json:"scope"`
                 }
                 if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{
                         return nil, err
                 }</span>
-                <span class="cov8" title="1">return addFAQ(ctx, pool, c, in.Title, in.Body, in.Key)</span>
+                <span class="cov8" title="1">return addFAQ(ctx, pool, c, in.Title, in.Body, in.Key, in.Scope)</span>
         })
         <span class="cov8" title="1">return nil</span>
 }
@@ -1709,7 +2157,17 @@ type hit struct {
         Score      float64 `json:"score"`
 }
 
-// search returns documents the caller may see: role and team ACL, and private notes of the caller only.
+// aclRole сопоставляет HR-администратора аудитории HR BP тестовых документов (HR-администратор решает заявки на
+// отсутствие и читает те же HR-инструкции).
+func aclRole(role string) string <span class="cov8" title="1">{
+        if role == "hr_admin" </span><span class="cov0" title="0">{
+                return "hrbp"
+        }</span>
+        <span class="cov8" title="1">return role</span>
+}
+
+// search возвращает документы, которые вызывающему можно видеть: ACL по роли и команде и личные заметки только самого
+// вызывающего.
 func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string, k int) (any, error) <span class="cov8" title="1">{
         rows, err := pool.Query(ctx, `
                 SELECT d.doc_id, d.title, d.source_type, coalesce(d.url, ''),
@@ -1721,7 +2179,7 @@ func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string
                   AND ('*' = ANY(d.acl_teams) OR $3 = ANY(d.acl_teams))
                   AND (d.owner_id IS NULL OR d.owner_id = $4)
                 ORDER BY 6 DESC, d.doc_id
-                LIMIT $5`, query, c.Role, c.TeamID, c.Sub, k)
+                LIMIT $5`, query, aclRole(c.Role), c.TeamID, c.Sub, k)
         if err != nil </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("searching knowledge base: %w", err)
         }</span>
@@ -1741,6 +2199,33 @@ func search(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, query string
         <span class="cov8" title="1">return map[string]any{"items": items}, nil</span>
 }
 
+// get возвращает один документ, который вызывающему можно видеть (тот же ACL, что в search); ответ наставника,
+// добавленный в базу знаний, находится здесь, поэтому ссылка на источник под ответом его открывает (отзыв 12.11).
+// Недоступный и отсутствующий выглядят одинаково: not_found.
+func get(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, docID string) (any, error) <span class="cov8" title="1">{
+        if docID == "" </span><span class="cov0" title="0">{
+                return nil, apierr.Validation().WithMessage("Укажите doc_id")
+        }</span>
+        <span class="cov8" title="1">var d struct {
+                DocID      string `json:"doc_id"`
+                Title      string `json:"title"`
+                Body       string `json:"body"`
+                SourceType string `json:"source_type"`
+                Kind       string `json:"kind"`
+        }
+        err := pool.QueryRow(ctx, `SELECT doc_id, title, body, source_type, kind FROM kb.documents d
+                WHERE d.doc_id = $1 AND $2 = ANY(d.acl_roles) AND ('*' = ANY(d.acl_teams) OR $3 = ANY(d.acl_teams))
+                  AND (d.owner_id IS NULL OR d.owner_id = $4)`, docID, aclRole(c.Role), c.TeamID, c.Sub).
+                Scan(&amp;d.DocID, &amp;d.Title, &amp;d.Body, &amp;d.SourceType, &amp;d.Kind)
+        if errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
+                return nil, apierr.NotFound().WithMessage("Документ не найден или недоступен")
+        }</span>
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("reading document: %w", err)
+        }</span>
+        <span class="cov8" title="1">return d, nil</span>
+}
+
 func truncateRunes(s string, n int) string <span class="cov8" title="1">{
         r := []rune(s)
         if len(r) &lt;= n </span><span class="cov8" title="1">{
@@ -1756,9 +2241,15 @@ type faqOut struct {
         Replayed   bool   `json:"replayed"`
 }
 
-// addFAQ stores a mentor answer as an FAQ document of the mentor's team; idempotent by key (R79).
-func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key string) (any, error) <span class="cov8" title="1">{
-        suffix := make([]byte, 4)
+// addFAQ сохраняет ответ наставника как документ FAQ: для команды наставника (scope "team", по умолчанию) или, если
+// ответ общий, для всех команд (scope "all", отзыв 12.11). Идемпотентно по ключу (R79). В id документа в любом случае
+// остаётся команда наставника.
+func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body, key, scope string) (any, error) <span class="cov8" title="1">{
+        teams := []string{c.TeamID}
+        if scope == "all" </span><span class="cov8" title="1">{
+                teams = []string{"*"}
+        }</span>
+        <span class="cov8" title="1">suffix := make([]byte, 4)
         if _, err := rand.Read(suffix); err != nil </span><span class="cov0" title="0">{
                 return nil, fmt.Errorf("generating doc id: %w", err)
         }</span>
@@ -1766,9 +2257,9 @@ func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body,
         var out faqOut
         err := pool.QueryRow(ctx, `
                 INSERT INTO kb.documents (doc_id, title, body, source_type, acl_roles, acl_teams, kind, created_by, idempotency_key)
-                VALUES ($1, $2, $3, 'test', ARRAY['intern','mentor','lead'], ARRAY[$4::text], 'faq', $5, $6)
+                VALUES ($1, $2, $3, 'test', ARRAY['intern','mentor','lead'], $4::text[], 'faq', $5, $6)
                 ON CONFLICT (idempotency_key) DO NOTHING
-                RETURNING doc_id, title, source_type`, docID, title, body, c.TeamID, c.Sub, key).
+                RETURNING doc_id, title, source_type`, docID, title, body, teams, c.Sub, key).
                 Scan(&amp;out.DocID, &amp;out.Title, &amp;out.SourceType)
         if err == nil </span><span class="cov8" title="1">{
                 return out, nil
@@ -1776,7 +2267,7 @@ func addFAQ(ctx context.Context, pool *pgxpool.Pool, c mcpx.Caller, title, body,
         <span class="cov8" title="1">if !errors.Is(err, pgx.ErrNoRows) </span><span class="cov8" title="1">{
                 return nil, fmt.Errorf("inserting faq: %w", err)
         }</span>
-        // The key was used before: replay the stored result when it is the same request, otherwise conflict.
+        // Ключ уже использовался: воспроизводим сохранённый результат, если это тот же запрос, иначе conflict.
         <span class="cov8" title="1">var createdBy, storedBody string
         err = pool.QueryRow(ctx, `SELECT doc_id, title, body, coalesce(created_by, '') FROM kb.documents WHERE idempotency_key = $1`, key).
                 Scan(&amp;out.DocID, &amp;out.Title, &amp;storedBody, &amp;createdBy)
@@ -1827,7 +2318,7 @@ type frontmatter struct {
         } `yaml:"acl"`
         ChecklistItemID string    `yaml:"checklist_item_id"`
         URL             string    `yaml:"url"`
-        Updated         yaml.Node `yaml:"updated"` // any scalar; only a YYYY-MM-DD date is used
+        Updated         yaml.Node `yaml:"updated"` // любой скаляр; используется только дата YYYY-MM-DD
 }
 
 type document struct {
@@ -1836,11 +2327,12 @@ type document struct {
         updated *time.Time
 }
 
-// LoadDir upserts every *.md file of dir (except README.md) into kb.documents (kind doc, no owner) and returns how
-// many were loaded. Files need YAML frontmatter with doc_id, title, source_type: test (R69) and acl {roles, teams};
-// checklist_item_id is optional; other frontmatter fields (checklist, tags, updated, origin, ...) are ignored, except
-// that a valid YYYY-MM-DD `updated` becomes the document date. Any invalid file fails the whole load with an error
-// naming it, and nothing is written. Other files are ignored. A missing dir returns 0 and no error.
+// LoadDir вставляет или обновляет каждый файл *.md из dir (кроме README.md) в kb.documents (kind doc, без владельца) и
+// возвращает, сколько загружено. Файлам нужен YAML-frontmatter с doc_id, title, source_type: test (R69) и acl {roles,
+// teams}; checklist_item_id необязателен; другие поля frontmatter (checklist, tags, updated, origin, ...) игнорируются,
+// только корректный `updated` в формате YYYY-MM-DD становится датой документа. Любой некорректный файл валит всю
+// загрузку с ошибкой, в которой он назван, и ничего не записывается. Другие файлы игнорируются. Отсутствующий dir
+// возвращает 0 без ошибки.
 func LoadDir(ctx context.Context, pool *pgxpool.Pool, dir string) (int, error) <span class="cov8" title="1">{
         entries, err := os.ReadDir(dir)
         if errors.Is(err, os.ErrNotExist) </span><span class="cov8" title="1">{
@@ -1957,10 +2449,10 @@ func parseDoc(raw []byte) (document, error) <span class="cov8" title="1">{
 }
 </pre>
 		
-		<pre class="file" id="file9" style="display: none">// Package trips implements the mock "trips" MCP server: business trips between Avito offices (case «Пространство
-// решений»: командировки). Data is synthetic (R68). Identity comes only from the verified JWT (R71): a caller sees and
-// creates only own requests; the approver is the caller's lead, who decides through approvals.decide. Requests are
-// idempotent by key (R79).
+		<pre class="file" id="file9" style="display: none">// Пакет trips реализует мок-сервер MCP «trips»: командировки между офисами Авито (кейс «Пространство решений»:
+// командировки). Данные синтетические (R68). Личность берётся только из проверенного JWT (R71): вызывающий видит и
+// создаёт только свои заявки; согласующий — руководитель вызывающего, который решает через approvals.decide. Заявки
+// идемпотентны по ключу (R79).
 package trips
 
 import (
@@ -1980,18 +2472,18 @@ import (
         "aibuddy/services/internal/platform/mcpx"
 )
 
-// Offices where a trip can go (test data of the prototype).
+// Офисы, куда можно поехать (тестовые данные прототипа).
 var Offices = []string{"Москва", "Санкт-Петербург", "Казань", "Екатеринбург", "Новосибирск"}
 
 const (
-        minNoticeDays = 5  // a trip is requested at least this many days ahead
-        maxDays       = 14 // the longest trip in calendar days
+        minNoticeDays = 5  // командировка запрашивается не меньше чем за столько дней
+        maxDays       = 14 // самая длинная командировка в календарных днях
 )
 
-// moscow is the business time zone (UTC+3, no DST), as in the absence mock.
+// moscow — рабочий часовой пояс (UTC+3, без летнего времени), как в моке absence.
 var moscow = time.FixedZone("MSK", 3*60*60)
 
-// Register binds every tool of the trips contract to srv.
+// Register привязывает каждый инструмент контракта trips к srv.
 func Register(srv *mcpx.Server, pool *pgxpool.Pool) error <span class="cov8" title="1">{
         return register(srv, pool, time.Now)
 }</span>
@@ -2134,8 +2626,8 @@ func (s *service) validateRequest(ctx context.Context, c mcpx.Caller, args json.
         <span class="cov8" title="1">return s.validate(ctx, s.pool, c, in)</span>
 }
 
-// validate checks a new trip of c: a known office other than the employee's own city, dates, notice, length, no
-// overlap with another trip; the approver is the employee's lead.
+// validate проверяет новую командировку c: известный офис не в родном городе сотрудника, даты, срок подачи,
+// длительность, без пересечения с другой командировкой; согласующий — руководитель сотрудника.
 func (s *service) validate(ctx context.Context, q querier, c mcpx.Caller, in tripIn) (validateOut, error) <span class="cov8" title="1">{
         out := validateOut{Problems: []string{}}
         start, errStart := time.Parse(time.DateOnly, in.StartDate)
@@ -2203,8 +2695,8 @@ type createIn struct {
         IdempotencyKey string `json:"idempotency_key"`
 }
 
-// createRequest re-validates and, in one transaction, inserts the request (pending_approval, approver = lead) and its
-// approval item. The same idempotency_key returns the stored request with replayed=true (R79).
+// createRequest повторно проверяет и в одной транзакции вставляет заявку (pending_approval, согласующий = руководитель)
+// и её пункт согласования. Тот же idempotency_key возвращает сохранённую заявку с replayed=true (R79).
 func (s *service) createRequest(ctx context.Context, c mcpx.Caller, args json.RawMessage) (any, error) <span class="cov8" title="1">{
         var in createIn
         if err := mcpx.DecodeArgs(args, &amp;in); err != nil </span><span class="cov0" title="0">{

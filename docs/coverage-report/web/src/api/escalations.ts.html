@@ -36,28 +36,28 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>5/5</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/0</span>
+                <span class='fraction'>4/6</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>2/2</span>
+                <span class='fraction'>5/5</span>
             </div>
         
             
@@ -91,7 +91,24 @@
 <a name='L15'></a><a href='#L15'>15</a>
 <a name='L16'></a><a href='#L16'>16</a>
 <a name='L17'></a><a href='#L17'>17</a>
-<a name='L18'></a><a href='#L18'>18</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -102,7 +119,24 @@
 <span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -114,15 +148,32 @@ import { escalationSchema } from './schemas'
 &nbsp;
 export type Escalation = z.infer&lt;typeof escalationSchema&gt;
 &nbsp;
-/** Questions sent by the caller (intern) or addressed to the caller (mentor, lead, HR BP). */
+/** Вопросы, отправленные вызывающим (стажёр) или адресованные вызывающему (наставник, руководитель, HR BP). */
 export function listEscalations() {
   return apiRequest('/api/escalations', z.array(escalationSchema))
 }
 &nbsp;
-export function answerEscalation(id: string, text: string, addToKb: boolean) {
+export const queueGroupSchema = z.object({
+  ids: z.array(z.string()).min(1),
+  question: z.string(),
+  count: z.number().int(),
+  askers: z.array(z.string()),
+  first_asked_at: z.string(),
+  last_asked_at: z.string(),
+})
+export type QueueGroup = z.infer&lt;typeof queueGroupSchema&gt;
+&nbsp;
+/** Организаторы 13.11: список вопросов вызывающего — открытые вопросы к нему, похожие сгруппированы. */
+export function listQueue() {
+  return apiRequest('/api/escalations/queue', z.array(queueGroupSchema))
+}
+&nbsp;
+/** kbScope (отзыв 12.13): «team» — стажёрам команды наставника; «all» — общий ответ для всех команд. */
+export function answerEscalation(id: string, text: string, addToKb: boolean, kbScope: 'team' | 'all' = 'team', alsoIds: string[] = []) {
+  const also = alsoIds.length &gt; 0 ? { also_ids: alsoIds } : <span class="branch-1 cbranch-no" title="branch not covered" >{}</span>
   return apiRequest(`/api/escalations/${encodeURIComponent(id)}/answer`, escalationSchema, {
     method: 'POST',
-    body: { text, add_to_kb: addToKb },
+    body: addToKb ? { text, add_to_kb: true, kb_scope: kbScope, ...also } : <span class="branch-1 cbranch-no" title="branch not covered" >{ text, add_to_kb: false, ...also },</span>
   })
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -132,7 +183,7 @@ export function answerEscalation(id: string, text: string, addToKb: boolean) {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-11T09:44:58.208Z
+                at 2026-11-14T18:50:49.925Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

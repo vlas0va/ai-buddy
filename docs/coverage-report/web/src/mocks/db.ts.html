@@ -261,13 +261,14 @@
 <a name='L185'></a><a href='#L185'>185</a>
 <a name='L186'></a><a href='#L186'>186</a>
 <a name='L187'></a><a href='#L187'>187</a>
-<a name='L188'></a><a href='#L188'>188</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -276,8 +277,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -345,9 +346,9 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">66x</span>
-<span class="cline-any cline-yes">66x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">73x</span>
+<span class="cline-any cline-yes">73x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -363,18 +364,19 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">66x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">73x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">55x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">57x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">7x</span>
-<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">4x</span>
@@ -424,7 +426,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">133x</span>
+<span class="cline-any cline-yes">135x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -441,16 +443,16 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">229x</span>
-<span class="cline-any cline-yes">403x</span>
+<span class="cline-any cline-yes">252x</span>
+<span class="cline-any cline-yes">501x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">193x</span>
+<span class="cline-any cline-yes">198x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { Action, Plan, User } from '@/api/schemas'
 &nbsp;
-// In-memory mock state (dev mock mode and tests). Shapes follow contracts/openapi.yaml.
+// Состояние мока в памяти (мок-режим разработки и тесты). Формы следуют contracts/openapi.yaml.
 &nbsp;
 export const MOCK_PASSWORD = 'demo'
 &nbsp;
@@ -460,6 +462,7 @@ export const MOCK_USERS: User[] = [
   { id: 'mentor.oleg', login: 'mentor.oleg', display_name: 'Олег Крылов', role: 'mentor', team_id: 'delivery', team_name: 'Доставка' },
   { id: 'lead.maria', login: 'lead.maria', display_name: 'Мария Лебедева', role: 'lead', team_id: 'delivery', team_name: 'Доставка' },
   { id: 'hrbp.elena', login: 'hrbp.elena', display_name: 'Елена Орлова', role: 'hrbp', team_id: 'hr', team_name: 'HR' },
+  { id: 'hradmin.olga', login: 'hradmin.olga', display_name: 'Ольга Смирнова', role: 'hr_admin', team_id: 'people', team_name: 'HR' },
   { id: 'alumni.petr', login: 'alumni.petr', display_name: 'Пётр Волков', role: 'alumni', team_id: 'delivery', team_name: 'Доставка' },
 ]
 &nbsp;
@@ -469,7 +472,7 @@ export const MOCK_FLAGS = {
   scenario_s3: true,
   scenario_s4: true,
   proactive_digest: true,
-  escalation_to_kb: false,
+  escalation_to_kb: true,
 }
 &nbsp;
 export interface MockProposal {
@@ -499,11 +502,11 @@ export interface MockState {
   sessions: Map&lt;string, StoredMessage[]&gt;
   extraTasks: Map&lt;string, Plan['periods'][number]['tasks']&gt;
   failedOnce: Set&lt;string&gt;
-  /** Idempotency-Key -&gt; decision already applied (replay of POST /api/approvals/{id}/decision) */
+  /** Idempotency-Key -&gt; уже применённое решение (повтор POST /api/approvals/{id}/decision) */
   decisions: Map&lt;string, { actionId: string; decision: 'approved' | 'rejected' }&gt;
-  /** `${userId}:${taskId}` -&gt; status set from the plan page */
+  /** `${userId}:${taskId}` -&gt; статус, выставленный на странице плана */
   taskStatus: Map&lt;string, string&gt;
-  goals: Map&lt;string, { id: string; created_by: string; title: string; criteria?: string }[]&gt;
+  goals: Map&lt;string, { id: string; created_by: string; title: string; criteria?: string; status: 'proposed' | 'active' | 'achieved' | 'missed' }[]&gt;
   escalations: MockEscalation[]
   notifications: Map&lt;string, MockNotification[]&gt;
   seq: number
@@ -559,7 +562,7 @@ export function resetMockState(): void {
   state = freshState()
 }
 &nbsp;
-// Browser mock mode keeps the whole db under one localStorage key so it survives F5 (R66).
+// Мок-режим в браузере хранит всю базу под одним ключом localStorage, чтобы она переживала F5 (R66).
 export const MOCK_STORAGE_KEY = 'ai-buddy-mock-db'
 let persistEnabled = false
 &nbsp;
@@ -615,7 +618,7 @@ export function saveState(): void {
   try {
     localStorage.setItem(MOCK_STORAGE_KEY, serializeState(state))
   } catch {
-    /* storage unavailable: the mock db lives in memory only */
+    /* хранилище недоступно: мок-база живёт только в памяти */
   }
 }
 &nbsp;
@@ -623,7 +626,7 @@ export function clearMockStorage(): void {
   try {
     localStorage.removeItem(MOCK_STORAGE_KEY)
   } catch {
-    /* ignore */
+    /* игнорируем */
   }
 }
 &nbsp;
@@ -642,7 +645,7 @@ export function uuid(): string {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-11T09:44:58.208Z
+                at 2026-11-14T18:50:49.925Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

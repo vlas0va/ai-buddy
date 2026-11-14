@@ -36,14 +36,14 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>6/6</span>
+                <span class='fraction'>12/12</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">100% </span>
+                <span class="strong">83.33% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>7/7</span>
+                <span class='fraction'>10/12</span>
             </div>
         
             
@@ -57,7 +57,7 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>5/5</span>
+                <span class='fraction'>12/12</span>
             </div>
         
             
@@ -113,7 +113,12 @@
 <a name='L37'></a><a href='#L37'>37</a>
 <a name='L38'></a><a href='#L38'>38</a>
 <a name='L39'></a><a href='#L39'>39</a>
-<a name='L40'></a><a href='#L40'>40</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -124,16 +129,26 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">20x</span>
-<span class="cline-any cline-yes">20x</span>
-<span class="cline-any cline-yes">20x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -143,51 +158,51 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
-import { sendEscalation } from '@/api/chat'
-import { errorMessage } from '@/api/client'
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import type { EscalationDraftData } from '@/chat/events'
 import { ROLE_TEXT } from '../statusText'
 &nbsp;
-/** `canSend`: core accepts escalations from interns only; other roles get the text to copy into their messenger. */
-export function EscalationDraft({ draft, sessionId, canSend = true }: { draft: EscalationDraftData; sessionId?: string; canSend?: boolean }) {
+/**
+ * Организаторы 13.11: buddy не передаёт сообщения наставнику — наставник редко открывает buddy. Стажёр копирует текст в
+ * личные сообщения или канал команды; вопрос без ответа уже в списке наставника (`queue`). `messageId`, `canSend` и
+ * `sent` оставлены для мест вызова; отсюда ничего не отправляется.
+ */
+export function EscalationDraft({ draft }: { draft: EscalationDraftData; sessionId?: string; messageId?: string; canSend?: boolean; sent?: boolean }) {
   const [text, setText] = useState(draft.text)
-  const send = useMutation({ mutationFn: () =&gt; sendEscalation({ to_role: draft.to_role, text, session_id: sessionId }) })
+  const [copied, setCopied] = useState(false)
+  const box = `textarea-${draft.to_role}`
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+    } catch {
+      const el = document.getElementById(box) as HTMLTextAreaElement | null // нет API буфера обмена: выделяем текст для Ctrl+C
+      el?.select()
+    }
+  }
+  const who = draft.to_name ? ` (${draft.to_name})` : ''
   return (
     &lt;Card className="chat-card" aria-label="Черновик сообщения"&gt;
-      &lt;h3&gt;Черновик сообщения {ROLE_TEXT[draft.to_role]}&lt;/h3&gt;
-      &lt;textarea
-        className="ui-input chat-textarea"
-        value={text}
-        onChange={(e) =&gt; setText(e.target.value)}
-        aria-label="Текст сообщения"
-        rows={4}
-        disabled={send.isSuccess}
-      /&gt;
-      {!canSend ? (
-        &lt;p className="hint"&gt;Скопируйте текст и отправьте в рабочий мессенджер.&lt;/p&gt;
-      ) : send.isSuccess ? (
-        &lt;p className="hint"&gt;Сообщение отправлено.&lt;/p&gt;
-      ) : (
-        &lt;div className="chat-actions"&gt;
-          &lt;Button loading={send.isPending} disabled={!text.trim()} onClick={() =&gt; send.mutate()}&gt;
-            Отправить наставнику
-          &lt;/Button&gt;
-        &lt;/div&gt;
+      &lt;h3&gt;Сообщение {ROLE_TEXT[draft.to_role]}&lt;/h3&gt;
+      &lt;textarea id={box} className="ui-input chat-textarea" value={text} onChange={(e) =&gt; setText(e.target.value)} aria-label="Текст сообщения" rows={4} /&gt;
+      &lt;div className="chat-actions"&gt;
+        &lt;Button variant="secondary" size="sm" disabled={!text.trim()} onClick={() =&gt; void copy()}&gt;
+          {copied ? 'Скопировано' : 'Скопировать'}
+        &lt;/Button&gt;
+        &lt;span className="hint"&gt;
+          Отправь в личные сообщения{who}
+          {draft.channel ? ` или в канал ${draft.channel}` : ''}.
+        &lt;/span&gt;
+      &lt;/div&gt;
+      {draft.queue &amp;&amp; (
+        &lt;p className="hint"&gt;Вопрос уже в списке {draft.to_role === 'lead' ? <span class="branch-0 cbranch-no" title="branch not covered" >'руководителя' : d</span>raft.to_role === 'hrbp' ? <span class="branch-0 cbranch-no" title="branch not covered" >'HR BP' : '</span>наставника'}: ответ придёт в «Мои вопросы» и попадёт в базу знаний.&lt;/p&gt;
       )}
-      {send.isError &amp;&amp; &lt;p className="ui-field-error"&gt;{errorMessage(send.error)}&lt;/p&gt;}
     &lt;/Card&gt;
   )
 }
@@ -198,7 +213,7 @@ export function EscalationDraft({ draft, sessionId, canSend = true }: { draft: E
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-11-11T09:44:58.208Z
+                at 2026-11-14T18:50:49.925Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
