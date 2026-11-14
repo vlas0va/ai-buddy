@@ -17,6 +17,18 @@ const dayLabel = `${day.getDate()} ${MONTHS[day.getMonth()]} ${day.getFullYear()
 const dayText = `${String(day.getDate()).padStart(2, '0')}.${String(day.getMonth() + 1).padStart(2, '0')}.${day.getFullYear()}`
 const QUESTION = 'Можно ли приходить в офис с собакой?'
 
+// Длительность озвучки сцен (../voice/scene_<id>.mp3): сцена в записи длится не меньше голоса,
+// чтобы в видео не было стоп-кадров. Без mp3 сцены идут в своём темпе.
+const { execFileSync } = require('child_process')
+const VOICE = __dirname + '/../voice/'
+const LEAD_IN = 0.35
+const TAIL = 0.6
+function voiceLength(id) {
+  const f = VOICE + `scene_${id}.mp3`
+  if (!fs.existsSync(f)) return 0
+  return parseFloat(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).toString())
+}
+
 // Курсор в кадре: Playwright его не рисует, поэтому точка следует за мышью и «пульсирует» на клике.
 const CURSOR = () => {
   window.addEventListener('DOMContentLoaded', () => {
@@ -65,9 +77,34 @@ async function seedOlegDayOff(browser) {
   const t0 = Date.now()
   const p = await ctx.newPage()
   const scenes = []
-  const scene = (id) => scenes.push({ id, t: (Date.now() - t0) / 1000 })
   const pause = (ms) => p.waitForTimeout(ms)
-  const hover = async (loc) => { await loc.scrollIntoViewIfNeeded(); await loc.hover(); await pause(500) }
+  const mouse = { x: SIZE.width / 2, y: SIZE.height / 2 }
+  // Дотягивает предыдущую сцену до длины её озвучки: курсор медленно «гуляет», экран живой.
+  const hold = async () => {
+    const last = scenes[scenes.length - 1]
+    if (!last) return
+    const until = t0 + (last.t + LEAD_IN + voiceLength(last.id) + TAIL) * 1000
+    let dir = 1
+    while (Date.now() < until - 150) {
+      const step = Math.min(1200, until - Date.now())
+      mouse.x += dir * 24
+      mouse.y += dir * 10
+      dir = -dir
+      await p.mouse.move(mouse.x, mouse.y, { steps: 12 })
+      await pause(Math.max(0, step - 200))
+    }
+  }
+  const scene = async (id) => {
+    await hold()
+    scenes.push({ id, t: (Date.now() - t0) / 1000 })
+  }
+  const hover = async (loc) => {
+    await loc.scrollIntoViewIfNeeded()
+    await loc.hover()
+    const b = await loc.boundingBox()
+    if (b) { mouse.x = b.x + b.width / 2; mouse.y = b.y + Math.min(b.height / 2, 120) }
+    await pause(500)
+  }
 
   const type = async (text) => {
     const i = p.getByLabel('Сообщение')
@@ -101,12 +138,12 @@ async function seedOlegDayOff(browser) {
   // 01 — экран входа с персонажем
   await p.goto(W + '/login')
   await pause(300)
-  scene('01-intro')
+  await scene('01-intro')
   await hover(p.getByText('Помощник для первых недель стажировки'))
   await pause(2500)
 
   // 02 — план стажёра
-  scene('02-plan')
+  await scene('02-plan')
   await login('intern.anna')
   await nav('Мой план')
   await p.getByRole('progressbar', { name: 'Прогресс плана' }).waitFor()
@@ -117,7 +154,7 @@ async function seedOlegDayOff(browser) {
   await pause(800)
 
   // 03 — вопрос с источником
-  scene('03-ask')
+  await scene('03-ask')
   await nav('Чат')
   await p.getByRole('button', { name: 'Новый диалог' }).click()
   await type('Как оформить отгул?')
@@ -126,7 +163,7 @@ async function seedOlegDayOff(browser) {
   await pause(1200)
 
   // 04 — отгул через календарь → черновик → заявка
-  scene('04-dayoff')
+  await scene('04-dayoff')
   const card = p.getByLabel('Выбор дат', { exact: true }).last()
   await card.getByRole('button', { name: /Выбери даты/ }).click()
   await pause(600)
@@ -150,14 +187,14 @@ async function seedOlegDayOff(browser) {
   await pause(1800)
 
   // 05 — доступы одним списком
-  scene('05-access')
+  await scene('05-access')
   await p.getByRole('button', { name: 'Новый диалог' }).click()
   await type('Какие доступы мне нужны?')
   await hover(p.getByText('Недостающие доступы').last())
   await pause(2500)
 
   // 06 — вопрос, которого нет в базе знаний
-  scene('06-unknown')
+  await scene('06-unknown')
   await p.getByRole('button', { name: 'Новый диалог' }).click()
   await type(QUESTION)
   const msg = p.getByLabel('Черновик сообщения').last()
@@ -166,7 +203,7 @@ async function seedOlegDayOff(browser) {
   await pause(2500)
 
   // 07 — наставник отвечает из списка, ответ — в базу знаний для всех
-  scene('07-mentor')
+  await scene('07-mentor')
   await logout()
   await login('mentor.oleg')
   await nav('Вопросы стажёров')
@@ -180,7 +217,7 @@ async function seedOlegDayOff(browser) {
   await pause(1800)
 
   // 08 — стажёр другой команды получает ответ наставника
-  scene('08-reuse')
+  await scene('08-reuse')
   await logout()
   await login('intern.ivan')
   await p.getByRole('button', { name: 'Новый диалог' }).click()
@@ -189,7 +226,7 @@ async function seedOlegDayOff(browser) {
   await pause(2200)
 
   // 09 — польза buddy и отчёт за стажировку
-  scene('09-benefit')
+  await scene('09-benefit')
   await logout()
   await login('mentor.oleg')
   await nav('Мои стажёры')
@@ -202,7 +239,7 @@ async function seedOlegDayOff(browser) {
   await pause(1800)
 
   // 10 — руководитель согласует, видит отсутствующих в те же дни; затем HR-администратор
-  scene('10-lead')
+  await scene('10-lead')
   await logout()
   await login('lead.maria')
   await p.getByRole('link', { name: 'Согласования', exact: true }).click()
@@ -222,10 +259,11 @@ async function seedOlegDayOff(browser) {
   await pause(1500)
 
   // 11 — финал на экране входа
-  scene('11-outro')
+  await scene('11-outro')
   await logout()
   await pause(3500)
 
+  await hold()
   const end = (Date.now() - t0) / 1000
   const video = p.video()
   await ctx.close()
