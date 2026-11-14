@@ -1,0 +1,38 @@
+name: deploy
+
+# Стенд обновляется сам: после зелёного CI на main GitHub Actions заходит на сервер по SSH и запускает
+# deploy/server/deploy.sh (git pull + docker compose up --build). Настройка — docs/deploy.md.
+# Секреты репозитория: DEPLOY_HOST (IP сервера), DEPLOY_SSH_KEY (приватный ключ), DEPLOY_USER (по умолчанию deploy).
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Обновить стенд по SSH
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER || 'deploy' }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$KEY" ]; then
+            echo "Секреты DEPLOY_HOST и DEPLOY_SSH_KEY не заданы — деплой пропущен (см. docs/deploy.md)."
+            exit 0
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes "$USER@$HOST" \
+            "cd /opt/aibuddy && BRANCH=main bash deploy/server/deploy.sh"

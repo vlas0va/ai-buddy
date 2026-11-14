@@ -1,0 +1,69 @@
+# Публичный стенд (VPS): Caddy с автоматическим HTTPS на ${DOMAIN}, stub-LLM, наружу открыты только 80 и 443.
+# Запуск на сервере (из корня репозитория, настройки — в .env, см. docs/deploy.md):
+#   docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml --profile core up -d --build --wait
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    profiles: [core, full]
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?задайте DOMAIN в .env, например 1-2-3-4.sslip.io}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+      core:
+        condition: service_healthy
+
+  # Веб и ядро доступны только через Caddy: браузер ходит на https://${DOMAIN}, API — на тот же адрес /api/...
+  web:
+    restart: unless-stopped
+    build:
+      args:
+        VITE_API_BASE_URL: https://${DOMAIN}
+    ports: !reset []
+
+  core:
+    restart: unless-stopped
+    environment:
+      CORS_ORIGINS: https://${DOMAIN}
+      JWT_SECRET: ${JWT_SECRET:?задайте JWT_SECRET в .env}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET:?задайте CONFIRMATION_HMAC_SECRET в .env}
+    ports: !reset []
+
+  agent:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET}
+      # stub по умолчанию: отвечает сразу и проходит все сценарии; облачный ключ можно задать строками LLM_* в .env
+      LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-stub}
+    ports: !reset []
+
+  mcp-mocks:
+    restart: unless-stopped
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      CONFIRMATION_HMAC_SECRET: ${CONFIRMATION_HMAC_SECRET}
+    ports: !reset []
+
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+  # Ollama с A-Vibe на дешёвом сервере без GPU не нужна: запускается только явно (--profile ollama)
+  ollama:
+    profiles: !override [ollama]
+
+volumes:
+  caddy-data:
+  caddy-config:

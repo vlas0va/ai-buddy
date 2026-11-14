@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_e2a0fc020fba741d_websearch_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.2">coverage.py v7.17.2</a>,
-            created at 2026-11-11 12:58 +0300
+            created at 2026-11-14 21:52 +0300
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -80,10 +80,10 @@
     </div>
 </header>
 <main id="source">
-    <p class="pln"><span class="n"><a id="t1" href="#t1">1</a></span><span class="t"><span class="str">&quot;&quot;&quot;Minimal MCP client over streamable HTTP (JSON-RPC 2.0) used to reach B&#x27;s Go MCP servers.</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t1" href="#t1">1</a></span><span class="t"><span class="str">&quot;&quot;&quot;&#1052;&#1080;&#1085;&#1080;&#1084;&#1072;&#1083;&#1100;&#1085;&#1099;&#1081; MCP-&#1082;&#1083;&#1080;&#1077;&#1085;&#1090; &#1087;&#1086;&#1074;&#1077;&#1088;&#1093; streamable HTTP (JSON-RPC 2.0), &#1095;&#1077;&#1088;&#1077;&#1079; &#1082;&#1086;&#1090;&#1086;&#1088;&#1099;&#1081; &#1072;&#1075;&#1077;&#1085;&#1090; &#1093;&#1086;&#1076;&#1080;&#1090; &#1082; Go MCP-&#1089;&#1077;&#1088;&#1074;&#1077;&#1088;&#1072;&#1084; B.</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t2" href="#t2">2</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t3" href="#t3">3</a></span><span class="t"><span class="str">Per call: forwards the user&#x27;s bearer token (servers re-check rights, ADR-003 layer 3), handles the</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t4" href="#t4">4</a></span><span class="t"><span class="str">initialize handshake and `Mcp-Session-Id`, accepts both JSON and SSE responses, maps failures to ToolError.</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t3" href="#t3">3</a></span><span class="t"><span class="str">&#1053;&#1072; &#1082;&#1072;&#1078;&#1076;&#1099;&#1081; &#1074;&#1099;&#1079;&#1086;&#1074;: &#1087;&#1077;&#1088;&#1077;&#1076;&#1072;&#1105;&#1090; bearer-&#1090;&#1086;&#1082;&#1077;&#1085; &#1087;&#1086;&#1083;&#1100;&#1079;&#1086;&#1074;&#1072;&#1090;&#1077;&#1083;&#1103; (&#1089;&#1077;&#1088;&#1074;&#1077;&#1088;&#1099; &#1087;&#1077;&#1088;&#1077;&#1087;&#1088;&#1086;&#1074;&#1077;&#1088;&#1103;&#1102;&#1090; &#1087;&#1088;&#1072;&#1074;&#1072;, ADR-003, &#1089;&#1083;&#1086;&#1081; 3), &#1074;&#1099;&#1087;&#1086;&#1083;&#1085;&#1103;&#1077;&#1090;</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t4" href="#t4">4</a></span><span class="t"><span class="str">&#1088;&#1091;&#1082;&#1086;&#1087;&#1086;&#1078;&#1072;&#1090;&#1080;&#1077; initialize &#1080; `Mcp-Session-Id`, &#1087;&#1088;&#1080;&#1085;&#1080;&#1084;&#1072;&#1077;&#1090; &#1086;&#1090;&#1074;&#1077;&#1090;&#1099; &#1080; &#1074; JSON, &#1080; &#1074; SSE, &#1087;&#1088;&#1077;&#1074;&#1088;&#1072;&#1097;&#1072;&#1077;&#1090; &#1089;&#1073;&#1086;&#1080; &#1074; ToolError.</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t5" href="#t5">5</a></span><span class="t"><span class="str">&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t6" href="#t6">6</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t7" href="#t7">7</a></span><span class="t"><span class="key">from</span> <span class="nam">__future__</span> <span class="key">import</span> <span class="nam">annotations</span>&nbsp;</span><span class="r"></span></p>
@@ -175,7 +175,7 @@
     <p class="run run2"><span class="n"><a id="t93" href="#t93">93</a></span><span class="t">            <span class="op">}</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t94" href="#t94">94</a></span><span class="t">            <span class="nam">resp</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_post</span><span class="op">(</span><span class="nam">payload</span><span class="op">,</span> <span class="nam">user_token</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t95" href="#t95">95</a></span><span class="t">            <span class="key">if</span> <span class="nam">resp</span><span class="op">.</span><span class="nam">status_code</span> <span class="key">in</span> <span class="op">(</span><span class="num">400</span><span class="op">,</span> <span class="num">404</span><span class="op">)</span> <span class="key">and</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_session</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t96" href="#t96">96</a></span><span class="t">                <span class="nam">self</span><span class="op">.</span><span class="nam">_initialize</span><span class="op">(</span><span class="nam">user_token</span><span class="op">)</span>  <span class="com"># session expired on the server &#8594; re-handshake once</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t96" href="#t96">96</a></span><span class="t">                <span class="nam">self</span><span class="op">.</span><span class="nam">_initialize</span><span class="op">(</span><span class="nam">user_token</span><span class="op">)</span>  <span class="com"># &#1089;&#1077;&#1089;&#1089;&#1080;&#1103; &#1080;&#1089;&#1090;&#1077;&#1082;&#1083;&#1072; &#1085;&#1072; &#1089;&#1077;&#1088;&#1074;&#1077;&#1088;&#1077; &#8594; &#1087;&#1086;&#1074;&#1090;&#1086;&#1088;&#1085;&#1086;&#1077; &#1088;&#1091;&#1082;&#1086;&#1087;&#1086;&#1078;&#1072;&#1090;&#1080;&#1077; &#1086;&#1076;&#1080;&#1085; &#1088;&#1072;&#1079;</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t97" href="#t97">97</a></span><span class="t">                <span class="nam">resp</span> <span class="op">=</span> <span class="nam">self</span><span class="op">.</span><span class="nam">_post</span><span class="op">(</span><span class="nam">payload</span><span class="op">,</span> <span class="nam">user_token</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t98" href="#t98">98</a></span><span class="t">        <span class="key">if</span> <span class="nam">resp</span><span class="op">.</span><span class="nam">status_code</span> <span class="key">in</span> <span class="op">(</span><span class="num">401</span><span class="op">,</span> <span class="num">403</span><span class="op">)</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t99" href="#t99">99</a></span><span class="t">            <span class="key">raise</span> <span class="nam">ToolDenied</span><span class="op">(</span><span class="str">&quot;&#1057;&#1077;&#1088;&#1074;&#1080;&#1089; &#1086;&#1090;&#1082;&#1072;&#1079;&#1072;&#1083; &#1074; &#1076;&#1086;&#1089;&#1090;&#1091;&#1087;&#1077;.&quot;</span><span class="op">)</span>&nbsp;</span><span class="r"></span></p>
@@ -229,7 +229,7 @@
             <a class="nav" href="z_e2a0fc020fba741d_websearch_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.2">coverage.py v7.17.2</a>,
-            created at 2026-11-11 12:58 +0300
+            created at 2026-11-14 21:52 +0300
         </p>
     </div>
 </footer>

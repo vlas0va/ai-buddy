@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_309a97267a8f1122_train_intents_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.2">coverage.py v7.17.2</a>,
-            created at 2026-11-10 21:41 +0300
+            created at 2026-11-14 21:52 +0300
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -80,11 +80,11 @@
     </div>
 </header>
 <main id="source">
-    <p class="pln"><span class="n"><a id="t1" href="#t1">1</a></span><span class="t"><span class="str">&quot;&quot;&quot;Augment the intent dataset with paraphrases from any OpenAI-compatible model (e.g. a local Ollama on the laptop).</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t1" href="#t1">1</a></span><span class="t"><span class="str">&quot;&quot;&quot;&#1044;&#1086;&#1087;&#1086;&#1083;&#1085;&#1080;&#1090;&#1100; &#1085;&#1072;&#1073;&#1086;&#1088; &#1085;&#1072;&#1084;&#1077;&#1088;&#1077;&#1085;&#1080;&#1081; &#1087;&#1077;&#1088;&#1077;&#1092;&#1088;&#1072;&#1079;&#1080;&#1088;&#1086;&#1074;&#1082;&#1072;&#1084;&#1080; &#1086;&#1090; &#1083;&#1102;&#1073;&#1086;&#1081; OpenAI-&#1089;&#1086;&#1074;&#1084;&#1077;&#1089;&#1090;&#1080;&#1084;&#1086;&#1081; &#1084;&#1086;&#1076;&#1077;&#1083;&#1080; (&#1085;&#1072;&#1087;&#1088;&#1080;&#1084;&#1077;&#1088;, &#1083;&#1086;&#1082;&#1072;&#1083;&#1100;&#1085;&#1086;&#1081; Ollama &#1085;&#1072; &#1085;&#1086;&#1091;&#1090;&#1073;&#1091;&#1082;&#1077;).</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t2" href="#t2">2</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t3" href="#t3">3</a></span><span class="t"><span class="str">python training/augment_with_llm.py --per-intent 15        # needs LLM_BASE_URL and LLM_MODEL</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t4" href="#t4">4</a></span><span class="t"><span class="str">Writes eval/intents/augmented.yaml for review; after a human check merge it into train.yaml and run `make train`.</span>&nbsp;</span><span class="r"></span></p>
-    <p class="pln"><span class="n"><a id="t5" href="#t5">5</a></span><span class="t"><span class="str">Phrases that collide with the held-out test set are dropped so the reported accuracy stays honest.</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t3" href="#t3">3</a></span><span class="t"><span class="str">python training/augment_with_llm.py --per-intent 15        # &#1085;&#1091;&#1078;&#1085;&#1099; LLM_BASE_URL &#1080; LLM_MODEL</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t4" href="#t4">4</a></span><span class="t"><span class="str">&#1055;&#1080;&#1096;&#1077;&#1090; eval/intents/augmented.yaml &#1085;&#1072; &#1087;&#1088;&#1086;&#1089;&#1084;&#1086;&#1090;&#1088;; &#1087;&#1086;&#1089;&#1083;&#1077; &#1087;&#1088;&#1086;&#1074;&#1077;&#1088;&#1082;&#1080; &#1095;&#1077;&#1083;&#1086;&#1074;&#1077;&#1082;&#1086;&#1084; &#1089;&#1083;&#1077;&#1081;&#1090;&#1077; &#1077;&#1075;&#1086; &#1074; train.yaml &#1080; &#1079;&#1072;&#1087;&#1091;&#1089;&#1090;&#1080;&#1090;&#1077; `make</span>&nbsp;</span><span class="r"></span></p>
+    <p class="pln"><span class="n"><a id="t5" href="#t5">5</a></span><span class="t"><span class="str">train`. &#1060;&#1088;&#1072;&#1079;&#1099;, &#1089;&#1086;&#1074;&#1087;&#1072;&#1076;&#1072;&#1102;&#1097;&#1080;&#1077; &#1089; &#1086;&#1090;&#1083;&#1086;&#1078;&#1077;&#1085;&#1085;&#1099;&#1084; &#1090;&#1077;&#1089;&#1090;&#1086;&#1074;&#1099;&#1084; &#1085;&#1072;&#1073;&#1086;&#1088;&#1086;&#1084;, &#1086;&#1090;&#1073;&#1088;&#1072;&#1089;&#1099;&#1074;&#1072;&#1102;&#1090;&#1089;&#1103;, &#1095;&#1090;&#1086;&#1073;&#1099; &#1079;&#1072;&#1103;&#1074;&#1083;&#1077;&#1085;&#1085;&#1072;&#1103; &#1090;&#1086;&#1095;&#1085;&#1086;&#1089;&#1090;&#1100; &#1086;&#1089;&#1090;&#1072;&#1074;&#1072;&#1083;&#1072;&#1089;&#1100; &#1095;&#1077;&#1089;&#1090;&#1085;&#1086;&#1081;.</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t6" href="#t6">6</a></span><span class="t"><span class="str">&quot;&quot;&quot;</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t7" href="#t7">7</a></span><span class="t">&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t8" href="#t8">8</a></span><span class="t"><span class="key">from</span> <span class="nam">__future__</span> <span class="key">import</span> <span class="nam">annotations</span>&nbsp;</span><span class="r"></span></p>
@@ -161,7 +161,7 @@
             <a class="nav" href="z_309a97267a8f1122_train_intents_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.17.2">coverage.py v7.17.2</a>,
-            created at 2026-11-10 21:41 +0300
+            created at 2026-11-14 21:52 +0300
         </p>
     </div>
 </footer>

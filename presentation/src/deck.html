@@ -3,7 +3,7 @@
 <style>
 @page { size: 1280px 720px; margin: 0; }
 * { box-sizing: border-box; }
-:root { --ink:#141821; --muted:#5b6270; --accent:#0a5fe0; --soft:#e6f0ff; --line:#e1e4ea; --ok:#0b7a3b; --okbg:#e3f6ea; --warn:#a14a00; --warnbg:#fff0dd; --bad:#b42318; --badbg:#fdeceb; }
+:root { --ink:#141821; --muted:#5b6270; --accent:#006fdb; --soft:#e8f2ff; --line:#e1e4ea; --ok:#0b7a3b; --okbg:#e3f6ea; --warn:#a14a00; --warnbg:#fff0dd; --bad:#b42318; --badbg:#fdeceb; }
 html, body { margin:0; padding:0; font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; color:var(--ink); }
 .s { width:1280px; height:720px; padding:56px 64px; position:relative; overflow:hidden; page-break-after:always; background:#fff; display:flex; flex-direction:column; }
 .s:last-child { page-break-after:auto; }
@@ -32,7 +32,8 @@ ul.clean li::before { content:""; position:absolute; left:4px; top:10px; width:1
 .b-acc { background:var(--soft); color:var(--accent); }
 .flow { display:flex; gap:10px; align-items:stretch; margin:8px 0 18px; }
 .flow div { flex:1; background:var(--soft); color:var(--accent); border-radius:10px; padding:10px 12px; font-size:15px; font-weight:600; text-align:center; display:flex; align-items:center; justify-content:center; }
-.title { background: linear-gradient(160deg, #e6f0ff 0%, #f3f7ff 55%, #ffffff 100%); justify-content:center; }
+.title { background: radial-gradient(circle at 92% 12%, rgba(151,207,38,.24) 0 120px, transparent 121px), radial-gradient(circle at 101% 78%, rgba(0,170,255,.2) 0 190px, transparent 191px), radial-gradient(circle at 70% 104%, rgba(150,94,235,.16) 0 90px, transparent 91px), radial-gradient(circle at 2% 102%, rgba(255,97,99,.16) 0 80px, transparent 81px), #eef6ff; justify-content:center; }
+.mascot { margin-bottom:22px; display:block; }
 .logo { width:64px; height:64px; border-radius:16px; background:var(--accent); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:800; font-size:26px; margin-bottom:28px; }
 table.t { border-collapse:collapse; width:100%; font-size:16px; }
 table.t td, table.t th { border-bottom:1px solid var(--line); padding:9px 10px; text-align:left; vertical-align:top; }
@@ -45,12 +46,12 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
 </style></head><body>
 
 <section class="s title">
-  <div class="logo">AI</div>
+  <svg class="mascot" width="104" height="104" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><rect width="140" height="140" rx="32" fill="#eef6ff"></rect><path d="M22 34h62a12 12 0 0 1 12 12v30a12 12 0 0 1-12 12H50l-14 13V88H22a12 12 0 0 1-12-12V46a12 12 0 0 1 12-12z" fill="#00aaff"></path><circle cx="42" cy="58" r="8" fill="#fff"></circle><circle cx="43" cy="60" r="4" fill="#1a1a1a"></circle><path d="M59 60q7-7 14 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><path d="M45 72q9 7 18 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><circle cx="31" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><circle cx="77" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><path d="M76 72h44a10 10 0 0 1 10 10v20a10 10 0 0 1-10 10h-6v10l-11-10H76a10 10 0 0 1-10-10V82a10 10 0 0 1 10-10z" fill="#97cf26"></path><circle cx="90" cy="90" r="5" fill="#fff"></circle><circle cx="91" cy="91" r="2.5" fill="#1a1a1a"></circle><circle cx="108" cy="90" r="5" fill="#fff"></circle><circle cx="109" cy="91" r="2.5" fill="#1a1a1a"></circle><path d="M93 100q6 5 12 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"></path><path d="M98 72v-8" stroke="#4a8f1a" stroke-width="3" stroke-linecap="round"></path><path d="M98 66q-10-2-12-10 10 0 12 10zM98 64q8-4 12-12-10 2-12 12z" fill="#4a8f1a"></path></svg>
   <div class="kicker">Hack&amp;Change 2026 · кейс Авито Старт</div>
   <h1 style="font-size:64px">AI-buddy — ИИ-наставник,<br>который учит, а не делает за стажёра</h1>
   <p class="muted" style="font-size:22px;max-width:900px">Ведёт по плану адаптации, отвечает на вопросы со ссылкой на источник, оформляет отгул и доступы
   через сервисы компании — и снимает с наставника рутину, не заменяя его.</p>
-  <p style="font-size:18px;margin-top:28px">Репозиторий: <b>github.com/Eliz-Kory/AI-Buddy</b> · Видео: <b>presentation/demo.mp4</b> в репозитории<br>
+  <p style="font-size:18px;margin-top:28px">Репозиторий: <b>https://github.com/Eliz-Kory/AI-Buddy</b> · Видео-демо: <b>presentation/demo.mp4</b> в репозитории<br>
   Запуск: <code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> — без ключа LLM</p>
   <div class="foot"><span>Все данные синтетические; документы — тестовые инструкции прототипа, а не регламенты Авито</span><span>1</span></div>
 </section>
@@ -97,9 +98,9 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
       <span class="badge b-acc">TO BE</span>
       <ul class="clean" style="margin-top:14px">
         <li><b>Отгул:</b> одно сообщение → черновик с проверенными датами → «Отправить» → номер и статус в чате и в плане</li>
-        <li><b>Вопрос:</b> ответ своей команды с источником сразу в чате; нет ответа — похожие инструкции и черновик наставнику</li>
+        <li><b>Вопрос:</b> ответ своей команды с источником сразу в чате; нет ответа — готовый текст для личных сообщений наставнику, а вопрос сам попадает в список наставника</li>
         <li><b>Доступы:</b> список со статусами и заявка в один клик; повышенные — сразу к руководителю</li>
-        <li><b>Наставник</b> отвечает один раз — ответ уходит в базу знаний; buddy учит, а не делает задачу за стажёра</li>
+        <li><b>Наставник</b> раз в день видит сводку вопросов, отвечает сразу на группу похожих — ответ уходит в базу знаний; buddy учит, а не делает задачу за стажёра</li>
       </ul>
     </div>
   </div>
@@ -120,7 +121,7 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
     <tr><th>Уровень эффекта</th><th>Пример</th><th>Где проверяется</th></tr>
     <tr><td>Результат стажёра</td><td>«Я оформил отгул и вижу его статус»</td><td>уже в прототипе — e2e-тест S3</td></tr>
     <tr><td>Наблюдаемое изменение</td><td>отгул — 1 сообщение и 1 кнопка вместо поиска инструкции и писем</td><td>тестовое прохождение со стажёрами</td></tr>
-    <tr><td>Долгосрочный эффект</td><td>−30% рутинных обращений, −20% до первой задачи</td><td>пилот по командам (слайд «Ценность и пилот»)</td></tr>
+    <tr><td>Долгосрочный эффект</td><td>−30% рутинных обращений, −20% до первой задачи</td><td>пилот по командам (слайд «Качество и пилот»)</td></tr>
   </table>
   <div class="foot"><span>Долгосрочный эффект — гипотеза для пилота, в прототипе его не обещаем</span><span>4</span></div>
 </section>
@@ -131,181 +132,97 @@ code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6
   <div class="grid4">
     <div class="card"><span class="badge b-acc">S3 · основной</span><h3 style="margin-top:12px">Отгул</h3><p>Порядок → даты → проверка → черновик → «Отправить» → заявка ABS-… → журнал и план → руководитель согласует → статус у стажёра</p></div>
     <div class="card"><span class="badge b-acc">S1</span><h3 style="margin-top:12px">План адаптации</h3><p>Два плана из чек-листа Авито — стажёра и наставника, статусы, следующий шаг, цели от наставника, напоминания по периодам</p></div>
-    <div class="card"><span class="badge b-acc">S2</span><h3 style="margin-top:12px">Спроси buddy</h3><p>Ответы с учётом команды, роли и этапа, источник с плашкой; нет ответа — черновик наставнику, ответ уходит в базу знаний</p></div>
+    <div class="card"><span class="badge b-acc">S2</span><h3 style="margin-top:12px">Спроси buddy</h3><p>Ответы с учётом команды, роли и этапа, источник с плашкой; нет ответа — текст для наставника и вопрос в его список, ответ уходит в базу знаний</p></div>
     <div class="card"><span class="badge b-acc">S4</span><h3 style="margin-top:12px">Доступы и каналы</h3><p>Confluence, Jira, Bitbucket, пространство команды; повышенные права — через руководителя; каналы и просьба наставнику</p></div>
   </div>
-  <div class="card" style="margin-top:18px;background:#f7faff;border-color:#cfe0ff"><h3>Учит, а не делает</h3><p style="font-size:17px">«Сделай за меня» → план из шагов и правила работы с нейросетями · подготовка к код-ревью и кого позвать · разбор лога с маскированием секретов · квиз по инструкции · справка по бенефитам без денежных операций</p></div>
+  <div class="card" style="margin-top:18px;background:#f7faff;border-color:#cfe0ff"><h3>Учит, а не делает</h3><p style="font-size:17px">«Сделай за меня» → план из шагов и правила работы с нейросетями · подготовка к код-ревью и кого позвать · разбор лога с маскированием секретов · квиз по инструкции · справка по бенефитам без денежных операций<br><b>Ещё:</b> командировки и согласия через сервисы · лог или конфиг прямо в чат (секреты скрываются) · общий техвопрос — с пометкой «Внешний источник»</p></div>
   <div class="foot"><span>Каждый заявленный сценарий проходит end-to-end и покрыт e2e-тестом Playwright</span><span>5</span></div>
 </section>
 
 <section class="s">
   <div class="kicker">S3 · основной сценарий</div>
   <h2>Отгул: от вопроса до согласованной заявки</h2>
-  <div class="flow"><div>Порядок + источник</div><div>Даты, проверка</div><div>Черновик</div><div>«Отправить»</div><div>ABS-… сохранено</div><div>Руководитель</div><div>Согласовано</div></div>
+  <div class="flow"><div>Порядок + источник</div><div>Дата в календаре</div><div>Черновик</div><div>«Отправить»</div><div>ABS-… сохранено</div><div>Руководитель видит, кто ещё отсутствует</div><div>HR-администратор</div></div>
   <div class="grid2">
-    <div class="shotwrap"><img class="shot" src="img/s3-result.png"></div>
-    <div class="shotwrap"><img class="shot" src="img/s3-approvals.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/02-intern-chat-day-off.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/08-lead-approvals.png"></div>
   </div>
-  <div class="foot"><span>Заявку создаёт сервис (absence MCP) только после подтверждения; результат виден после F5 и связан с задачей плана</span><span>6</span></div>
+  <div class="foot"><span>Заявку создаёт сервис (absence MCP) только после подтверждения; её можно отозвать, пока не согласована; статус виден в чате и в плане</span><span>6</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">S1 · план адаптации</div>
-  <h2>План из чек-листа Авито: этап, следующий шаг, сроки</h2>
-  <div class="grid2" style="grid-template-columns:1.25fr 1fr">
+  <div class="kicker">S1 · план адаптации и цели</div>
+  <h2>План из чек-листа Авито и цели после встречи 1:1</h2>
+  <div class="flow"><div>16 пунктов чек-листа в 5 периодах</div><div>Статусы и «что дальше?»</div><div>Учёба — мини-проверка, знакомство — подтверждает наставник</div><div>Встреча 1:1</div><div>Стажёр записывает цели и критерии</div><div>Наставник или руководитель согласует</div></div>
+  <div class="grid2" style="grid-template-columns:1.1fr 1fr">
     <div class="shotwrap"><img class="shot" src="img/s1-plan.png"></div>
-    <div><ul class="clean">
-      <li>16 пунктов чек-листа (CL-01…CL-16) в периодах <i>1 неделя → после 3 месяцев</i>, подзадачи</li>
-      <li>Статусы: не начато, в работе, ждёт согласования, готово, просрочено</li>
-      <li>Отметка задачи — мгновенно (&lt; 1 с), сохраняется на сервере</li>
-      <li>«Что дальше?» в чате → этап и карточка следующего шага</li>
-      <li>Шаги «только с людьми» (1:1, экватор) buddy напоминает, но не выполняет</li>
-      <li>AI-cron: напоминания по периодам стажёру и наставнику</li>
-    </ul></div>
+    <div class="shotwrap"><img class="shot" src="img/goals.png"></div>
   </div>
-  <div class="foot"><span>Планы стажёра и наставника строятся из data/checklist/checklist.yaml</span><span>7</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">S1 · наставник и руководитель</div>
-  <h2>Наставник видит прогресс и ставит цели</h2>
-  <div class="grid2">
-    <div class="shotwrap"><img class="shot" src="img/mentor-team.png"></div>
-    <div class="shotwrap"><img class="shot" src="img/mentor-goals.png"></div>
-  </div>
-  <div class="foot"><span>Только стажёры своей команды — фильтрует сервер; задачи отмечает сам стажёр, цели задаёт наставник</span><span>8</span></div>
+  <div class="foot"><span>Шаги «только с людьми» (1:1, экватор) buddy напоминает, но не выполняет; AI-cron напоминает по периодам стажёру и наставнику</span><span>7</span></div>
 </section>
 
 <section class="s">
   <div class="kicker">S2 · спроси buddy</div>
-  <h2>Ответы своей команды со ссылкой на источник</h2>
-  <div class="grid2">
+  <h2>Ответ с источником, а если не знает — вопрос в список наставника</h2>
+  <div class="flow"><div>Ответ своей команды с источником</div><div>Нет ответа — честное «не знаю»</div><div>Текст для ЛС или канала — «Скопировать»</div><div>Вопрос сам в списке наставника</div><div>Похожие — одной группой, сводка раз в день</div><div>Ответ всем — и в базу знаний</div></div>
+  <div class="grid3" style="flex:1;min-height:0;align-items:start">
     <div class="shotwrap"><img class="shot" src="img/s2-answer.png"></div>
-    <div><ul class="clean">
-      <li>Учитывает команду, роль, этап и офис: у «Доставки» и «Поиска» разные правила ревью, ноутбук в Москве и Петербурге выдают по-разному</li>
-      <li>Инженерный онбординг: Bitbucket и SSH-ключ, ветки и PR, CI/CD и GitOps, секреты, dev-стенд</li>
-      <li>Каждый ответ — с источником и плашкой <span class="badge b-test">Тестовая инструкция прототипа</span></li>
-      <li>Нет ответа — честно говорит и готовит черновик наставнику; ответ наставника можно одной галочкой добавить в базу знаний</li>
-      <li>«Полезно / Не полезно» под каждым ответом — метрика качества</li>
-    </ul></div>
+    <div class="shotwrap"><img class="shot" src="img/s2-unknown.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/06-mentor-questions.png"></div>
   </div>
-  <div class="foot"><span>Поиск: ACL до ранжирования в mcp-kb + повторная проверка в агенте; BM25 + порог покрытия запроса</span><span>9</span></div>
+  <p style="font-size:17px;margin:14px 0 0" class="muted">Учитывает команду, роль, этап и офис · плашка <span class="badge b-test">Тестовая инструкция прототипа</span> · «Полезно / Не полезно» под ответом · buddy не пишет наставнику сам — так попросили организаторы</p>
+  <div class="foot"><span>Поиск: ACL до ранжирования в mcp-kb + повторная проверка в агенте; BM25 + порог покрытия запроса</span><span>8</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">S4 · доступы и каналы</div>
-  <h2>Нужные доступы — со статусами и заявкой в один клик</h2>
-  <div class="grid2" style="grid-template-columns:1.25fr 1fr">
-    <div class="shotwrap"><img class="shot" src="img/s4-access.png"></div>
-    <div><ul class="clean">
-      <li>Список обязательных доступов команды: Confluence, Jira, Bitbucket, пространство кластера</li>
-      <li>Обычный доступ — заявка через access MCP, результат ACC-… с номером и статусом</li>
-      <li>Повышенные права — только через согласование руководителя</li>
-      <li>Каналы команды и черновик просьбы наставнику добавить в чаты</li>
-      <li>Наставник видит, что запросил его стажёр</li>
-    </ul></div>
-  </div>
-  <div class="foot"><span>Опирается на пункты чек-листа CL-01, CL-04, CL-05</span><span>10</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Наставничество</div>
-  <h2>Учит, а не делает: против делегирования и «копипасты из нейросети»</h2>
+  <div class="kicker">Наставник и руководитель · эффект</div>
+  <h2>Польза buddy в цифрах и отчёт за стажировку</h2>
   <div class="grid2">
-    <div class="shotwrap"><img class="shot" src="img/co-learning.png"></div>
-    <div class="shotwrap"><img class="shot" src="img/co-log.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/05-mentor-team-benefit.png"></div>
+    <div class="shotwrap"><img class="shot" src="img/07-mentor-report.png"></div>
   </div>
-  <div class="foot"><span>Лог: главная строка, причина по базе знаний, секреты скрыты и в ответе, и в черновике наставнику</span><span>11</span></div>
+  <div class="foot"><span>Сколько вопросов закрыл сам buddy, сколько ушло наставнику и попало в базу знаний, сколько минут сэкономлено; отчёт — к экватору и выпускному</span><span>9</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Корпоративные сервисы</div>
-  <h2>Командировки, согласия и шаги HR в отгуле</h2>
-  <div class="grid2" style="grid-template-columns:1.25fr 1fr">
-    <div class="shotwrap"><img class="shot" src="img/ex-trip.png"></div>
-    <div><ul class="clean">
-      <li>Командировка в другой офис: город, даты и цель одним сообщением → проверка в trips MCP → черновик → TRP-… → согласует руководитель</li>
-      <li>Билеты и гостиницу buddy не бронирует и не оплачивает — это служба командировок</li>
-      <li>Согласия: статусы обязательных (подписаны в кадровом портале) и подпись добровольных после «Отправить»; отзыв — через HR BP</li>
-      <li>Отгул: руководитель согласует → HR-администратор оформляет → HR BP получает уведомление; шаги видны в заявке</li>
-    </ul></div>
-  </div>
-  <div class="foot"><span>MCP-серверы trips и consents, те же права и токен подтверждения, что у отгула</span><span>12</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Инженерный онбординг</div>
-  <h2>Файлы в чате и поиск по открытым источникам</h2>
-  <div class="grid2">
-    <div class="shotwrap"><img class="shot" src="img/ex-file.png"></div>
-    <div class="shotwrap"><img class="shot" src="img/ex-web.png"></div>
-  </div>
-  <div class="foot"><span>Лог и конфиг — секреты скрыты до обработки; скриншоты и документы не читаются; общий техвопрос — «Внешний источник», не правила Авито</span><span>13</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Безопасность и данные</div>
-  <h2>Пять рубежей: ошибка модели не превращается в утечку</h2>
-  <div class="grid2" style="grid-template-columns:1.1fr 1fr">
+  <div class="kicker">Безопасность и внедряемость</div>
+  <h2>Пять рубежей защиты и встраивание через промпт + MCP</h2>
+  <div class="grid2" style="grid-template-columns:1fr 1fr;gap:32px">
     <div>
-      <div class="layer"><b class="n">1</b><div><b>Guardrails до LLM</b> — чужие данные, зарплата и медицина, найм, «игнорируй инструкции» → вежливый отказ и к кому идти</div></div>
-      <div class="layer"><b class="n">2</b><div><b>Документы по правам</b> — модель видит только документы своей роли и команды; агент перепроверяет ACL</div></div>
+      <div class="layer"><b class="n">1</b><div><b>Guardrails до LLM</b> — чужие данные, зарплата, медицина, «игнорируй инструкции» → отказ и к кому идти</div></div>
+      <div class="layer"><b class="n">2</b><div><b>Документы по правам</b> — модель видит только документы своей роли и команды</div></div>
       <div class="layer"><b class="n">3</b><div><b>Инструменты по ролям</b> из <code>agent.yaml</code>; пишущих инструментов LLM не видит</div></div>
-      <div class="layer"><b class="n">4</b><div><b>Проверка в сервисе</b> — каждый MCP-вызов с JWT пользователя, только свои записи</div></div>
+      <div class="layer"><b class="n">4</b><div><b>Проверка в сервисе</b> — каждый MCP-вызов с JWT пользователя</div></div>
       <div class="layer"><b class="n">5</b><div><b>Подтверждённая запись</b> — HMAC-токен связывает пользователя и аргументы; повтор не создаёт дубль</div></div>
     </div>
-    <div class="shotwrap"><img class="shot" src="img/guard.png"></div>
-  </div>
-  <div class="foot"><span>Guard-метрики eval — 100%; синтетические данные, без ПДн и денежных операций</span><span>14</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Внедряемость</div>
-  <h2>Встраивается как внутренний инструмент: промпт + MCP</h2>
-  <div class="grid2">
-    <pre class="arch">web (React, SSE)
-   │
-core (Go): REST, SSE-прокси, план, журнал действий,
-   │       JWT, флаги по командам, AI-cron, события → Kafka
-   │
+    <div>
+      <pre class="arch" style="font-size:13px;padding:14px 16px">web (React, SSE)
+core (Go): REST, план, журнал, JWT, флаги, AI-cron
 agent (Python): роутер, сценарии, RAG с ACL, LLM
-   │  MCP · streamable HTTP · JWT пользователя
-   ▼
-absence · access · directory · kb · approvals · checklist · trips · consents</pre>
-    <div><ul class="clean">
-      <li><b>Один конфиг</b> <code>agent.yaml</code>: промпт, модель, MCP-серверы, инструменты по ролям. Новая система = MCP-сервер + строка</li>
-      <li><b>Свои мощности</b>: A-Vibe (<code>AvitoTech/avibe</code>) через vLLM, Ollama на ноутбуке или любой OpenAI-совместимый API — одной переменной</li>
-      <li><b>Без ключа</b>: stub по умолчанию, все сценарии работают</li>
-      <li><b>Пилот по командам</b>: runtime-флаги, стоп-кран за минуту</li>
-      <li><b>Одна команда</b> запуска, healthchecks, CI поднимает стек и гоняет e2e</li>
-    </ul></div>
+  │ MCP · JWT пользователя
+absence · access · directory · kb · approvals
+checklist · trips · consents</pre>
+      <ul class="clean" style="margin-top:14px;gap:8px">
+        <li style="font-size:16px"><b>Один конфиг</b> <code>agent.yaml</code>: новая система = MCP-сервер + строка</li>
+        <li style="font-size:16px"><b>Свои мощности</b>: A-Vibe (<code>AvitoTech/avibe</code>) через vLLM или Ollama, любой OpenAI-совместимый API</li>
+        <li style="font-size:16px"><b>Без ключа</b>: stub по умолчанию; пилот по командам флагами, стоп-кран за минуту</li>
+      </ul>
+    </div>
   </div>
-  <div class="foot"><span>Confluence, Jira, Bitbucket — как в Авито; моки заменяются реальными MCP без изменения агента</span><span>15</span></div>
+  <div class="foot"><span>Синтетические данные, без ПДн и денежных операций; моки Confluence, Jira, Bitbucket заменяются реальными MCP без изменения агента</span><span>10</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Качество</div>
-  <h2>Проверено автотестами, а не только на демо</h2>
-  <div class="grid4" style="margin-bottom:22px">
-    <div class="card"><div class="big">97%</div><p>покрытие строк агента и web; Go-сервисы ≥ 80%, CI падает ниже</p></div>
-    <div class="card"><div class="big">134</div><p>кейса eval качества ответов, 100%; guard-метрики 100%</p></div>
-    <div class="card"><div class="big">27</div><p>e2e-тестов Playwright на запущенном стеке — по спеке на сценарий</p></div>
-    <div class="card"><div class="big">180/180</div><p>сценариев OpenSpec трассируются в тесты (spec-first)</p></div>
+  <div class="kicker">Качество и пилот</div>
+  <h2>Проверено автотестами; эффект измерим в пилоте</h2>
+  <div class="grid4" style="margin-bottom:18px">
+    <div class="card"><div class="big">96%</div><p>покрытие строк агента, web — 93%; Go-сервисы 87–98%, CI падает ниже 80%</p></div>
+    <div class="card"><div class="big">139</div><p>кейсов eval качества ответов, 100%; guard-метрики 100%</p></div>
+    <div class="card"><div class="big">35</div><p>e2e-тестов Playwright на запущенном стеке — по спеке на сценарий</p></div>
+    <div class="card"><div class="big">196/196</div><p>сценариев OpenSpec трассируются в тесты (spec-first)</p></div>
   </div>
-  <table class="t">
-    <tr><th>Что</th><th>Как</th></tr>
-    <tr><td>Юнит и интеграция</td><td>36 Go-пакетов на одноразовом Postgres · 215 тестов агента · 161 тест web (vitest)</td></tr>
-    <tr><td>Роутер намерений</td><td>обученная логистическая регрессия, 95% на отложенном наборе; обучается за секунды</td></tr>
-    <tr><td>Отзывчивость</td><td>локальные действия &lt; 1 с (оптимистичные обновления); LLM и сервисы — SSE, статус ожидания, «Повторить» при сбое</td></tr>
-  </table>
-  <div class="foot"><span>make test · make coverage · make eval · make e2e · make smoke</span><span>16</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Ценность и пилот</div>
-  <h2>Как поймём, что buddy помогает</h2>
-  <div class="grid2">
-    <table class="t">
+  <div class="grid2" style="grid-template-columns:1.15fr 1fr;gap:32px">
+    <table class="t" style="font-size:15px">
       <tr><th>Метрика</th><th>Цель пилота</th></tr>
       <tr><td><b>North Star:</b> время до первой самостоятельной задачи</td><td>−20% к контролю</td></tr>
       <tr><td>Рутинные обращения к наставнику</td><td>−30%, ≥ 8 ч из 40–48 за программу</td></tr>
@@ -313,15 +230,14 @@ absence · access · directory · kb · approvals · checklist · trips · conse
       <tr><td>Действия с первой попытки</td><td>≥ 95%</td></tr>
       <tr><td>Корректные отказы, p95 локальных действий</td><td>100%, &lt; 1 с</td></tr>
     </table>
-    <div><ul class="clean">
-      <li>Включение флагом <b>по командам</b>, чтобы советы не «перетекали» в контроль</li>
-      <li>Difference-in-differences к контролю и прошлой когорте</li>
-      <li>Опросы на 2-й неделе и на экваторе, дневник времени наставника</li>
-      <li>События уже пишутся: core → Kafka → дашборд Grafana</li>
-      <li>Стоп-критерий: любой сбой guard-метрик — флаг выключается для всех</li>
+    <div><ul class="clean" style="gap:9px">
+      <li style="font-size:16px">36 Go-пакетов на одноразовом Postgres · 253 теста агента · 194 теста web · 35 e2e</li>
+      <li style="font-size:16px">Роутер намерений — логистическая регрессия, 95% на отложенном наборе</li>
+      <li style="font-size:16px">Включение флагом по командам, difference-in-differences к контролю</li>
+      <li style="font-size:16px">События уже пишутся: core → Kafka → Grafana; сбой guard-метрик — флаг выключается</li>
     </ul></div>
   </div>
-  <div class="foot"><span>Подробно: docs/product/metrics.md</span><span>17</span></div>
+  <div class="foot"><span>make test · make coverage · make eval · make e2e · отчёт о покрытии — docs/coverage-report · метрики — docs/product/metrics.md</span><span>11</span></div>
 </section>
 
 <section class="s">
@@ -329,10 +245,11 @@ absence · access · directory · kb · approvals · checklist · trips · conse
   <h2>Что дальше после хакатона</h2>
   <div class="grid3">
     <div class="card"><h3>Ближайший релиз</h3><p style="font-size:17px">Реальные MCP к Confluence, Jira, Bitbucket и кадровому порталу вместо моков · A-Vibe на собственных GPU · напоминания в корпоративном мессенджере</p></div>
-    <div class="card"><h3>Для наставника</h3><p style="font-size:17px">Сводка к 1:1 и экватору из плана и вопросов · база знаний пополняется ответами наставников · аналитика «где стажёры застревают»</p></div>
+    <div class="card"><h3>Для наставника</h3><p style="font-size:17px">Сводка вопросов и напоминания — в корпоративный мессенджер · подготовка к 1:1 и экватору из плана и вопросов · аналитика «где стажёры застревают» по командам</p></div>
     <div class="card"><h3>Масштабирование</h3><p style="font-size:17px">Чек-листы всех направлений (backend, frontend, аналитика, ML) · точка входа для выпускников и новых сотрудников · раскатка по когортам по результатам пилота</p></div>
   </div>
-  <div class="card" style="margin-top:20px"><h3>Проверить самим</h3><p style="font-size:17px"><code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> → http://localhost:5173 · учётки <code>intern.anna</code>, <code>mentor.oleg</code>, <code>lead.maria</code>, пароль <code>demo</code> · порядок проверки — в README</p></div>
-  <div class="foot"><span>github.com/Eliz-Kory/AI-Buddy</span><span>18</span></div>
+  <div class="card" style="margin-top:20px"><h3>Проверить самим</h3><p style="font-size:17px"><code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> → http://localhost:5173 · учётки <code>intern.anna</code>, <code>intern.ivan</code>, <code>mentor.oleg</code>, <code>lead.maria</code>, <code>hradmin.olga</code>, пароль <code>demo</code> · порядок проверки — в README</p></div>
+  <div class="foot"><span>https://github.com/Eliz-Kory/AI-Buddy · видео-демо: presentation/demo.mp4</span><span>12</span></div>
 </section>
+
 </body></html>

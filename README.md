@@ -8,7 +8,7 @@
 > «Тестовая инструкция прототипа» на каждом ответе), а не регламенты Авито. Зарплаты, выплаты и медицинские данные
 > buddy не обсуждает и направляет к HR BP.
 
-**Видео** — [раздел ниже](#видео) · **Галерея экранов** — [по ролям](#галерея) · **Презентация:** [presentation/AI-buddy.pdf](presentation/AI-buddy.pdf)
+**Стенд:** адрес появится здесь после запуска сервера ([как поднять](docs/deploy.md)) · **Видео** — [раздел ниже](#видео) · **Галерея экранов** — [по ролям](#галерея) · **Презентация:** [presentation/AI-buddy.pdf](presentation/AI-buddy.pdf)
 
 ## Быстрый старт — одна команда
 
@@ -85,7 +85,7 @@ docker compose -f deploy/docker-compose.yml --profile core up -d --build --wait
 <!-- VIDEO: ссылка на запись демо команды — вставить сюда -->
 **Демо команды:** ссылка появится здесь.
 
-Короткое автоматическое демо с подписями: [presentation/demo.mp4](presentation/demo.mp4) (как пересобрать — `presentation/README.md`).
+Видео-демо с озвучкой и субтитрами (≈2 мин): [presentation/demo.mp4](presentation/demo.mp4) — вход, план, вопрос с источником, отгул через календарь, доступы, вопрос без ответа → список наставника → ответ для всех, польза buddy и отчёт, согласование руководителем и HR. Как пересобрать — `presentation/README.md`.
 
 ## Порядок проверки (10 минут)
 
@@ -175,10 +175,10 @@ web (React, SSE) ──► core (Go: REST, SSE-прокси, план, журн�
 | Команда | Что | Результат |
 |---|---|---|
 | `make test` | Go (core, mocks, platform) + агент (pytest) | 36 Go-пакетов, 253 теста агента |
-| `make coverage` | покрытие по сервисам, падает < 80% | core 89.3%, mocks 88.5%, platform 98%, agent 97%, web 96.5% — снимок отчётов в [docs/coverage-report](docs/coverage-report/README.md) |
+| `make coverage` | покрытие по сервисам, падает < 80% | core 87.5%, mocks 87.1%, platform 98.1%, agent 96%, web 93.4% — снимок отчётов в [docs/coverage-report](docs/coverage-report/README.md) |
 | `cd web && npm run coverage` | vitest | 194 теста |
 | `make eval` | 139 кейсов качества ответов, guard-метрики | 100%, guard 100% |
-| `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 195/195 |
+| `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 196/196 |
 | `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 35 тестов, по спеке на сценарий |
 | `make smoke` | S3, S4, командировка, согласие, шаги HR, вложение через API core | SMOKE OK |
 | `make lint` | golangci/gofmt, ruff, eslint, `openspec validate --all` | |

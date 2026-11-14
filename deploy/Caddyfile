@@ -1,0 +1,20 @@
+# Стенд: Caddy сам получает сертификат Let's Encrypt для {$DOMAIN} (например 1-2-3-4.sslip.io) и продлевает его.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# API ядра, включая поток ответа чата (SSE): Caddy пересылает его без буферизации
+	handle /api/* {
+		reverse_proxy core:8080
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
