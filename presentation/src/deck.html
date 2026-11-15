@@ -55,6 +55,11 @@ table.t.compact th { font-size:12px; }
 .short { flex:none; }
 .short .shotwrap img { max-height:300px; }
 table.t.compact.big9 td { font-size:15px; padding:9px 8px; }
+.qrs { display:flex; gap:14px; }
+.qrs figure { margin:0; width:150px; background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 10px 8px; text-align:center; }
+.qrs img { width:96px; height:96px; display:block; margin:0 auto 6px; }
+.qrs figcaption { font-size:11px; color:var(--muted); line-height:1.3; overflow-wrap:anywhere; }
+.qrs figcaption b { display:block; font-size:13px; color:var(--ink); }
 </style></head><body>
 
 <section class="s title" style="justify-content:flex-start;padding-top:44px">
@@ -63,14 +68,15 @@ table.t.compact.big9 td { font-size:15px; padding:9px 8px; }
       <svg class="mascot" width="64" height="64" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><rect width="140" height="140" rx="32" fill="#eef6ff"></rect><path d="M22 34h62a12 12 0 0 1 12 12v30a12 12 0 0 1-12 12H50l-14 13V88H22a12 12 0 0 1-12-12V46a12 12 0 0 1 12-12z" fill="#00aaff"></path><circle cx="42" cy="58" r="8" fill="#fff"></circle><circle cx="43" cy="60" r="4" fill="#1a1a1a"></circle><path d="M59 60q7-7 14 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><path d="M45 72q9 7 18 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><circle cx="31" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><circle cx="77" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><path d="M76 72h44a10 10 0 0 1 10 10v20a10 10 0 0 1-10 10h-6v10l-11-10H76a10 10 0 0 1-10-10V82a10 10 0 0 1 10-10z" fill="#97cf26"></path><circle cx="90" cy="90" r="5" fill="#fff"></circle><circle cx="91" cy="91" r="2.5" fill="#1a1a1a"></circle><circle cx="108" cy="90" r="5" fill="#fff"></circle><circle cx="109" cy="91" r="2.5" fill="#1a1a1a"></circle><path d="M93 100q6 5 12 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"></path><path d="M98 72v-8" stroke="#4a8f1a" stroke-width="3" stroke-linecap="round"></path><path d="M98 66q-10-2-12-10 10 0 12 10zM98 64q8-4 12-12-10 2-12 12z" fill="#4a8f1a"></path></svg>
       <div class="kicker">Hack&amp;Change 2026 · кейс Авито «AI-buddy»</div>
       <h1 style="font-size:36px;margin-bottom:12px">AI-buddy — ИИ-наставник, который ведёт стажёра по адаптации и учит, а не делает за него</h1>
-      <p class="muted" style="font-size:16px;margin:0 0 14px">План из чек-листа Авито, ответы со ссылкой на источник, отгул и доступы через сервисы компании —
+      <p class="muted" style="font-size:16px;margin:0 0 10px">План из чек-листа Авито, ответы со ссылкой на источник, отгул и доступы через сервисы компании —
       а наставник отвечает на вопросы раз в день, и каждый ответ пополняет базу знаний.</p>
-      <dl class="links">
-        <dt>Стенд</dt><dd>https://186-246-6-113.sslip.io</dd>
-        <dt>Репозиторий</dt><dd>https://github.com/Eliz-Kory/AI-Buddy</dd>
-        <dt>Видео-демо</dt><dd>presentation/demo.mp4 в репозитории (2,5 мин)</dd>
-        <dt>Запуск у себя</dt><dd style="font-weight:400"><code>make up</code> (Docker) → localhost:5173, ключ LLM не нужен</dd>
-      </dl>
+      <p style="font-size:15px;margin:0 0 14px"><b>Команда Halcyon:</b> Власова Маргарита, Кожакина Анна, Корочкина Елизавета</p>
+      <div class="qrs">
+        <figure><img src="img/qr-stand.svg" alt=""><figcaption><b>Стенд</b>186-246-6-113.sslip.io</figcaption></figure>
+        <figure><img src="img/qr-repo.svg" alt=""><figcaption><b>Репозиторий</b>github.com/Eliz-Kory/AI-Buddy</figcaption></figure>
+        <figure><img src="img/qr-video.svg" alt=""><figcaption><b>Видео-демо</b>2,5 мин · presentation/demo.mp4</figcaption></figure>
+      </div>
+      <p style="font-size:13px;margin:10px 0 0" class="muted">Запуск у себя: <code>make up</code> (нужен только Docker) → localhost:5173, ключ LLM не нужен</p>
     </div>
     <div class="card" style="background:rgba(255,255,255,.88);padding:20px 22px">
       <h3 style="margin:0 0 4px;font-size:19px">Порядок проверки · 5 минут</h3>
