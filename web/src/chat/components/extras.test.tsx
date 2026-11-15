@@ -121,6 +121,52 @@ describe('HR steps of a day off (Q&A 10.11)', () => {
   })
 })
 
+describe('my requests panel (Рита 15.11)', () => {
+  it('a request opens on click and shows the rejection reason with its author', async () => {
+    const user = userEvent.setup()
+    render(
+      <ActionsPanel
+        query={{
+          data: [
+            {
+              id: 'a9',
+              kind: 'absence_request',
+              external_id: 'ABS-000009',
+              status: 'rejected',
+              summary: 'Отгул 08.12.2026, согласующий — Мария Лебедева',
+              approver_display_name: 'Мария Лебедева',
+              created_at: '2026-11-15T09:00:00Z',
+              updated_at: '2026-11-15T10:00:00Z',
+              decision_comment: 'В эти дни релиз, перенеси, пожалуйста',
+              decided_by: 'Мария Лебедева',
+            },
+            { id: 'a10', kind: 'access_request', status: 'granted', summary: 'Доступ: Jira — выдан', created_at: '2026-11-15T09:00:00Z' },
+          ],
+          isPending: false,
+          error: null,
+          refetch: vi.fn(),
+        }}
+      />,
+    )
+    const toggle = screen.getByRole('button', { name: /ABS-000009/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByText('Есть причина отказа — открыть')).toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Причина отказа' })).not.toBeInTheDocument()
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const note = screen.getByRole('note', { name: 'Причина отказа' })
+    expect(note).toHaveTextContent('Причина отказа · Мария Лебедева')
+    expect(note).toHaveTextContent('В эти дни релиз, перенеси, пожалуйста')
+    expect(screen.getByText(/Заявка убрана из плана/)).toBeInTheDocument()
+    expect(screen.getByText('Согласующий')).toBeInTheDocument()
+    // заявка без внешнего номера и комментария тоже раскрывается, но без блока причины
+    await user.click(screen.getByRole('button', { name: /Доступ: Jira/ }))
+    expect(screen.getAllByRole('note')).toHaveLength(1)
+    await user.click(toggle)
+    expect(screen.queryByRole('note', { name: 'Причина отказа' })).not.toBeInTheDocument()
+  })
+})
+
 describe('external sources (WS-01)', () => {
   it('external chips are links with their own badge, never the KB badge', () => {
     render(

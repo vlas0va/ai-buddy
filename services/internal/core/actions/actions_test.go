@@ -239,15 +239,31 @@ func TestApplyDecision_S3_AbsenceRejectedAndApproved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "rejected", byMaria)
-	if err != nil || !changed || got.Status != StatusRejected {
+	// отказ с комментарием: заявка уходит из плана, причина видна стажёру в заявке и в уведомлении
+	rejecting := byMaria
+	rejecting.Comment = "  В эти дни релиз, перенеси, пожалуйста  "
+	got, changed, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "rejected", rejecting)
+	if err != nil || !changed || got.Status != StatusRejected || got.TaskID != nil {
 		t.Fatalf("%+v %v %v", got, changed, err)
 	}
-	if task := loadTask(t, pool, *a.TaskID); task.status != "not_started" {
-		t.Fatalf("task %+v", task)
+	if got.DecisionComment == nil || *got.DecisionComment != "В эти дни релиз, перенеси, пожалуйста" || got.DecidedBy == nil || *got.DecidedBy != "Мария Лебедева" {
+		t.Fatalf("comment %v by %v", got.DecisionComment, got.DecidedBy)
 	}
-	lead, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byMaria)
-	if err != nil || lead.Status != StatusPendingHR {
+	if n := count(t, pool, `SELECT count(*) FROM core.plan_tasks WHERE id = $1`, *a.TaskID); n != 0 {
+		t.Fatalf("rejected task stays in the plan: %d", n)
+	}
+	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title = 'Отгул отклонён'
+		AND body LIKE '%Комментарий: В эти дни релиз, перенеси, пожалуйста'`); n != 1 {
+		t.Fatalf("rejection notification with comment = %d", n)
+	}
+	// согласование другой заявки: задача ждёт HR-администратора, затем выполнена; без комментария его нет
+	a, err = svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000012", Kind: KindAbsence,
+		Result: absenceResult("ABS-000111", "2026-11-20", "2026-11-20", "Мария Лебедева")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lead, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000111", "approved", byMaria)
+	if err != nil || lead.Status != StatusPendingHR || lead.DecisionComment != nil {
 		t.Fatalf("%+v %v", lead, err)
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.status != "waiting_approval" {
@@ -256,7 +272,7 @@ func TestApplyDecision_S3_AbsenceRejectedAndApproved(t *testing.T) {
 	if n := count(t, pool, `SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND title = 'Отгул: руководитель согласовал, ждёт HR-администратора'`); n != 1 {
 		t.Fatalf("lead stage notifications = %d", n)
 	}
-	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000110", "approved", byOlga); err != nil {
+	if _, _, err := svc.ApplyDecision(ctx, pool, KindAbsence, "ABS-000111", "approved", byOlga); err != nil {
 		t.Fatal(err)
 	}
 	if task := loadTask(t, pool, *a.TaskID); task.status != "done" {
@@ -657,5 +673,30 @@ func TestSave_Feedback1213_CancelAndReplace(t *testing.T) {
 	if _, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000404", Kind: KindCancel,
 		Result: json.RawMessage(`{}`)}); err == nil {
 		t.Fatal("result without id")
+	}
+}
+
+func TestApplyDecision_S4_RejectedChecklistTaskReopens(t *testing.T) {
+	svc, pool := newSvc(t)
+	ctx := context.Background()
+	maria := "lead.maria"
+	pending, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000013", Kind: KindAccess,
+		Result: accessResult("ACC-000051", "space-delivery-incidents", "Закрытое пространство", "pending_approval", "CL-05", &maria)})
+	if err != nil || pending.TaskID == nil {
+		t.Fatalf("%+v %v", pending, err)
+	}
+	got, changed, err := svc.ApplyDecision(ctx, pool, KindAccess, "ACC-000051", "rejected", byMaria)
+	if err != nil || !changed || got.Status != StatusRejected || got.DecisionComment != nil {
+		t.Fatalf("%+v %v %v", got, changed, err)
+	}
+	// пункт чек-листа остаётся в плане, снова не начат и свободен для новой заявки
+	if task := loadTask(t, pool, *pending.TaskID); task.status != "not_started" || task.linked != nil || task.source != "checklist" {
+		t.Fatalf("task %+v", task)
+	}
+	// сразу отклонённая заявка в план не попадает
+	instant, err := svc.Save(ctx, pool, SaveInput{Claims: anna, ProposalID: "aaaaaaaa-0000-4000-8000-000000000014", Kind: KindAccess,
+		Result: accessResult("ACC-000052", "jira", "Jira", "rejected", "", nil)})
+	if err != nil || instant.TaskID != nil {
+		t.Fatalf("%+v %v", instant, err)
 	}
 }

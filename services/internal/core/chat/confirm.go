@@ -383,7 +383,7 @@ func (h *Handler) saveDecision(ctx context.Context, at attempt, _ toolResult, me
 	var out *actions.Action
 	err = h.inProposalTx(ctx, at.p.id, func(ctx context.Context, tx pgx.Tx, sessionID string) (string, error) {
 		a, changed, err := h.actions.ApplyDecision(ctx, tx, decided.Kind, decided.RefID, decided.Status,
-			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub, Stage: decided.Stage})
+			actions.Scope{RequesterID: decided.RequesterID, ApproverID: at.c.Sub, Stage: decided.Stage, Comment: decided.Comment})
 		switch {
 		case errors.Is(err, actions.ErrNotFound):
 		case err != nil:

@@ -163,6 +163,9 @@ export const actionSchema = z.object({
   task_id: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string().optional(),
+  /** комментарий согласующего к решению (причина отказа) и его автор */
+  decision_comment: z.string().nullable().optional(),
+  decided_by: z.string().nullable().optional(),
 })
 export const actionsSchema = z.array(actionSchema)
 

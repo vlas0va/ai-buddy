@@ -18,7 +18,7 @@ The agent SHALL show a lead the requests waiting for their decision and SHALL pr
 
 #### Scenario: TR-03 Reject with comment
 - **WHEN** the lead rejects with «потому что …»
-- **THEN** decision rejected with the comment, the intern sees «Отклонено»
+- **THEN** decision rejected with the comment, the intern sees «Отклонено» and, after opening the request in «Мои заявки», the comment with its author; the request leaves the intern's plan (a checklist task returns to not started)
 
 #### Scenario: TR-04 Unknown id
 - **WHEN** the id is not pending for the lead

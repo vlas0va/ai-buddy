@@ -208,6 +208,11 @@ func TestApprovals_S3_LeadQueueAndDecision_R66(t *testing.T) {
 		WHERE a.external_id = $1 AND a.status = 'approved' AND t.status = 'done'`, absID) != 1 {
 		t.Fatal("action and task not updated")
 	}
+	// комментарий руководителя доходит до заявки стажёра и не стирается решением HR-администратора без комментария
+	if e.count(`SELECT count(*) FROM core.actions WHERE external_id = $1 AND payload->>'decision_comment' = 'Хорошего отдыха'
+		AND payload->>'decided_by' = 'Мария Лебедева'`, absID) != 1 {
+		t.Fatal("decision comment not stored on the action")
+	}
 	if e.count(`SELECT count(*) FROM core.notifications WHERE user_id = 'intern.anna' AND kind = 'status_change' AND title = 'Отгул согласован'`) != 1 {
 		t.Fatal("intern not notified")
 	}
