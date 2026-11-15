@@ -79,6 +79,9 @@ type Action struct {
 	TaskID              *string `json:"task_id"`
 	CreatedAt           string  `json:"created_at"`
 	UpdatedAt           string  `json:"updated_at"`
+	// DecisionComment — комментарий согласующего к решению (например, причина отказа), DecidedBy — кто решил.
+	DecisionComment *string `json:"decision_comment"`
+	DecidedBy       *string `json:"decided_by"`
 
 	UserID     string `json:"-"`
 	ProposalID string `json:"-"`
@@ -143,12 +146,13 @@ const actionCols = `a.id::text, a.user_id, a.kind, a.external_id, a.status, a.su
 	a.payload->>'approver_display_name', a.task_id::text,
 	to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
 	to_char(a.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-	a.idempotency_key::text, COALESCE(a.payload->>'message_id', '')`
+	a.idempotency_key::text, COALESCE(a.payload->>'message_id', ''),
+	a.payload->>'decision_comment', a.payload->>'decided_by'`
 
 func scanAction(row pgx.Row) (Action, error) {
 	var a Action
 	err := row.Scan(&a.ID, &a.UserID, &a.Kind, &a.ExternalID, &a.Status, &a.Summary, &a.ApproverDisplayName, &a.TaskID,
-		&a.CreatedAt, &a.UpdatedAt, &a.ProposalID, &a.MessageID)
+		&a.CreatedAt, &a.UpdatedAt, &a.ProposalID, &a.MessageID, &a.DecisionComment, &a.DecidedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -211,7 +215,7 @@ func (s *Service) Save(ctx context.Context, q DBTX, in SaveInput) (Action, error
 		return Action{}, fmt.Errorf("insert action: %w", err)
 	}
 	var taskID *string
-	if !d.noTask {
+	if !d.noTask && d.status != StatusRejected { // сразу отклонённая заявка — не шаг плана
 		taskID, err = s.linkTask(ctx, q, in.Claims.Sub, id, d)
 		if err != nil {
 			return Action{}, err
@@ -447,12 +451,15 @@ type Scope struct {
 	// Stage — этап согласования заявки на отсутствие: "" или "lead", затем "hr_admin". На этапе HR-администратора
 	// решает не согласующий из заявки: сервис согласований уже проверил, что пункт его.
 	Stage string
+	// Comment — комментарий решающего из результата decide (причина отказа); стажёр видит его в «Моих заявках».
+	Comment string
 }
 
 // ApplyDecision применяет решение согласующего ("approved" или "rejected", как вернул approvals.decide) к действию вида
 // kind с externalID (ABS-…/ACC-…), владелец которого scope.RequesterID, а согласующий в заявке — scope.ApproverID:
-// статус действия approved/granted/rejected, связанная задача done или not_started (никогда не задача human_only) и
-// уведомление status_change владельцу, всё через q. Сообщает, изменилось ли что-то (повторное решение ничего не
+// статус действия approved/granted/rejected и комментарий решающего, связанная задача done (при отказе задача,
+// созданная по заявке, удаляется из плана, а задача чек-листа возвращается в not_started; задача human_only не
+// меняется) и уведомление status_change владельцу с комментарием, всё через q. Сообщает, изменилось ли что-то (повторное решение ничего не
 // делает), и возвращает ErrNotFound, если в ядре нет такого действия; оба поля scope обязательны.
 func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, decision string, scope Scope) (Action, bool, error) {
 	status, err := decisionStatus(kind, decision)
@@ -479,19 +486,30 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	if a.Status == status || (status == StatusPendingHR && a.Status == StatusApproved) {
 		return a, false, nil // повторённое решение руководителя никогда не отменяет согласование HR-администратора
 	}
-	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = $2, updated_at = now() WHERE id = $1`, a.ID, status); err != nil {
+	comment := strings.TrimSpace(scope.Comment)
+	// Комментарий показывается вместе с автором: новый комментарий заменяет прежний, отказ без комментария убирает
+	// прежний (например, «Хорошего отдыха» руководителя), решение без комментария его сохраняет.
+	if _, err := q.Exec(ctx, `UPDATE core.actions SET status = $2, updated_at = now(),
+		payload = CASE
+			WHEN $3 <> '' THEN payload || jsonb_build_object('decision_comment', $3::text,
+				'decided_by', (SELECT display_name FROM core.users WHERE id = $4))
+			WHEN $2 = 'rejected' THEN payload - 'decision_comment' - 'decided_by'
+			ELSE payload END
+		WHERE id = $1`, a.ID, status, comment, scope.ApproverID); err != nil {
 		return Action{}, false, fmt.Errorf("update action status: %w", err)
 	}
 	if a.TaskID != nil {
-		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now()
-			WHERE id = $1 AND linked_action_id = $3 AND NOT human_only`,
-			*a.TaskID, taskStatus(status), a.ID); err != nil {
-			return Action{}, false, fmt.Errorf("update linked task: %w", err)
+		if err := s.applyToTask(ctx, q, a, status); err != nil {
+			return Action{}, false, err
 		}
 	}
 	if s.notifier != nil {
+		body := a.Summary
+		if comment != "" {
+			body += ". Комментарий: " + comment
+		}
 		if err := s.notifier.Create(ctx, q, notify.Notification{UserID: a.UserID, Kind: notify.KindStatusChange,
-			Title: decisionTitle(kind, status, a.Summary), Body: a.Summary, DedupeKey: "action:" + a.ID + ":" + status}); err != nil {
+			Title: decisionTitle(kind, status, a.Summary), Body: body, DedupeKey: "action:" + a.ID + ":" + status}); err != nil {
 			return Action{}, false, fmt.Errorf("notify owner: %w", err)
 		}
 		if kind == KindAbsence && status == StatusApproved {
@@ -502,6 +520,43 @@ func (s *Service) ApplyDecision(ctx context.Context, q DBTX, kind, externalID, d
 	}
 	a, err = scanAction(q.QueryRow(ctx, `SELECT `+actionCols+` FROM core.actions a WHERE a.id = $1`, a.ID))
 	return a, err == nil, err
+}
+
+// applyToTask отражает решение в задаче плана действия a. Отклонённая заявка уходит из плана: задача, созданная по
+// заявке (source = action), удаляется, а задача чек-листа (например, доступ по пункту CL-04) возвращается в not_started
+// и отвязывается — её можно закрыть другой заявкой. Задачи human_only решение не трогает.
+func (s *Service) applyToTask(ctx context.Context, q DBTX, a Action, status string) error {
+	if status != StatusRejected {
+		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, updated_at = now()
+			WHERE id = $1 AND linked_action_id = $3 AND NOT human_only`,
+			*a.TaskID, taskStatus(status), a.ID); err != nil {
+			return fmt.Errorf("update linked task: %w", err)
+		}
+		return nil
+	}
+	var source string
+	err := q.QueryRow(ctx, `SELECT source FROM core.plan_tasks WHERE id = $1 AND linked_action_id = $2 AND NOT human_only`,
+		*a.TaskID, a.ID).Scan(&source)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load linked task: %w", err)
+	}
+	if source != "action" {
+		if _, err := q.Exec(ctx, `UPDATE core.plan_tasks SET status = $2, linked_action_id = NULL, updated_at = now() WHERE id = $1`,
+			*a.TaskID, taskStatus(status)); err != nil {
+			return fmt.Errorf("reopen checklist task: %w", err)
+		}
+		return nil
+	}
+	if _, err := q.Exec(ctx, `UPDATE core.actions SET task_id = NULL WHERE id = $1`, a.ID); err != nil {
+		return fmt.Errorf("unlink rejected task: %w", err)
+	}
+	if _, err := q.Exec(ctx, `DELETE FROM core.plan_tasks WHERE id = $1 AND linked_action_id = $2`, *a.TaskID, a.ID); err != nil {
+		return fmt.Errorf("remove rejected task: %w", err)
+	}
+	return nil
 }
 
 // notifyHRBP сообщает HR BP, что HR-администратор оформил согласованный отгул (ответы организаторов 10.11: в отгуле

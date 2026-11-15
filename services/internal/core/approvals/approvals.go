@@ -177,7 +177,7 @@ func (h *Handler) apply(ctx context.Context, c authn.Claims, res mcpclient.Appro
 	defer func() { _ = tx.Rollback(ctx) }()
 	// Только действие заявителя, в заявке которого согласующим указан решающий руководитель (R71).
 	a, changed, err := h.actions.ApplyDecision(ctx, tx, res.Kind, res.RefID, res.Status,
-		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub, Stage: res.Stage})
+		actions.Scope{RequesterID: res.RequesterID, ApproverID: c.Sub, Stage: res.Stage, Comment: res.Comment})
 	switch {
 	case errors.Is(err, actions.ErrNotFound):
 		h.log.Info("decision for a request without a core action", "approval", res.ID, "ref", res.RefID)

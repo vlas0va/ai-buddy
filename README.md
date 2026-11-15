@@ -176,10 +176,10 @@ web (React, SSE) ──► core (Go: REST, SSE-прокси, план, журн�
 |---|---|---|
 | `make test` | Go (core, mocks, platform) + агент (pytest) | 36 Go-пакетов, 253 теста агента |
 | `make coverage` | покрытие по сервисам, падает < 80% | core 87.5%, mocks 87.1%, platform 98.1%, agent 96%, web 93.4% — снимок отчётов в [docs/coverage-report](docs/coverage-report/README.md) |
-| `cd web && npm run coverage` | vitest | 194 теста |
+| `cd web && npm run coverage` | vitest | 195 тестов |
 | `make eval` | 139 кейсов качества ответов, guard-метрики | 100%, guard 100% |
 | `python services/agent/tools/spec_trace.py` | каждый сценарий OpenSpec покрыт тестом | 196/196 |
-| `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 35 тестов, по спеке на сценарий |
+| `make e2e` | Playwright на стеке со stub: `LLM_DEFAULT_PROVIDER=stub make up`, затем `make e2e` | 36 тестов, по спеке на сценарий |
 | `make smoke` | S3, S4, командировка, согласие, шаги HR, вложение через API core | SMOKE OK |
 | `make lint` | golangci/gofmt, ruff, eslint, `openspec validate --all` | |
 

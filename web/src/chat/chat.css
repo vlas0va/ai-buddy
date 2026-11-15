@@ -85,6 +85,18 @@
 .request-head strong { font-size: 15px; }
 .request-head { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); }
 .request-card p { margin: 0; }
+.request-toggle { all: unset; box-sizing: border-box; display: grid; gap: 6px; width: 100%; cursor: pointer; border-radius: 10px; }
+.request-toggle:focus-visible { box-shadow: var(--focus-ring); }
+.request-card:hover { border-color: var(--color-accent-soft); }
+.request-more { font-size: 13px; color: var(--color-accent-ink); font-weight: 600; }
+.request-details { display: grid; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--color-border, #e6e8ec); }
+.request-details dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+.request-details dt { color: var(--color-text-muted, #5b6270); }
+.request-details dd { margin: 0; }
+.request-comment { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--color-accent-soft); }
+.request-comment.is-rejected { background: var(--status-overdue-bg, #fdeceb); }
+.request-comment-title { font-size: 12px; font-weight: 700; color: var(--color-text-muted, #5b6270); }
+.request-comment p { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-backdrop { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.4); display: flex; justify-content: flex-end; z-index: 20; }
 .chat-drawer { width: min(360px, 100%); height: 100%; overflow-y: auto; padding: var(--space-4); background: var(--color-bg); display: grid; align-content: start; gap: var(--space-3); }
 .chat-drawer-head { display: flex; justify-content: space-between; align-items: center; }
