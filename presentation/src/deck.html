@@ -9,7 +9,7 @@ html, body { margin:0; padding:0; font-family: Inter, "Segoe UI", system-ui, -ap
 .s:last-child { page-break-after:auto; }
 .kicker { font-size:15px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); margin-bottom:10px; }
 h1 { font-size:46px; line-height:1.1; margin:0 0 16px; letter-spacing:-.02em; }
-h2 { font-size:34px; line-height:1.15; margin:0 0 22px; letter-spacing:-.015em; }
+h2 { font-size:30px; line-height:1.18; margin:0 0 18px; letter-spacing:-.015em; max-width:1120px; }
 p, li { font-size:19px; line-height:1.45; }
 .muted { color:var(--muted); }
 .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:36px; flex:1; min-height:0; align-items:start; }
@@ -43,213 +43,247 @@ table.t th { color:var(--muted); font-weight:600; font-size:14px; text-transform
 .layer div { font-size:17px; line-height:1.4; }
 code { font-family: ui-monospace, Menlo, Consolas, monospace; background:#f1f3f6; padding:1px 6px; border-radius:5px; font-size:.9em; }
 .arch { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:15px; line-height:1.5; background:#f7f8fa; border:1px solid var(--line); border-radius:12px; padding:18px 20px; white-space:pre; margin:0; }
+.links { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:16px; margin:0; }
+.links dt { color:var(--muted); font-weight:600; }
+.links dd { margin:0; font-weight:600; }
+ol.check { margin:0; padding-left:22px; display:grid; gap:7px; }
+ol.check li { font-size:15px; line-height:1.4; }
+table.t.compact td, table.t.compact th { padding:7px 8px; font-size:14px; }
+table.t.compact th { font-size:12px; }
+.pill { display:inline-block; padding:2px 9px; border-radius:999px; background:var(--soft); color:var(--accent); font-size:13px; font-weight:700; margin:0 4px 4px 0; }
+.note { font-size:14px; color:var(--muted); margin:10px 0 0; }
+.short { flex:none; }
+.short .shotwrap img { max-height:300px; }
+table.t.compact.big9 td { font-size:15px; padding:9px 8px; }
 </style></head><body>
 
-<section class="s title">
-  <svg class="mascot" width="104" height="104" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><rect width="140" height="140" rx="32" fill="#eef6ff"></rect><path d="M22 34h62a12 12 0 0 1 12 12v30a12 12 0 0 1-12 12H50l-14 13V88H22a12 12 0 0 1-12-12V46a12 12 0 0 1 12-12z" fill="#00aaff"></path><circle cx="42" cy="58" r="8" fill="#fff"></circle><circle cx="43" cy="60" r="4" fill="#1a1a1a"></circle><path d="M59 60q7-7 14 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><path d="M45 72q9 7 18 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><circle cx="31" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><circle cx="77" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><path d="M76 72h44a10 10 0 0 1 10 10v20a10 10 0 0 1-10 10h-6v10l-11-10H76a10 10 0 0 1-10-10V82a10 10 0 0 1 10-10z" fill="#97cf26"></path><circle cx="90" cy="90" r="5" fill="#fff"></circle><circle cx="91" cy="91" r="2.5" fill="#1a1a1a"></circle><circle cx="108" cy="90" r="5" fill="#fff"></circle><circle cx="109" cy="91" r="2.5" fill="#1a1a1a"></circle><path d="M93 100q6 5 12 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"></path><path d="M98 72v-8" stroke="#4a8f1a" stroke-width="3" stroke-linecap="round"></path><path d="M98 66q-10-2-12-10 10 0 12 10zM98 64q8-4 12-12-10 2-12 12z" fill="#4a8f1a"></path></svg>
-  <div class="kicker">Hack&amp;Change 2026 · кейс Авито Старт</div>
-  <h1 style="font-size:64px">AI-buddy — ИИ-наставник,<br>который учит, а не делает за стажёра</h1>
-  <p class="muted" style="font-size:22px;max-width:900px">Ведёт по плану адаптации, отвечает на вопросы со ссылкой на источник, оформляет отгул и доступы
-  через сервисы компании — и снимает с наставника рутину, не заменяя его.</p>
-  <p style="font-size:18px;margin-top:28px">Репозиторий: <b>https://github.com/Eliz-Kory/AI-Buddy</b> · Видео-демо: <b>presentation/demo.mp4</b> в репозитории<br>
-  Запуск: <code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> — без ключа LLM</p>
-  <div class="foot"><span>Все данные синтетические; документы — тестовые инструкции прототипа, а не регламенты Авито</span><span>1</span></div>
+<section class="s title" style="justify-content:flex-start;padding-top:44px">
+  <div style="display:grid;grid-template-columns:1.05fr 1fr;gap:40px;align-items:start">
+    <div>
+      <svg class="mascot" width="64" height="64" viewBox="0 0 140 140" aria-hidden="true" focusable="false"><rect width="140" height="140" rx="32" fill="#eef6ff"></rect><path d="M22 34h62a12 12 0 0 1 12 12v30a12 12 0 0 1-12 12H50l-14 13V88H22a12 12 0 0 1-12-12V46a12 12 0 0 1 12-12z" fill="#00aaff"></path><circle cx="42" cy="58" r="8" fill="#fff"></circle><circle cx="43" cy="60" r="4" fill="#1a1a1a"></circle><path d="M59 60q7-7 14 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><path d="M45 72q9 7 18 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"></path><circle cx="31" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><circle cx="77" cy="70" r="4" fill="#ff6163" opacity=".5"></circle><path d="M76 72h44a10 10 0 0 1 10 10v20a10 10 0 0 1-10 10h-6v10l-11-10H76a10 10 0 0 1-10-10V82a10 10 0 0 1 10-10z" fill="#97cf26"></path><circle cx="90" cy="90" r="5" fill="#fff"></circle><circle cx="91" cy="91" r="2.5" fill="#1a1a1a"></circle><circle cx="108" cy="90" r="5" fill="#fff"></circle><circle cx="109" cy="91" r="2.5" fill="#1a1a1a"></circle><path d="M93 100q6 5 12 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"></path><path d="M98 72v-8" stroke="#4a8f1a" stroke-width="3" stroke-linecap="round"></path><path d="M98 66q-10-2-12-10 10 0 12 10zM98 64q8-4 12-12-10 2-12 12z" fill="#4a8f1a"></path></svg>
+      <div class="kicker">Hack&amp;Change 2026 · кейс Авито «AI-buddy»</div>
+      <h1 style="font-size:36px;margin-bottom:12px">AI-buddy — ИИ-наставник, который ведёт стажёра по адаптации и учит, а не делает за него</h1>
+      <p class="muted" style="font-size:16px;margin:0 0 14px">План из чек-листа Авито, ответы со ссылкой на источник, отгул и доступы через сервисы компании —
+      а наставник отвечает на вопросы раз в день, и каждый ответ пополняет базу знаний.</p>
+      <dl class="links">
+        <dt>Стенд</dt><dd>https://186-246-6-113.sslip.io</dd>
+        <dt>Репозиторий</dt><dd>https://github.com/Eliz-Kory/AI-Buddy</dd>
+        <dt>Видео-демо</dt><dd>presentation/demo.mp4 в репозитории (2,5 мин)</dd>
+        <dt>Запуск у себя</dt><dd style="font-weight:400"><code>make up</code> (Docker) → localhost:5173, ключ LLM не нужен</dd>
+      </dl>
+    </div>
+    <div class="card" style="background:rgba(255,255,255,.88);padding:20px 22px">
+      <h3 style="margin:0 0 4px;font-size:19px">Порядок проверки · 5 минут</h3>
+      <p style="font-size:14px;margin:0 0 10px" class="muted">Пароль у всех учёток — <code>demo</code>. Полный порядок (10 мин) — в README.</p>
+      <ol class="check">
+        <li><b>intern.anna</b> → чат «Как оформить отгул?» — порядок и источник; выбрать дату в календаре → «Отправить» → заявка <code>ABS-…</code></li>
+        <li><b>lead.maria</b> → «Согласования» → видно, кто ещё отсутствует → «Согласовать»; <b>hradmin.olga</b> → «Согласовать». У Анны — «Согласовано»</li>
+        <li><b>intern.anna</b> → «Можно ли приходить в офис с собакой?» — buddy честно не знает и даёт текст для наставника</li>
+        <li><b>mentor.oleg</b> → «Вопросы стажёров» → ответ «всем стажёрам»; <b>intern.ivan</b> задаёт тот же вопрос — buddy отвечает сам</li>
+        <li><b>intern.anna</b> → «Мой план» и «какие доступы мне нужны?»; <b>mentor.oleg</b> → «Мои стажёры» — польза buddy и отчёт</li>
+      </ol>
+    </div>
+  </div>
+  <div class="foot"><span>Все данные синтетические; документы базы знаний — тестовые инструкции прототипа, а не регламенты Авито</span><span>1</span></div>
 </section>
 
 <section class="s">
   <div class="kicker">Проблема</div>
-  <h2>Первые недели стажёра съедают время наставника</h2>
-  <div class="grid3" style="margin-bottom:26px">
+  <h2>Наставник тратит 40–48 часов за стажировку на повторяющиеся вопросы, а стажёр теряет дни на оргвопросах и инженерном онбординге</h2>
+  <div class="grid3" style="margin-bottom:22px">
     <div class="card"><div class="big">40–48 ч</div><p>тратит наставник за шестимесячную программу, 55–65 ч — за девятимесячную</p></div>
     <div class="card"><div class="big">16 шагов</div><p>чек-листа стажёра в пяти периодах — от первой недели до выпускного</p></div>
-    <div class="card"><div class="big">3 роли</div><p>в одном отгуле: руководитель, HR BP и HR-администратор — стажёр не знает порядок</p></div>
+    <div class="card"><div class="big">3 роли</div><p>в одном отгуле: руководитель, HR-администратор, HR BP — стажёр не знает порядок</p></div>
   </div>
   <div class="grid2" style="flex:none">
-    <div><h3 style="margin:0 0 10px;font-size:21px">Что болит</h3>
+    <div><h3 style="margin:0 0 10px;font-size:20px">Что болит у стажёра</h3>
       <ul class="clean">
-        <li>Инженерный онбординг: репозиторий в Bitbucket, ветки и PR, кого звать на ревью, CI/CD, секреты, стенд</li>
-        <li>Оргвопросы требуют конкретики: где и когда ноутбук, какой, куда писать</li>
-        <li>Стажёры делегируют задачи и бездумно вставляют ответы нейросетей</li>
+        <li>Инженерный онбординг: Bitbucket и SSH, ветки и PR, кого звать на ревью, CI/CD, секреты, стенд</li>
+        <li>Оргвопросы требуют конкретики: где и когда ноутбук, куда писать, в каком порядке оформить отгул</li>
+        <li>Соблазн отдать задачу нейросети и вставить ответ, не разобравшись</li>
       </ul></div>
-    <div><h3 style="margin:0 0 10px;font-size:21px">Что нельзя делать</h3>
+    <div><h3 style="margin:0 0 10px;font-size:20px">Ограничения, которые задаёт кейс</h3>
       <ul class="clean">
-        <li>Показывать чужие данные и выполнять чужие операции</li>
-        <li>Обсуждать зарплату, выплаты, медицину — только к HR BP</li>
-        <li>Заменять людей: 1:1, обратная связь, экватор — за наставником</li>
+        <li>Не показывать чужие данные и не выполнять чужие операции</li>
+        <li>Зарплата, выплаты, медицина — только к HR BP; денежных операций нет</li>
+        <li>Не заменять людей: 1:1, обратная связь, экватор — за наставником</li>
       </ul></div>
   </div>
   <div class="foot"><span>Источник цифр: материалы кейса Авито</span><span>2</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Путь стажёра · как сейчас → с AI-buddy</div>
-  <h2>Что меняется для стажёра и наставника</h2>
-  <div class="grid2" style="grid-template-columns:1fr 1fr">
-    <div class="card" style="background:#f7f8fa">
-      <span class="badge" style="background:#e6e8ec;color:#5b6270">AS IS</span>
-      <ul class="clean" style="margin-top:14px">
-        <li><b>Отгул:</b> найти инструкцию, понять, кого предупредить, написать руководителю и наставнику, создать заявку в сервисе отсутствий, ждать и проверять статус</li>
-        <li><b>Вопрос «где ноутбук / как сделать PR»:</b> искать в нескольких сервисах или спрашивать наставника</li>
-        <li><b>Доступы:</b> выяснить список, запрашивать по одному, не знать, где нужен руководитель</li>
-        <li><b>Наставник</b> отвечает на одни и те же вопросы каждому стажёру; стажёр иногда отдаёт задачу нейросети, не разобравшись</li>
-      </ul>
-    </div>
-    <div class="card" style="border-color:#cfe0ff;background:#f7faff">
-      <span class="badge b-acc">TO BE</span>
-      <ul class="clean" style="margin-top:14px">
-        <li><b>Отгул:</b> одно сообщение → черновик с проверенными датами → «Отправить» → номер и статус в чате и в плане</li>
-        <li><b>Вопрос:</b> ответ своей команды с источником сразу в чате; нет ответа — готовый текст для личных сообщений наставнику, а вопрос сам попадает в список наставника</li>
-        <li><b>Доступы:</b> список со статусами и заявка в один клик; повышенные — сразу к руководителю</li>
-        <li><b>Наставник</b> раз в день видит сводку вопросов, отвечает сразу на группу похожих — ответ уходит в базу знаний; buddy учит, а не делает задачу за стажёра</li>
-      </ul>
-    </div>
-  </div>
-  <p style="font-size:19px;margin-top:18px"><b>Благодаря этому стажёр теперь может</b> сам пройти шаги первых недель, не дожидаясь наставника, а наставник — тратить время на 1:1, ревью и обратную связь.</p>
-  <div class="foot"><span>Шаги AS IS — по тестовой инструкции «Как оформить отгул»</span><span>3</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">Гипотеза</div>
-  <h2>Что проверяем и на что опираемся</h2>
-  <div class="card" style="background:#f7faff;border-color:#cfe0ff;margin-bottom:12px;padding:14px 20px"><p style="margin:0;font-size:18px;color:var(--ink)">Если мы поможем <b>стажёру</b> получать ответы и оформлять заявки <b>в одном чате по его плану адаптации</b>, то <b>рутинных обращений к наставнику станет меньше</b>, потому что ответы берутся из базы знаний и сервисов компании, а каждый новый ответ наставника пополняет базу.</p></div>
-  <div class="grid3" style="margin-bottom:10px">
-    <div class="card" style="background:#141821;border-color:#141821"><h3 style="color:#fff">Знаем</h3><p style="color:#c9ced8">Наставник тратит 40–48 ч за программу (данные кейса). Главная боль — инженерный онбординг и оргвопросы; стажёры делегируют задачи.</p></div>
-    <div class="card"><h3>Предполагаем</h3><p>Стажёр будет сначала спрашивать buddy; рутинных обращений станет меньше на 30%, время до первой самостоятельной задачи — меньше на 20%.</p></div>
-    <div class="card"><h3>Не знаем</h3><p>Насколько реальные инструкции Авито совпадут с тестовыми; как A-Vibe ответит на живые вопросы; доступ к реальным API сервисов.</p></div>
-  </div>
-  <table class="t">
-    <tr><th>Уровень эффекта</th><th>Пример</th><th>Где проверяется</th></tr>
-    <tr><td>Результат стажёра</td><td>«Я оформил отгул и вижу его статус»</td><td>уже в прототипе — e2e-тест S3</td></tr>
-    <tr><td>Наблюдаемое изменение</td><td>отгул — 1 сообщение и 1 кнопка вместо поиска инструкции и писем</td><td>тестовое прохождение со стажёрами</td></tr>
-    <tr><td>Долгосрочный эффект</td><td>−30% рутинных обращений, −20% до первой задачи</td><td>пилот по командам (слайд «Качество и пилот»)</td></tr>
+  <div class="kicker">Решение · чем отличается от очевидного варианта</div>
+  <h2>Не «чат-бот по wiki»: заявки ведут проверяемые сценарии, LLM отвечает только по найденным документам, а наставника buddy не дёргает</h2>
+  <table class="t compact" style="margin-bottom:14px">
+    <tr><th style="width:21%">Задача</th><th style="width:31%">Очевидный вариант</th><th>Наш выбор и почему</th></tr>
+    <tr><td><b>Ответы на вопросы</b></td><td>LLM отвечает по всей wiki</td><td>Поиск только по документам своей роли и команды, ответ с источником; нет документа — честное «не знаю» вместо выдумки</td></tr>
+    <tr><td><b>Отгул, доступы, командировки</b></td><td>LLM сама вызывает инструменты</td><td>Сценарий проверяет даты и правила, показывает черновик; запись — только по кнопке «Отправить». Пишущих инструментов модель не видит</td></tr>
+    <tr><td><b>Нет ответа</b></td><td>Бот пишет наставнику в мессенджер</td><td>Текст для личных сообщений — «Скопировать»; вопрос сам в списке наставника, похожие сгруппированы, сводка раз в день (просьба организаторов)</td></tr>
+    <tr><td><b>«Сделай за меня»</b></td><td>Бот пишет код задачи</td><td>План из шагов, подготовка к ревью, разбор лога, квиз по инструкции — стажёр делает сам</td></tr>
+    <tr><td><b>Где работает</b></td><td>Отдельный чат</td><td>Чат + план адаптации + «Мои заявки» + кабинет наставника и руководителя в одном интерфейсе</td></tr>
   </table>
-  <div class="foot"><span>Долгосрочный эффект — гипотеза для пилота, в прототипе его не обещаем</span><span>4</span></div>
+  <p style="font-size:16px;margin:0"><b>Сознательно не делаем:</b> бронирование билетов и оплату, ответы про зарплату и медицину, отправку сообщений от имени стажёра,
+  выполнение задач за стажёра, замену встреч 1:1 — это зоны людей и сервисов компании.</p>
+  <div class="foot"><span>Сценарии: S1 план · S2 вопросы · S3 отгул (основной) · S4 доступы и каналы · плюс командировки, согласия, файлы в чате, внешний поиск</span><span>3</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Решение</div>
-  <h2>Четыре сценария адаптации + наставничество</h2>
-  <div class="grid4">
-    <div class="card"><span class="badge b-acc">S3 · основной</span><h3 style="margin-top:12px">Отгул</h3><p>Порядок → даты → проверка → черновик → «Отправить» → заявка ABS-… → журнал и план → руководитель согласует → статус у стажёра</p></div>
-    <div class="card"><span class="badge b-acc">S1</span><h3 style="margin-top:12px">План адаптации</h3><p>Два плана из чек-листа Авито — стажёра и наставника, статусы, следующий шаг, цели от наставника, напоминания по периодам</p></div>
-    <div class="card"><span class="badge b-acc">S2</span><h3 style="margin-top:12px">Спроси buddy</h3><p>Ответы с учётом команды, роли и этапа, источник с плашкой; нет ответа — текст для наставника и вопрос в его список, ответ уходит в базу знаний</p></div>
-    <div class="card"><span class="badge b-acc">S4</span><h3 style="margin-top:12px">Доступы и каналы</h3><p>Confluence, Jira, Bitbucket, пространство команды; повышенные права — через руководителя; каналы и просьба наставнику</p></div>
-  </div>
-  <div class="card" style="margin-top:18px;background:#f7faff;border-color:#cfe0ff"><h3>Учит, а не делает</h3><p style="font-size:17px">«Сделай за меня» → план из шагов и правила работы с нейросетями · подготовка к код-ревью и кого позвать · разбор лога с маскированием секретов · квиз по инструкции · справка по бенефитам без денежных операций<br><b>Ещё:</b> командировки и согласия через сервисы · лог или конфиг прямо в чат (секреты скрываются) · общий техвопрос — с пометкой «Внешний источник»</p></div>
-  <div class="foot"><span>Каждый заявленный сценарий проходит end-to-end и покрыт e2e-тестом Playwright</span><span>5</span></div>
-</section>
-
-<section class="s">
-  <div class="kicker">S3 · основной сценарий</div>
-  <h2>Отгул: от вопроса до согласованной заявки</h2>
-  <div class="flow"><div>Порядок + источник</div><div>Дата в календаре</div><div>Черновик</div><div>«Отправить»</div><div>ABS-… сохранено</div><div>Руководитель видит, кто ещё отсутствует</div><div>HR-администратор</div></div>
-  <div class="grid2">
+  <div class="kicker">Сквозной сценарий · S3 отгул</div>
+  <h2>Отгул — одно сообщение и одна кнопка вместо поиска инструкции и писем трём людям; статус стажёр видит в чате и в плане</h2>
+  <div class="flow"><div>«Как оформить отгул?» — порядок и источник</div><div>Дата в календаре</div><div>Проверка правил, черновик</div><div>«Отправить» → ABS-…</div><div>Руководитель видит, кто ещё отсутствует</div><div>HR-администратор оформляет</div><div>Статус у стажёра</div></div>
+  <div class="grid2 short">
     <div class="shotwrap"><img class="shot" src="img/02-intern-chat-day-off.png"></div>
     <div class="shotwrap"><img class="shot" src="img/08-lead-approvals.png"></div>
   </div>
-  <div class="foot"><span>Заявку создаёт сервис (absence MCP) только после подтверждения; её можно отозвать, пока не согласована; статус виден в чате и в плане</span><span>6</span></div>
+  <p class="note"><b>Было:</b> найти инструкцию, понять порядок, написать руководителю и наставнику, создать заявку в сервисе отсутствий, проверять статус.
+  <b>Неполный запрос</b> («хочу отгул» без даты) — buddy открывает календарь; дата в прошлом или выходной — объясняет и не создаёт черновик. Отказ — заявка уходит из плана, причина видна в «Моих заявках».</p>
+  <div class="foot"><span>Заявку создаёт сервис отсутствий (absence MCP) только после подтверждения; повтор не создаёт дубль; заявку можно перенести или отозвать</span><span>4</span></div>
 </section>
 
 <section class="s">
   <div class="kicker">S1 · план адаптации и цели</div>
-  <h2>План из чек-листа Авито и цели после встречи 1:1</h2>
-  <div class="flow"><div>16 пунктов чек-листа в 5 периодах</div><div>Статусы и «что дальше?»</div><div>Учёба — мини-проверка, знакомство — подтверждает наставник</div><div>Встреча 1:1</div><div>Стажёр записывает цели и критерии</div><div>Наставник или руководитель согласует</div></div>
+  <h2>План из чек-листа Авито подсказывает следующий шаг, а цели после встречи 1:1 записываются и согласуются в том же плане</h2>
+  <div class="flow"><div>16 пунктов чек-листа в 5 периодах</div><div>Статусы, сроки и «что дальше?»</div><div>Учёба — мини-проверка, знакомство — подтверждает наставник</div><div>Встреча 1:1</div><div>Стажёр записывает цели и критерии</div><div>Наставник или руководитель согласует</div></div>
   <div class="grid2" style="grid-template-columns:1.1fr 1fr">
     <div class="shotwrap"><img class="shot" src="img/s1-plan.png"></div>
     <div class="shotwrap"><img class="shot" src="img/goals.png"></div>
   </div>
-  <div class="foot"><span>Шаги «только с людьми» (1:1, экватор) buddy напоминает, но не выполняет; AI-cron напоминает по периодам стажёру и наставнику</span><span>7</span></div>
+  <div class="foot"><span>Шаги «только с людьми» (1:1, экватор) buddy напоминает, но не выполняет; AI-cron напоминает по периодам стажёру и наставнику</span><span>5</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">S2 · спроси buddy</div>
-  <h2>Ответ с источником, а если не знает — вопрос в список наставника</h2>
-  <div class="flow"><div>Ответ своей команды с источником</div><div>Нет ответа — честное «не знаю»</div><div>Текст для ЛС или канала — «Скопировать»</div><div>Вопрос сам в списке наставника</div><div>Похожие — одной группой, сводка раз в день</div><div>Ответ всем — и в базу знаний</div></div>
-  <div class="grid3" style="flex:1;min-height:0;align-items:start">
-    <div class="shotwrap"><img class="shot" src="img/s2-answer.png"></div>
+  <div class="kicker">S2 · вопросы и нестандартные ситуации</div>
+  <h2>Если ответа нет в базе знаний, buddy не выдумывает: говорит об этом, даёт текст для наставника и ставит вопрос в его список</h2>
+  <div class="grid3" style="grid-template-columns:1fr 1fr 1.05fr;flex:1;min-height:0;align-items:start">
     <div class="shotwrap"><img class="shot" src="img/s2-unknown.png"></div>
     <div class="shotwrap"><img class="shot" src="img/06-mentor-questions.png"></div>
+    <div>
+      <h3 style="margin:0 0 8px;font-size:18px">Как buddy понимает, что информации мало</h3>
+      <p style="font-size:15px;margin:0 0 12px">Документ ищется только среди доступных роли и команде; ответ даётся, если документ прошёл порог релевантности BM25
+      <b>и</b> покрывает значимые слова вопроса (доля по IDF). Совпадение только по общим словам («работа», «команда») — это «не знаю».</p>
+      <table class="t compact">
+        <tr><th>Ситуация</th><th>Что делает buddy</th></tr>
+        <tr><td>Вопрос не по теме</td><td>Вежливо возвращает к адаптации</td></tr>
+        <tr><td>Чужие данные, зарплата</td><td>Отказ и к кому идти (HR BP)</td></tr>
+        <tr><td>«Игнорируй инструкции»</td><td>Отказ, промпт не раскрывает</td></tr>
+        <tr><td>Лог с паролем</td><td>Скрывает секрет, разбирает ошибку</td></tr>
+      </table>
+    </div>
   </div>
-  <p style="font-size:17px;margin:14px 0 0" class="muted">Учитывает команду, роль, этап и офис · плашка <span class="badge b-test">Тестовая инструкция прототипа</span> · «Полезно / Не полезно» под ответом · buddy не пишет наставнику сам — так попросили организаторы</p>
-  <div class="foot"><span>Поиск: ACL до ранжирования в mcp-kb + повторная проверка в агенте; BM25 + порог покрытия запроса</span><span>8</span></div>
+  <p class="note">Ответ наставника «всем стажёрам» попадает в базу знаний: следующий стажёр, даже из другой команды, получает его с пометкой «Ответ наставника».</p>
+  <div class="foot"><span>Каждый ответ по базе — с источником и плашкой «Тестовая инструкция прототипа»; «Полезно / Не полезно» под ответом — метрика качества</span><span>6</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Наставник и руководитель · эффект</div>
-  <h2>Польза buddy в цифрах и отчёт за стажировку</h2>
+  <div class="kicker">Наставник и руководитель</div>
+  <h2>Наставник видит пользу buddy в цифрах — долю вопросов без него и сэкономленные минуты — и готовый отчёт к встрече 1:1</h2>
   <div class="grid2">
     <div class="shotwrap"><img class="shot" src="img/05-mentor-team-benefit.png"></div>
     <div class="shotwrap"><img class="shot" src="img/07-mentor-report.png"></div>
   </div>
-  <div class="foot"><span>Сколько вопросов закрыл сам buddy, сколько ушло наставнику и попало в базу знаний, сколько минут сэкономлено; отчёт — к экватору и выпускному</span><span>9</span></div>
+  <p class="note">«Польза buddy» считается по журналу: вопросы, закрытые buddy сам, эскалации, ответы в базу знаний, оценки «Полезно». Минуты — по нормативу на один вопрос. Цифры на скриншотах — из демо-данных.</p>
+  <div class="foot"><span>Только стажёры своей команды — фильтрует сервер; руководитель согласует заявки и видит отсутствующих в те же дни</span><span>7</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Безопасность и внедряемость</div>
-  <h2>Пять рубежей защиты и встраивание через промпт + MCP</h2>
+  <div class="kicker">Техническая реализация</div>
+  <h2>Агент подключается к сервисам компании через MCP от имени пользователя, поэтому новая система добавляется без изменения агента</h2>
   <div class="grid2" style="grid-template-columns:1fr 1fr;gap:32px">
     <div>
-      <div class="layer"><b class="n">1</b><div><b>Guardrails до LLM</b> — чужие данные, зарплата, медицина, «игнорируй инструкции» → отказ и к кому идти</div></div>
-      <div class="layer"><b class="n">2</b><div><b>Документы по правам</b> — модель видит только документы своей роли и команды</div></div>
-      <div class="layer"><b class="n">3</b><div><b>Инструменты по ролям</b> из <code>agent.yaml</code>; пишущих инструментов LLM не видит</div></div>
-      <div class="layer"><b class="n">4</b><div><b>Проверка в сервисе</b> — каждый MCP-вызов с JWT пользователя</div></div>
-      <div class="layer"><b class="n">5</b><div><b>Подтверждённая запись</b> — HMAC-токен связывает пользователя и аргументы; повтор не создаёт дубль</div></div>
-    </div>
-    <div>
-      <pre class="arch" style="font-size:13px;padding:14px 16px">web (React, SSE)
+      <pre class="arch" style="font-size:13.5px;padding:14px 16px">web (React, SSE)
+   │
 core (Go): REST, план, журнал, JWT, флаги, AI-cron
-agent (Python): роутер, сценарии, RAG с ACL, LLM
-  │ MCP · JWT пользователя
+   │
+agent (Python): роутер → сценарии · RAG с ACL · LLM
+   │  MCP · streamable HTTP · JWT пользователя
+   ▼
 absence · access · directory · kb · approvals
-checklist · trips · consents</pre>
+checklist · trips · consents      (8 MCP-серверов)</pre>
       <ul class="clean" style="margin-top:14px;gap:8px">
-        <li style="font-size:16px"><b>Один конфиг</b> <code>agent.yaml</code>: новая система = MCP-сервер + строка</li>
-        <li style="font-size:16px"><b>Свои мощности</b>: A-Vibe (<code>AvitoTech/avibe</code>) через vLLM или Ollama, любой OpenAI-совместимый API</li>
-        <li style="font-size:16px"><b>Без ключа</b>: stub по умолчанию; пилот по командам флагами, стоп-кран за минуту</li>
+        <li style="font-size:16px"><b>Один конфиг</b> <code>agent.yaml</code>: промпт, модель, MCP-серверы, инструменты по ролям</li>
+        <li style="font-size:16px"><b>Свои мощности</b>: A-Vibe (<code>AvitoTech/avibe</code>) через vLLM или Ollama; любой OpenAI-совместимый API — одной переменной</li>
+        <li style="font-size:16px"><b>Пилот по командам</b>: runtime-флаги, стоп-кран за минуту; события core → Kafka</li>
       </ul>
     </div>
+    <div>
+      <h3 style="margin:0 0 6px;font-size:18px">Пять рубежей: ошибка модели не превращается в утечку</h3>
+      <div class="layer"><b class="n">1</b><div><b>Guardrails до LLM</b> — чужие данные, зарплата, медицина, prompt injection</div></div>
+      <div class="layer"><b class="n">2</b><div><b>Документы по правам</b> — ACL до ранжирования и повторная проверка в агенте</div></div>
+      <div class="layer"><b class="n">3</b><div><b>Инструменты по ролям</b>; пишущих инструментов модель не видит</div></div>
+      <div class="layer"><b class="n">4</b><div><b>Проверка в сервисе</b> — каждый вызов с JWT пользователя</div></div>
+      <div class="layer"><b class="n">5</b><div><b>Подтверждённая запись</b> — HMAC-токен связывает пользователя и аргументы; повтор не создаёт дубль</div></div>
+    </div>
   </div>
-  <div class="foot"><span>Синтетические данные, без ПДн и денежных операций; моки Confluence, Jira, Bitbucket заменяются реальными MCP без изменения агента</span><span>10</span></div>
+  <div class="foot"><span>Моки Confluence, Jira, Bitbucket и кадровых сервисов заменяются реальными MCP-серверами; данные синтетические, без ПДн и денежных операций</span><span>8</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Качество и пилот</div>
-  <h2>Проверено автотестами; эффект измерим в пилоте</h2>
+  <div class="kicker">Обоснование технических решений</div>
+  <h2>Каждый технический выбор обоснован: гибридный агент, поиск с порогом покрытия и роутер с правилами делают ответы предсказуемыми</h2>
+  <table class="t compact big9">
+    <tr><th style="width:15%">Где</th><th style="width:27%">Что пробовали / рассматривали</th><th style="width:29%">Что получили</th><th>Что выбрали</th></tr>
+    <tr><td><b>Намерения</b></td><td>Наивный Байес; логистическая регрессия на стеммах и 3–4-граммах</td><td>63,5% и 68,3% на 5-fold CV (356 фраз, 18 намерений)</td><td>Guardrails → правила → логрегрессия → порог 0,6: <b>95,2%</b> на отложенном наборе из 62 новых фраз</td></tr>
+    <tr><td><b>Агент</b></td><td>«LLM с инструментами» на всех шагах</td><td>На слабой локальной модели риск перепутать даты, вызвать не тот инструмент, пропустить подтверждение</td><td>Гибрид: заявки — конечные автоматы с проверкой, LLM — язык и ответы по документам (ADR-007)</td></tr>
+    <tr><td><b>Поиск</b></td><td>BM25 по всем документам</td><td>Документ, совпавший только по общим словам, давал ответ невпопад</td><td>ACL до ранжирования + порог BM25 + покрытие запроса по IDF; эмбеддинги (bge-m3) — опционально, слияние RRF</td></tr>
+    <tr><td><b>Модель</b></td><td>A-Vibe 8B: vLLM (GPU ~23 ГБ) и Ollama Q4_K_M (4,8 ГБ)</td><td>Поддерживает вызов функций; без GPU — около минуты на ответ</td><td>По умолчанию A-Vibe в Ollama с откатом на детерминированный режим; на стенде без GPU — детерминированный режим</td></tr>
+    <tr><td><b>Наставник</b></td><td>buddy отправлял вопрос наставнику сам</td><td>Обратная связь организаторов: наставник редко заходит в buddy</td><td>Текст для ЛС + список вопросов с группировкой + сводка раз в день</td></tr>
+    <tr><td><b>Отклик UI</b></td><td>Ответ целиком после генерации</td><td>Интерфейс ждёт LLM и сервисы</td><td>SSE со статусами («ищу в базе», «обращаюсь к сервису»), оптимистичные обновления плана &lt; 1 с</td></tr>
+  </table>
+  <div class="foot"><span>Подробно: docs/adr (ADR-004 модели, ADR-007 гибридный агент, ADR-008 поиск и намерения), отчёт классификатора — eval/reports/intents.md</span><span>9</span></div>
+</section>
+
+<section class="s">
+  <div class="kicker">Проверка качества</div>
+  <h2>Все заявленные сценарии проходят автотесты end-to-end, а guard-метрики — отказы, права, prompt injection — 100%</h2>
   <div class="grid4" style="margin-bottom:18px">
-    <div class="card"><div class="big">96%</div><p>покрытие строк агента, web — 93%; Go-сервисы 87–98%, CI падает ниже 80%</p></div>
-    <div class="card"><div class="big">139</div><p>кейсов eval качества ответов, 100%; guard-метрики 100%</p></div>
-    <div class="card"><div class="big">36</div><p>e2e-тестов Playwright на запущенном стеке — по спеке на сценарий</p></div>
-    <div class="card"><div class="big">196/196</div><p>сценариев OpenSpec трассируются в тесты (spec-first)</p></div>
+    <div class="card"><div class="big">139/139</div><p>кейсов eval качества ответов; guard-метрики 100%</p></div>
+    <div class="card"><div class="big">36</div><p>e2e-тестов Playwright на запущенном стеке — по каждому сценарию</p></div>
+    <div class="card"><div class="big">87–98%</div><p>покрытие строк: Go 87–98%, агент 96%, web 93%; CI падает ниже 80%</p></div>
+    <div class="card"><div class="big">196/196</div><p>сценариев спецификаций OpenSpec связаны с тестами (spec-first)</p></div>
   </div>
-  <div class="grid2" style="grid-template-columns:1.15fr 1fr;gap:32px">
-    <table class="t" style="font-size:15px">
+  <table class="t compact">
+    <tr><th style="width:24%">Что проверяем</th><th style="width:44%">Как</th><th>Результат</th></tr>
+    <tr><td>Ответы и отказы агента</td><td>eval по категориям: S1–S4, наставничество, права, инъекции, секреты, командировки</td><td>139/139; в ответе на вопрос ни разу не вызван пишущий инструмент</td></tr>
+    <tr><td>Пользовательские сценарии</td><td>Playwright: вход → чат → заявка → согласование руководителем и HR → статус после F5</td><td>36/36, включая отказ с причиной и отзыв заявки</td></tr>
+    <tr><td>Сервисы и права</td><td>36 Go-пакетов на одноразовом Postgres; 253 теста агента; 195 тестов web</td><td>все зелёные в CI на каждый коммит</td></tr>
+    <tr><td>Скорость</td><td>локальные действия — оптимистичные обновления; агент в детерминированном режиме</td><td>&lt; 1 с; p95 агента 3 мс без LLM</td></tr>
+  </table>
+  <div class="foot"><span>make test · make coverage · make eval · make e2e · отчёт о покрытии — docs/coverage-report</span><span>10</span></div>
+</section>
+
+<section class="s">
+  <div class="kicker">Ценность и внедрение</div>
+  <h2>Ожидаемый эффект — минус 30% рутинных обращений к наставнику; проверим его пилотом по командам, а не обещаем заранее</h2>
+  <div class="card" style="background:#f7faff;border-color:#cfe0ff;margin-bottom:14px;padding:12px 18px"><p style="margin:0;font-size:16px;color:var(--ink)"><b>Гипотеза:</b> если стажёр получает ответы и оформляет заявки в одном чате по своему плану, рутинных обращений к наставнику станет меньше, потому что ответы берутся из базы знаний и сервисов, а каждый ответ наставника пополняет базу.</p></div>
+  <div class="grid2" style="grid-template-columns:1.15fr 1fr;gap:30px">
+    <table class="t compact">
       <tr><th>Метрика</th><th>Цель пилота</th></tr>
       <tr><td><b>North Star:</b> время до первой самостоятельной задачи</td><td>−20% к контролю</td></tr>
       <tr><td>Рутинные обращения к наставнику</td><td>−30%, ≥ 8 ч из 40–48 за программу</td></tr>
-      <tr><td>Вопросы без эскалации / «полезно»</td><td>≥ 70% / ≥ 80%</td></tr>
-      <tr><td>Действия с первой попытки</td><td>≥ 95%</td></tr>
-      <tr><td>Корректные отказы, p95 локальных действий</td><td>100%, &lt; 1 с</td></tr>
+      <tr><td>Вопросы без эскалации / «Полезно»</td><td>≥ 70% / ≥ 80%</td></tr>
+      <tr><td>Заявки с первой попытки</td><td>≥ 95%</td></tr>
+      <tr><td>Корректные отказы</td><td>100%</td></tr>
     </table>
-    <div><ul class="clean" style="gap:9px">
-      <li style="font-size:16px">36 Go-пакетов на одноразовом Postgres · 253 теста агента · 195 тестов web · 36 e2e</li>
-      <li style="font-size:16px">Роутер намерений — логистическая регрессия, 95% на отложенном наборе</li>
-      <li style="font-size:16px">Включение флагом по командам, difference-in-differences к контролю</li>
-      <li style="font-size:16px">События уже пишутся: core → Kafka → Grafana; сбой guard-метрик — флаг выключается</li>
+    <div><h3 style="margin:0 0 8px;font-size:18px">Как внедрить</h3><ul class="clean" style="gap:8px">
+      <li style="font-size:15px">Подключить реальные MCP к Confluence, Jira, Bitbucket и кадровым сервисам — агент не меняется</li>
+      <li style="font-size:15px">A-Vibe на собственных GPU (vLLM), без внешних API</li>
+      <li style="font-size:15px">Включить флагом для части команд; difference-in-differences к контролю и прошлой когорте</li>
+      <li style="font-size:15px">Метрики уже пишутся: события core → Kafka → дашборд; сбой guard-метрик — флаг выключается</li>
     </ul></div>
   </div>
-  <div class="foot"><span>make test · make coverage · make eval · make e2e · отчёт о покрытии — docs/coverage-report · метрики — docs/product/metrics.md</span><span>11</span></div>
+  <div class="foot"><span>Цифры пилота — гипотеза для проверки; в прототипе измеряются те же показатели («Польза buddy»). Подробно: docs/product/metrics.md</span><span>11</span></div>
 </section>
 
 <section class="s">
-  <div class="kicker">Развитие</div>
-  <h2>Что дальше после хакатона</h2>
+  <div class="kicker">Ограничения и развитие</div>
+  <h2>Прототип готов к пилоту; до продакшена остаются реальные интеграции и проверка на живых вопросах стажёров</h2>
   <div class="grid3">
-    <div class="card"><h3>Ближайший релиз</h3><p style="font-size:17px">Реальные MCP к Confluence, Jira, Bitbucket и кадровому порталу вместо моков · A-Vibe на собственных GPU · напоминания в корпоративном мессенджере</p></div>
-    <div class="card"><h3>Для наставника</h3><p style="font-size:17px">Сводка вопросов и напоминания — в корпоративный мессенджер · подготовка к 1:1 и экватору из плана и вопросов · аналитика «где стажёры застревают» по командам</p></div>
-    <div class="card"><h3>Масштабирование</h3><p style="font-size:17px">Чек-листы всех направлений (backend, frontend, аналитика, ML) · точка входа для выпускников и новых сотрудников · раскатка по когортам по результатам пилота</p></div>
+    <div class="card" style="border-color:#bfe6cc;background:#f3fbf6"><h3>Уже работает</h3><p style="font-size:15px">Четыре сценария кейса и наставничество end-to-end · согласование руководителем и HR-администратором · список вопросов наставника и база знаний из ответов · цели после 1:1 · польза buddy и отчёт · стенд по HTTPS с автодеплоем</p></div>
+    <div class="card" style="border-color:#f3d2a8;background:#fffaf2"><h3>Пока нет</h3><p style="font-size:15px">Моки вместо реальных Confluence, Jira, Bitbucket и кадровых систем · тестовая база знаний (57 документов) · A-Vibe не проверена на живых вопросах · на стенде нет GPU — отвечает детерминированный режим · нет корпоративного мессенджера · нет данных пилота</p></div>
+    <div class="card"><h3>Следующие шаги</h3><p style="font-size:15px">Реальные MCP и документы Авито · eval на A-Vibe с GPU · сводка вопросов в мессенджере · чек-листы backend, frontend, аналитики, ML · пилот по когортам и решение о раскатке по метрикам</p></div>
   </div>
-  <div class="card" style="margin-top:20px"><h3>Проверить самим</h3><p style="font-size:17px"><code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> → http://localhost:5173 · учётки <code>intern.anna</code>, <code>intern.ivan</code>, <code>mentor.oleg</code>, <code>lead.maria</code>, <code>hradmin.olga</code>, пароль <code>demo</code> · порядок проверки — в README</p></div>
+  <div class="card" style="margin-top:18px"><h3>Проверить самим</h3><p style="font-size:16px">Стенд <b>https://186-246-6-113.sslip.io</b> или <code>docker compose -f deploy/docker-compose.yml --profile core up -d --build</code> → localhost:5173 · учётки <code>intern.anna</code>, <code>intern.ivan</code>, <code>mentor.oleg</code>, <code>lead.maria</code>, <code>hradmin.olga</code>, пароль <code>demo</code> · порядок проверки — на слайде 1 и в README</p></div>
   <div class="foot"><span>https://github.com/Eliz-Kory/AI-Buddy · видео-демо: presentation/demo.mp4</span><span>12</span></div>
 </section>
-
 </body></html>
