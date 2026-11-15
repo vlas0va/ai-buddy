@@ -1,13 +1,13 @@
 # Презентация и видео
 
 - `AI-buddy.pdf` — продуктовая презентация (12 слайдов, 16:9), ссылка на репозиторий — на первом слайде.
-- `demo.mp4` — видео-демо с женским голосом и субтитрами (≈2 мин), `demo.srt` — субтитры отдельно.
+- `demo.mp4` — видео-демо с женским голосом и субтитрами (≈2,5 мин), `demo.srt` — субтитры отдельно.
 
 Как пересобрать на свежем стеке (`make up` со stub-LLM, web на `http://127.0.0.1:5173`):
 
 ```bash
 cd presentation/src
-node screenshots.js && node screenshots-extras.js   # скриншоты в img/ (нужен Playwright)
+node screenshots.js                                 # скриншоты в img/ (нужен Playwright)
 node topdf.js                                       # deck.html → ../AI-buddy.pdf
 
 # видео: запись → озвучка → склейка
