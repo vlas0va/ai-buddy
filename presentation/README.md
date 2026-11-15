@@ -7,7 +7,7 @@
 
 ```bash
 cd presentation/src
-node screenshots.js && node screenshots-extras.js   # скриншоты в img/ (нужен Playwright)
+node screenshots.js                                 # скриншоты в img/ (нужен Playwright)
 node topdf.js                                       # deck.html → ../AI-buddy.pdf
 
 # видео: запись → озвучка → склейка
